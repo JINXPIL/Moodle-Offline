@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moodle Offline</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f6fde'/%3E%3Cpath d='M9 21l7-11 7 11' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --accent:#2f6fde; --accent-ink:#fff;
+  --bg:#eef1f5; --bg2:#e6eaf0; --surface:rgba(255,255,255,.86); --surface-solid:#fff; --raised:#fff;
+  --line:rgba(16,24,40,.09); --line-strong:rgba(16,24,40,.16);
+  --text:#16181d; --muted:#5d6675; --faint:#8a93a3;
+  --ok:#1a9e5c; --warn:#d99100; --bad:#d93a3a;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 8px 24px rgba(16,24,40,.06);
+  --r:14px; --r-sm:10px;
+  --font:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --font-display:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root[data-theme=auto]{
+  --bg:#17191d; --bg2:#1c1f24; --surface:rgba(34,37,43,.86); --surface-solid:#23262c; --raised:#2a2e35;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.15);
+  --text:#e9ebef; --muted:#a3abb8; --faint:#7d8594; --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.25); color-scheme:dark;}}
+:root[data-theme=dark]{
+  --bg:#17191d; --bg2:#1c1f24; --surface:rgba(34,37,43,.86); --surface-solid:#23262c; --raised:#2a2e35;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.15);
+  --text:#e9ebef; --muted:#a3abb8; --faint:#7d8594; --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.25); color-scheme:dark;}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font:14px/1.45 var(--font);color:var(--text);
+  background:radial-gradient(1200px 600px at 10% -10%,color-mix(in srgb,var(--accent) 10%,transparent),transparent 60%),
+             linear-gradient(180deg,var(--bg),var(--bg2));background-attachment:fixed;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+.hidden{display:none!important}
+svg{flex:none}
+#app{display:grid;grid-template-rows:56px auto 1fr auto;height:100vh}
+
+/* верхняя панель */
+.top{display:flex;align-items:center;gap:14px;padding:0 18px;border-bottom:1px solid var(--line);
+  background:var(--surface);backdrop-filter:blur(18px) saturate(1.4)}
+.brand{display:flex;align-items:center;gap:10px;font:600 15px var(--font-display);letter-spacing:.2px}
+.logo{width:28px;height:28px;border-radius:8px;background:var(--accent);display:grid;place-items:center;color:var(--accent-ink)}
+.pill{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:999px;
+  border:1px solid var(--line);background:var(--raised);font-size:12.5px;color:var(--muted);white-space:nowrap}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--faint);box-shadow:0 0 0 3px color-mix(in srgb,var(--faint) 22%,transparent)}
+.dot.ok{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 22%,transparent)}
+.dot.slow{background:var(--warn);box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 25%,transparent)}
+.dot.down{background:var(--bad);box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 25%,transparent);animation:pulse 1.6s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--bad) 0%,transparent)}}
+.spacer{flex:1}
+.icon-btn{width:34px;height:34px;border-radius:10px;border:1px solid transparent;background:transparent;display:grid;place-items:center;cursor:pointer;color:var(--muted)}
+.icon-btn:hover{background:var(--raised);border-color:var(--line);color:var(--text)}
+.user{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+.avatar{width:28px;height:28px;border-radius:50%;background:color-mix(in srgb,var(--accent) 18%,var(--raised));color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:12px}
+.pop{position:absolute;top:50px;right:60px;z-index:30;background:var(--surface-solid);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:14px;width:260px}
+.pop h4{margin:0 0 10px;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.seg{display:flex;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
+.seg button{flex:1;border:0;background:transparent;border-radius:8px;padding:7px 8px;cursor:pointer;color:var(--muted);font-size:13px}
+.seg button.on{background:var(--raised);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.swatches{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.sw{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;outline:none}
+.sw.on{border-color:var(--text)}
+
+/* баннер */
+.banner{margin:12px 18px 0;padding:12px 16px;border-radius:var(--r);display:flex;gap:12px;align-items:flex-start;
+  background:color-mix(in srgb,var(--warn) 14%,var(--surface-solid));border:1px solid color-mix(in srgb,var(--warn) 40%,transparent)}
+.banner.bad{background:color-mix(in srgb,var(--bad) 12%,var(--surface-solid));border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+.banner b{display:block;margin-bottom:2px}
+
+/* основная область */
+main{overflow:hidden;min-height:0}
+.view{height:100%}
+.layout{display:grid;grid-template-columns:1fr 340px;height:100%;min-height:0}
+.content{overflow:auto;padding:18px 18px 24px;min-height:0}
+.side{overflow:auto;padding:18px 18px 24px 0;min-height:0}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.toolbar h2{margin:0 6px 0 2px;font:600 20px var(--font-display)}
+.chips{display:flex;gap:6px}
+.chip{height:32px;padding:0 13px;border-radius:999px;border:1px solid var(--line);background:var(--raised);cursor:pointer;color:var(--muted);font-size:13px}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.search{flex:1;min-width:200px;display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--faint)}
+.search input{border:0;outline:0;background:transparent;flex:1;color:var(--text)}
+.btn{height:36px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--raised);cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.btn:hover{border-color:var(--line-strong)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.5;cursor:default;filter:none}
+.btn.big{min-height:46px;height:auto;padding:10px 14px;font-size:15px;justify-content:center;width:100%;white-space:normal;text-align:center;line-height:1.25}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:14px}
+.card{position:relative;display:flex;flex-direction:column;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);
+  box-shadow:var(--shadow);overflow:hidden;cursor:pointer;transition:transform .12s,border-color .12s,box-shadow .12s;user-select:none}
+.card:hover{transform:translateY(-2px);border-color:var(--line-strong)}
+.card.sel{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 35%,transparent),var(--shadow)}
+.cover{height:112px;background-size:cover;background-position:center;position:relative}
+.cover .ini{position:absolute;inset:0;display:grid;place-items:center;font:700 30px var(--font-display);color:rgba(255,255,255,.92);letter-spacing:1px}
+.check{cursor:pointer;z-index:2;position:absolute;top:10px;left:10px;width:24px;height:24px;border-radius:7px;background:rgba(255,255,255,.9);border:1.5px solid rgba(0,0,0,.2);display:grid;place-items:center;color:transparent;transition:.12s}
+.card.sel .check{background:var(--accent);border-color:var(--accent);color:#fff}
+.tag{position:absolute;top:10px;right:10px;font-size:11px;padding:3px 8px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff}
+.cbody{padding:12px 14px 12px;display:flex;flex-direction:column;gap:6px;flex:1}
+.cat{font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctitle{font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.prog{height:5px;border-radius:5px;background:var(--line);overflow:hidden;margin-top:auto}
+.prog i{display:block;height:100%;background:var(--accent);border-radius:5px}
+.cfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted)}
+.cfoot .mini{height:26px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:transparent;cursor:pointer;color:var(--muted);font-size:12px}
+.cfoot .mini:hover{color:var(--text);border-color:var(--line-strong)}
+.empty{padding:50px 20px;text-align:center;color:var(--muted)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
+.panel h3{margin:0 0 12px;font:600 14px var(--font-display)}
+.field{margin:12px 0}
+.field>label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+.path{display:flex;gap:6px}
+.path input{flex:1;min-width:0;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--raised);padding:0 10px;outline:none}
+.path input:focus,.lf input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.mode{display:grid;gap:8px}
+.mopt{display:flex;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;cursor:pointer;background:var(--raised)}
+.mopt.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--raised))}
+.mopt b{display:block;font-size:13px}.mopt span{font-size:12px;color:var(--muted)}
+.radio{width:18px;height:18px;border-radius:50%;border:2px solid var(--line-strong);margin-top:2px;flex:none}
+.mopt.on .radio{border:5px solid var(--accent)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row .lbl{display:flex;flex-direction:column}.row .lbl small{color:var(--muted);font-size:12px}
+.sw-t{position:relative;width:40px;height:22px;flex:none}
+.sw-t input{opacity:0;width:0;height:0;position:absolute}
+.sw-t span{position:absolute;inset:0;border-radius:999px;background:var(--line-strong);transition:.15s;cursor:pointer}
+.sw-t span:after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.sw-t input:checked+span{background:var(--accent)}
+.sw-t input:checked+span:after{transform:translateX(18px)}
+.sw-t input:disabled+span{opacity:.45;cursor:default}
+.times{display:flex;align-items:center;gap:6px;margin-top:8px}
+.times input{height:32px;border-radius:8px;border:1px solid var(--line);background:var(--raised);padding:0 8px}
+.hint{font-size:12px;color:var(--muted);margin-top:6px}
+details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-top:4px}
+
+/* вход */
+.login-wrap{height:100%;display:grid;place-items:center;padding:20px;overflow:auto}
+.login{width:min(420px,100%);background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:28px}
+.login h1{margin:14px 0 4px;font:600 22px var(--font-display)}
+.login p.sub{margin:0 0 18px;color:var(--muted)}
+.lf{margin-bottom:12px}.lf label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+.lf input{width:100%;height:42px;border-radius:11px;border:1px solid var(--line);background:var(--raised);padding:0 12px;outline:none}
+.err{color:var(--bad);font-size:13px;margin:8px 0}
+.lrow{display:flex;justify-content:space-between;align-items:center;margin:14px 0 18px}
+.link{background:none;border:0;color:var(--accent);cursor:pointer;padding:0;font-size:13px}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* менеджер загрузок */
+.dock{border-top:1px solid var(--line);background:var(--surface);backdrop-filter:blur(18px) saturate(1.4);display:flex;flex-direction:column;min-height:0}
+.dock-head{display:flex;align-items:center;gap:10px;padding:10px 18px;flex-wrap:wrap}
+.dock-head h3{margin:0;font:600 14px var(--font-display)}
+.state{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--bg2);color:var(--muted)}
+.state.run{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.state.pause,.state.wait{background:color-mix(in srgb,var(--warn) 18%,transparent);color:color-mix(in srgb,var(--warn) 80%,var(--text))}
+.state.down{background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad)}
+.state.done{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.counts{font-size:12.5px;color:var(--muted)}
+.tabs{display:flex;gap:4px;margin-left:auto}
+.tab{height:30px;padding:0 12px;border-radius:8px;border:0;background:transparent;cursor:pointer;color:var(--muted)}
+.tab.on{background:var(--raised);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.dock-body{height:260px;display:grid;grid-template-columns:360px 1fr;border-top:1px solid var(--line);min-height:0}
+.dock.collapsed .dock-body{display:none}
+.now{padding:14px 18px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:8px;min-width:0}
+.now .k{font-size:11.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+.now .v{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:8px;border-radius:8px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);border-radius:8px;transition:width .3s}
+.bar.indet i{width:35%;animation:ind 1.3s ease-in-out infinite}
+@keyframes ind{0%{margin-left:-35%}100%{margin-left:100%}}
+.nums{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.ctrl{display:flex;gap:6px;margin-top:auto;flex-wrap:wrap}
+.ctrl .btn{height:32px;padding:0 10px;font-size:13px}
+.list{overflow:auto;min-height:0}
+.dl{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;padding:8px 18px;border-bottom:1px solid var(--line)}
+.dl:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.ext{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font:700 9.5px var(--font);color:#fff;letter-spacing:.02em}
+.dl .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl .s{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl .acts{display:flex;gap:4px;opacity:.85}
+.dl .acts button{height:28px;padding:0 9px;border-radius:8px;border:1px solid var(--line);background:var(--raised);cursor:pointer;font-size:12px}
+.dl .acts button:hover{border-color:var(--accent);color:var(--accent)}
+.badge{font-size:11px;padding:2px 7px;border-radius:6px;margin-left:6px;vertical-align:1px}
+.b-new{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.b-copy{background:var(--bg2);color:var(--muted)}
+.b-fail{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.log{overflow:auto;font:12.5px/1.55 "Cascadia Mono",Consolas,ui-monospace,monospace;padding:10px 18px;white-space:pre-wrap;min-height:0}
+.log .warn{color:color-mix(in srgb,var(--warn) 85%,var(--text))}.log .error{color:var(--bad)}.log .debug{color:var(--faint)}
+.log .ts{color:var(--faint);margin-right:8px}
+
+/* вкладки, экран курса, расписание, элективы */
+.mtabs{margin-left:6px}.mtabs button{padding:6px 14px}
+.cv-head{border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);margin-bottom:14px}
+.cv-cover{height:120px;background-size:cover;background-position:center;position:relative}
+.cv-cover img{width:100%;height:100%;object-fit:cover}
+.cv-info{padding:14px 18px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.cv-info h2{margin:2px 0 6px;font:600 21px/1.25 var(--font-display)}
+.cv-acts{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.cv-body{display:grid;grid-template-columns:220px 1fr;gap:14px;align-items:start}
+.toc{position:sticky;top:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px;max-height:calc(100vh - 360px);overflow:auto}
+.toc a{display:block;padding:6px 8px;border-radius:8px;color:var(--muted);text-decoration:none;font-size:12.5px;line-height:1.3}
+.toc a:hover{background:var(--bg2);color:var(--text)}
+.msec{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);margin-bottom:12px;overflow:hidden;box-shadow:var(--shadow)}
+.msec h3{margin:0;padding:12px 16px;font:600 15px var(--font-display);color:var(--accent);border-bottom:1px solid var(--line)}
+.mi{display:grid;grid-template-columns:36px 1fr auto;gap:12px;padding:10px 16px;border-top:1px solid var(--line);align-items:start}
+.mi:first-of-type{border-top:0}.mi.dim{opacity:.6}
+.micon{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:#fff}
+.mname{font-weight:600}.mname .kb{font-size:10.5px;font-weight:700;color:#fff;border-radius:5px;padding:1px 6px;margin-right:6px;vertical-align:1px}
+.kb.ЛК{background:#2f6fde}.kb.ПЗ{background:#0f9d8a}.kb.ЛЗ{background:#e8710a}.kb.ДР{background:#6b7280}
+.mdesc{font-size:12.5px;color:var(--muted);font-style:italic;margin-top:2px}
+.mfiles{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.mf{display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
+.mf .fn{max-width:520px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mf button,.mi .side-b button{height:26px;padding:0 9px;border-radius:7px;border:1px solid var(--line);background:var(--raised);cursor:pointer;font-size:12px}
+.mf button:hover,.mi .side-b button:hover{border-color:var(--accent);color:var(--accent)}
+.mmeta{font-size:12px;color:var(--faint)}
+.schedframe{width:100%;height:100%;border:0;border-radius:var(--r);background:var(--surface)}
+.srclist label{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);cursor:pointer;font-size:13px}
+.srclist label:first-child{border-top:0}
+.ranges{display:flex;flex-wrap:wrap;gap:6px}
+.ranges button{border:1px solid var(--line);background:var(--raised);border-radius:999px;padding:5px 11px;cursor:pointer;font-size:12.5px}
+.ranges button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.ecards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.ecard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px}
+.ecard .ctx{line-height:1.4}.ecard.mine{border-color:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb,var(--ok) 30%,transparent)}
+.ecard .row2{display:flex;gap:8px;align-items:center;margin-top:auto}
+.msgs{margin:0 0 12px;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--ok) 12%,var(--surface));border:1px solid color-mix(in srgb,var(--ok) 35%,transparent)}
+input.txt{height:36px;border-radius:10px;border:1px solid var(--line);background:var(--raised);padding:0 10px;width:100%;outline:none}
+/* просмотр */
+.modal{position:fixed;inset:0;background:rgba(10,12,16,.45);backdrop-filter:blur(4px);display:grid;place-items:center;z-index:50}
+.modal-box{width:min(1100px,94vw);height:min(860px,90vh);background:var(--surface-solid);border-radius:18px;border:1px solid var(--line);box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.modal-box header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.modal-box header b{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.modal-box iframe{flex:1;border:0;background:#fff}
+.toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:60}
+.toast{background:var(--surface-solid);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;box-shadow:var(--shadow);padding:12px 14px;max-width:420px;animation:tin .2s}
+.toast.bad{border-left-color:var(--bad)}.toast.ok{border-left-color:var(--ok)}
+@keyframes tin{from{transform:translateY(8px);opacity:0}}
+@media (max-width:980px){.cv-body{grid-template-columns:1fr}.toc{display:none}.layout{grid-template-columns:1fr}.side{padding:0 18px 24px}.dock-body{grid-template-columns:1fr}.now{display:none}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>Moodle Offline</div>
+    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on">Курсы</button><button data-view="schedule">Расписание</button><button data-view="electives">Элективы</button></div>
+    <div class="pill" id="net" title="Проверка доступности Moodle раз в 30 секунд"><span class="dot"></span><span class="txt">Проверяю сервер…</span></div>
+    <div class="pill hidden" id="ip"></div>
+    <div class="spacer"></div>
+    <div class="user hidden" id="user"><div class="avatar" id="avatar"></div><span id="uname"></span>
+      <button class="icon-btn" id="logoutBtn" title="Выйти и забыть вход"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h12"/></svg></button></div>
+    <button class="icon-btn" id="themeBtn" title="Оформление"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18" fill="currentColor"/></svg></button>
+  </header>
+  <div class="pop hidden" id="themePop">
+    <h4>Тема</h4>
+    <div class="seg" id="themeSeg"><button data-t="auto">Как в системе</button><button data-t="light">Светлая</button><button data-t="dark">Тёмная</button></div>
+    <h4 style="margin-top:16px">Акцентный цвет</h4>
+    <div class="swatches" id="swatches"></div>
+  </div>
+  <div id="bannerWrap"></div>
+  <main>
+    <!-- Вход -->
+    <section class="view" id="loginView">
+      <div class="login-wrap"><div class="login">
+        <div class="logo" style="width:44px;height:44px;border-radius:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>
+        <h1>Вход в Moodle</h1>
+        <p class="sub">Материалы курсов будут сохранены на этот компьютер для доступа без интернета.</p>
+        <div class="lf"><label>Адрес сайта</label><input id="lUrl" placeholder="https://do.sevsu.ru"></div>
+        <div id="credBox">
+          <div class="lf"><label>Логин</label><input id="lUser" autocomplete="username"></div>
+          <div class="lf"><label>Пароль</label><input id="lPass" type="password" autocomplete="current-password"></div>
+        </div>
+        <div class="lf hidden" id="cookieBox"><label>Cookie MoodleSession из браузера</label><input id="lCookie" placeholder="вставьте значение MoodleSession">
+          <p class="hint">Войдите на сайт в браузере → нажмите <b>F12</b> → вкладка «Хранилище» (Firefox) или «Приложение» (Edge, Chrome) →
+          Cookies → <code>https://do.sevsu.ru</code> → строка <b>MoodleSession</b> → скопируйте «Значение». На сайте потом не нажимайте «Выход» — сессия закроется.</p></div>
+        <div class="lrow">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><span class="sw-t"><input type="checkbox" id="lRemember" checked><span></span></span><span id="rememberTxt">Запомнить меня</span></label>
+          <button class="link" id="cookieToggle">Вход по cookie (SSO)</button>
+        </div>
+        <div class="err hidden" id="lErr"></div>
+        <button class="btn primary big" id="loginBtn">Войти</button>
+        <p class="hint" id="rememberHint"></p>
+      </div></div>
+    </section>
+    <!-- Курсы -->
+    <section class="view hidden" id="coursesView">
+      <div class="layout">
+        <div class="content">
+          <div class="toolbar">
+            <h2>Курсы</h2>
+            <div class="chips" id="filters">
+              <button class="chip on" data-f="current">Текущие</button><button class="chip" data-f="past">Прошлые</button>
+              <button class="chip" data-f="hidden">Скрытые</button><button class="chip" data-f="all">Все</button>
+            </div>
+            <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" placeholder="Поиск курса"></div>
+            <button class="btn ghost" id="selAll">Выбрать все</button>
+            <button class="btn ghost" id="selNone">Снять</button>
+            <button class="icon-btn" id="refreshBtn" title="Обновить список курсов"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button>
+          </div>
+          <div class="grid" id="grid"></div>
+          <div class="hidden" id="courseView"></div>
+        </div>
+        <aside class="side">
+          <div class="panel">
+            <h3>Как сохранять</h3>
+            <div class="mode" id="modeBox">
+              <div class="mopt" data-m="1"><div class="radio"></div><div><b>Каталог с оглавлением</b><span>Файлы с префиксами «03_ЛЗ_02 …» и index.html / README.md с названиями как на сайте</span></div></div>
+              <div class="mopt" data-m="2"><div class="radio"></div><div><b>Папки по типам</b><span>Курс / 03. Раздел / Лекции · ПЗ · ЛЗ / файлы</span></div></div>
+            </div>
+            <div class="field"><label>Папка для сохранения</label>
+              <div class="path"><input id="outDir"><button class="btn" id="pickDir" title="Выбрать папку">…</button><button class="btn" id="openDir" title="Открыть в проводнике"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button></div>
+            </div>
+            <div class="row"><div class="lbl">PDF-копии страниц<small id="pdfNote">задания, тесты, страницы — ещё и в PDF</small></div><label class="sw-t"><input type="checkbox" data-s="pdf"><span></span></label></div>
+            <div class="row"><div class="lbl">ZIP-бэкап курса<small>архив с датой в папке _бэкапы</small></div><label class="sw-t"><input type="checkbox" data-s="zip"><span></span></label></div>
+          </div>
+          <div class="panel">
+            <h3>Бережный режим</h3>
+            <div class="row"><div class="lbl">Ждать поднятия сервера<small>если Moodle лежит — начну сам, когда оживёт</small></div><label class="sw-t"><input type="checkbox" data-s="wait_for_server"><span></span></label></div>
+            <div class="row" style="flex-wrap:wrap"><div class="lbl">Тихие часы<small>качать только в это время</small></div><label class="sw-t"><input type="checkbox" data-s="quiet_hours_on"><span></span></label>
+              <div class="times" style="width:100%"><span class="hint" style="margin:0">с</span><input type="time" id="qhFrom" value="01:00"><span class="hint" style="margin:0">до</span><input type="time" id="qhTo" value="07:00"></div></div>
+            <div class="row" style="flex-wrap:wrap" id="schedRow"><div class="lbl">Ночная синхронизация<small>планировщик Windows, каждый день</small></div><label class="sw-t"><input type="checkbox" id="schedOn"><span></span></label>
+              <div class="times" style="width:100%"><span class="hint" style="margin:0">в</span><input type="time" id="schedTime" value="03:10"></div></div>
+            <details class="adv"><summary>Дополнительно</summary>
+              <div class="row"><div class="lbl">Имена файлов как на сервере<small>а не как называется элемент курса</small></div><label class="sw-t"><input type="checkbox" data-s="original_names"><span></span></label></div>
+              <div class="row"><div class="lbl">Оглавление и в режиме папок</div><label class="sw-t"><input type="checkbox" data-s="index_in_mode2"><span></span></label></div>
+              <div class="row"><div class="lbl">Через системный прокси<small>обычно не нужно — Moodle лучше напрямую</small></div><label class="sw-t"><input type="checkbox" data-s="use_system_proxy"><span></span></label></div>
+              <div class="row"><div class="lbl">Не проверять страну IP</div><label class="sw-t"><input type="checkbox" data-s="no_geo_check"><span></span></label></div>
+            </details>
+          </div>
+          <div class="panel">
+            <button class="btn primary big" id="startBtn">Скачать выбранные</button>
+            <button class="btn big" id="syncBtn" style="margin-top:8px">Быстрая синхронизация (только новое)</button>
+            <p class="hint" id="selInfo"></p>
+          </div>
+        </aside>
+      </div>
+    </section>
+    <!-- Расписание -->
+    <section class="view hidden" id="scheduleView">
+      <div class="layout">
+        <div class="content" style="display:flex;flex-direction:column">
+          <div class="toolbar"><h2>Расписание</h2><span class="hint" id="schInfo" style="margin:0"></span></div>
+          <div id="schEmpty" class="empty hidden">Расписание ещё не сохранено. Выберите период справа и нажмите «Сохранить для офлайна».</div>
+          <iframe class="schedframe hidden" id="schFrame" style="flex:1;min-height:420px"></iframe>
+        </div>
+        <aside class="side">
+          <div class="panel">
+            <h3>Группа и источники</h3>
+            <div class="field"><label>Группа (как в адресе расписания)</label><input class="txt" id="schGroup" placeholder="ib-b-25-2-o"></div>
+            <div class="srclist" id="schSources"></div>
+            <details class="adv"><summary>Адреса источников</summary><div id="schUrls"></div>
+              <p class="hint">В адресе можно использовать {group}, {week} (номер недели) и {date} (понедельник недели, ГГГГ-ММ-ДД).</p></details>
+          </div>
+          <div class="panel">
+            <h3>Период для офлайна</h3>
+            <div class="ranges" id="schRanges">
+              <button data-r="week">Эта неделя</button><button data-r="next">Следующая</button><button data-r="2weeks" class="on">2 недели</button>
+              <button data-r="month">Месяц</button><button data-r="semester">До конца семестра</button><button data-r="custom">Свой период</button></div>
+            <div class="times hidden" id="schCustom"><span class="hint" style="margin:0">с</span><input type="date" id="schFrom"><span class="hint" style="margin:0">по</span><input type="date" id="schTo"></div>
+            <div class="row" style="margin-top:8px"><div class="lbl">Снимки страниц в PDF<small>каждая неделя — «как на сайте»</small></div><label class="sw-t"><input type="checkbox" id="schPdf"><span></span></label></div>
+            <div class="row"><div class="lbl">Обновлять при синхронизации<small>на 2 недели вперёд, и ночью тоже</small></div><label class="sw-t"><input type="checkbox" id="schAuto"><span></span></label></div>
+            <button class="btn primary big" id="schSave" style="margin-top:10px">Сохранить для офлайна</button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+              <button class="btn" id="schOpen">Открыть в браузере</button><button class="btn" id="schIcs">В календарь (.ics)</button><button class="btn" id="schSnaps">Снимки страниц</button></div>
+            <p class="hint">Данные копятся: сохранили месяц, потом неделю — месяц не пропадёт. Официальные сайты СевГУ открываются через Edge в фоне, как в обычном браузере.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+    <!-- Элективы -->
+    <section class="view hidden" id="electivesView">
+      <div class="layout">
+        <div class="content">
+          <div class="toolbar"><h2 id="elTitle">Спортивные элективы</h2><span class="hint" id="elInfo" style="margin:0"></span></div>
+          <div id="elMsgs"></div>
+          <div class="ecards" id="elCards"></div>
+        </div>
+        <aside class="side">
+          <div class="panel">
+            <h3>Запись на неделю</h3>
+            <button class="btn primary big" id="elRefresh">Обновить варианты</button>
+            <div id="elPassBox" class="hidden" style="margin-top:12px">
+              <div class="field"><label>Пароль учётной записи СевГУ (как для Moodle)</label><input class="txt" type="password" id="elPass"></div>
+              <button class="btn" id="elPassGo">Войти и обновить</button></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="btn" id="elSite">Открыть на сайте</button><button class="btn" id="elSnap">Офлайн-копия</button></div>
+            <div class="row" style="margin-top:10px;flex-wrap:wrap"><div class="lbl">Следить за новыми вариантами<small>уведомлю, когда появятся новые</small></div><label class="sw-t"><input type="checkbox" id="elWatch"><span></span></label>
+              <div class="times" style="width:100%"><span class="hint" style="margin:0">каждые</span><select id="elHours" class="txt" style="width:auto"><option>3</option><option selected>6</option><option>12</option><option>24</option></select><span class="hint" style="margin:0">ч</span></div></div>
+            <details class="adv"><summary>Адрес страницы</summary><input class="txt" id="elUrl" style="margin-top:8px"></details>
+            <p class="hint">Записываю только по вашему нажатию — это то же, что кнопка на сайте. Автоматически «ловить» места программа не будет.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+  <section class="dock collapsed" id="dock">
+    <div class="dock-head">
+      <h3>Загрузки</h3><span class="state" id="jobState">Ожидание</span><span class="counts" id="counts"></span>
+      <div class="tabs"><button class="tab on" data-tab="files">Файлы</button><button class="tab" data-tab="errors">Ошибки</button><button class="tab" data-tab="log">Журнал</button>
+        <button class="icon-btn" id="collapse" title="Свернуть"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg></button></div>
+    </div>
+    <div class="dock-body">
+      <div class="now">
+        <div><div class="k">Курс</div><div class="v" id="nowCourse">—</div></div>
+        <div><div class="k">Элемент</div><div class="v" id="nowItem">—</div></div>
+        <div><div class="k">Файл</div><div class="v" id="nowFile">—</div></div>
+        <div class="bar" id="nowBar"><i></i></div>
+        <div class="nums"><span id="nowBytes"></span><span id="nowSpeed"></span></div>
+        <div class="ctrl">
+          <button class="btn" id="pauseBtn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><span>Пауза</span></button>
+          <button class="btn" id="skipBtn" disabled title="Пропустить текущий файл (попадёт в список «не скачано»)"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M5 5l9 7-9 7z"/><rect x="16" y="5" width="3" height="14" rx="1"/></svg>Пропустить файл</button>
+          <button class="btn danger" id="stopBtn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Стоп</button>
+        </div>
+      </div>
+      <div class="list" id="dlist"><div class="empty">Здесь появятся скачанные файлы.</div></div>
+      <div class="list hidden" id="elist"></div>
+      <div class="log hidden" id="log"></div>
+    </div>
+  </section>
+</div>
+<div class="modal hidden" id="modal"><div class="modal-box"><header><b id="mTitle"></b><button class="btn" id="mOpen">Открыть в программе</button><button class="btn" id="mReveal">Показать в папке</button><button class="icon-btn" id="mClose"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><iframe id="mFrame"></iframe></div></div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+"use strict";
+const T = new URLSearchParams(location.search).get("t") || sessionStorage.getItem("mo_t") || "";
+if (T) sessionStorage.setItem("mo_t", T);
+history.replaceState(null, "", "/");
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(path, body) {
+  const opt = {headers: {"X-Token": T}};
+  if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  if (r.status === 403) throw new Error("forbidden");
+  return r.json();
+}
+const fileUrl = p => "/files/" + p.split("/").map(encodeURIComponent).join("/") + "?t=" + encodeURIComponent(T);
+function hsize(n){ if(n==null) return ""; const u=["Б","КБ","МБ","ГБ"]; let i=0; while(n>=1024&&i<3){n/=1024;i++} return (i?n.toFixed(1):n.toFixed(0))+" "+u[i]; }
+function dur(s){ if(s==null||!isFinite(s)) return ""; s=Math.round(s); if(s<60) return s+" с"; const m=Math.floor(s/60); return m+" мин "+(s%60)+" с"; }
+function toast(msg, kind=""){ const d=document.createElement("div"); d.className="toast "+kind; d.textContent=msg; $("#toasts").appendChild(d); setTimeout(()=>d.remove(), 6000); }
+
+/* ── тема и акцент ── */
+const ACCENTS = ["#2f6fde","#7c4dff","#0f9d8a","#e8710a","#d63384","#5f6b7a"];
+function applyTheme(){
+  const t = localStorage.getItem("mo_theme") || "auto", a = localStorage.getItem("mo_accent") || ACCENTS[0];
+  document.documentElement.dataset.theme = t;
+  document.documentElement.style.setProperty("--accent", a);
+  $$("#themeSeg button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  $$(".sw").forEach(b => b.classList.toggle("on", b.dataset.c === a));
+}
+$("#swatches").innerHTML = ACCENTS.map(c => `<button class="sw" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("");
+$("#themeBtn").onclick = e => { e.stopPropagation(); $("#themePop").classList.toggle("hidden"); };
+document.addEventListener("click", e => { if (!$("#themePop").contains(e.target)) $("#themePop").classList.add("hidden"); });
+$$("#themeSeg button").forEach(b => b.onclick = () => { localStorage.setItem("mo_theme", b.dataset.t); applyTheme(); });
+$$(".sw").forEach(b => b.onclick = () => { localStorage.setItem("mo_accent", b.dataset.c); applyTheme(); });
+applyTheme();
+
+/* ── состояние ── */
+let S = null, seq = 0, courses = [], selected = new Set(), filter = "current", query = "", lastLogin = null, lastJob = "idle",
+    lastDl = -1, lastErr = -1, settingsLoaded = false, tab = "files";
+
+/* ── вход ── */
+$("#cookieToggle").onclick = () => { const c = $("#cookieBox").classList.toggle("hidden"); $("#credBox").classList.toggle("hidden", !c);
+  $("#cookieToggle").textContent = c ? "Вход по cookie (SSO)" : "Вход по логину и паролю"; };
+async function doLogin(){
+  const btn = $("#loginBtn"); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Вхожу…'; $("#lErr").classList.add("hidden");
+  const cookieMode = !$("#cookieBox").classList.contains("hidden");
+  const r = await api("/api/login", {url: $("#lUrl").value.trim(), username: $("#lUser").value.trim(), password: $("#lPass").value,
+                                     remember: $("#lRemember").checked, cookie: cookieMode ? $("#lCookie").value.trim() : ""}).catch(e => ({ok:false, error:String(e)}));
+  btn.disabled = false; btn.textContent = "Войти";
+  if (!r.ok) {
+    $("#lErr").innerHTML = esc(r.error || "Не удалось войти") + (r.hint ? `<div class="hint" style="color:var(--muted);margin-top:6px">${esc(r.hint)}</div>` : "");
+    $("#lErr").classList.remove("hidden");
+  }
+  else { $("#lPass").value = ""; }
+}
+$("#loginBtn").onclick = doLogin;
+$("#lPass").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+$("#logoutBtn").onclick = async () => { if (!confirm("Выйти и забыть сохранённый вход на этом компьютере?")) return; await api("/api/logout", {}); courses = []; renderGrid(); };
+
+/* ── курсы ── */
+const visible = c => (filter === "all" || (filter === "current" && !c.past && !c.hidden) || (filter === "past" && c.past && !c.hidden) || (filter === "hidden" && c.hidden))
+                   && (!query || (c.fullname + " " + c.shortname + " " + c.category).toLowerCase().includes(query));
+function coverStyle(c){
+  const h = (c.id * 47) % 360;
+  return `background-image:linear-gradient(135deg,hsl(${h} 62% 46%),hsl(${(h+40)%360} 70% 36%))`;
+}
+function initials(c){ return (c.shortname || c.fullname).replace(/[^\p{L}\p{N} ]/gu," ").split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase(); }
+function renderGrid(){
+  const list = courses.filter(visible);
+  $("#grid").innerHTML = list.length ? list.map(c => {
+    const img = c.image ? (c.image.startsWith("data:") ? c.image : c.image + "&t=" + encodeURIComponent(T)) : "";
+    const tag = c.hidden ? "скрыт" : c.past ? "прошлый" : c.future ? "будущий" : "";
+    return `<div class="card ${selected.has(c.id) ? "sel" : ""}" data-id="${c.id}">
+      <div class="cover" style="${coverStyle(c)}">${img ? `<img src="${esc(img)}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">` : `<div class="ini">${esc(initials(c))}</div>`}
+        <span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>${tag ? `<span class="tag">${tag}</span>` : ""}</div>
+      <div class="cbody"><div class="cat">${esc(c.category || " ")}</div><div class="ctitle" title="${esc(c.fullname)}">${esc(c.fullname)}</div>
+        ${c.progress != null ? `<div class="prog" title="Выполнено в Moodle: ${Math.round(c.progress)}%"><i style="width:${Math.round(c.progress)}%"></i></div>` : `<div style="margin-top:auto"></div>`}
+        <div class="cfoot"><span>${c.downloaded ? `Скачано ${c.downloaded} · ${esc(c.updated.split(" ")[0])}` : "Ещё не скачан"}</span>
+        ${c.dir ? `<button class="mini" data-open="${esc(c.dir)}" title="Открыть папку курса">Папка</button>` : ""}</div></div></div>`;
+  }).join("") : `<div class="empty">${courses.length ? "Ничего не найдено — попробуйте другой фильтр." : "Курсы загружаются…"}</div>`;
+  updateSelInfo();
+}
+$("#grid").addEventListener("click", e => {
+  const open = e.target.closest("[data-open]");
+  if (open) { e.stopPropagation(); api("/api/open", {path: open.dataset.open}); return; }
+  const card = e.target.closest(".card"); if (!card) return;
+  const id = +card.dataset.id;
+  if (e.target.closest(".check")) {          // галочка — выбрать для загрузки
+    selected.has(id) ? selected.delete(id) : selected.add(id);
+    card.classList.toggle("sel", selected.has(id)); saveSel(); updateSelInfo(); return;
+  }
+  openCourse(id);                            // остальная карточка — открыть курс
+});
+$$("#filters .chip").forEach(b => b.onclick = () => { filter = b.dataset.f; $$("#filters .chip").forEach(x => x.classList.toggle("on", x === b)); renderGrid(); });
+$("#q").oninput = e => { query = e.target.value.trim().toLowerCase(); renderGrid(); };
+$("#selAll").onclick = () => { courses.filter(visible).forEach(c => selected.add(c.id)); saveSel(); renderGrid(); };
+$("#selNone").onclick = () => { selected.clear(); saveSel(); renderGrid(); };
+$("#refreshBtn").onclick = async () => { await api("/api/refresh_courses", {}); loadCourses(); toast("Список курсов обновлён"); };
+let selTimer; function saveSel(){ clearTimeout(selTimer); selTimer = setTimeout(() => api("/api/settings", {course_ids: [...selected]}), 400); }
+function updateSelInfo(){
+  const n = selected.size, busy = S && S.job.state !== "idle";
+  $("#startBtn").textContent = n ? `Скачать выбранные (${n})` : "Выберите курсы";
+  $("#startBtn").disabled = !n || busy; $("#syncBtn").disabled = !n || busy;
+  $("#selInfo").textContent = n ? "Можно закрыть окно во время загрузки — она завершится в фоне, придёт уведомление." : "Отметьте курсы галочкой в углу карточки. Нажатие на саму карточку открывает курс.";
+}
+async function loadCourses(){ courses = await api("/api/courses"); renderGrid(); }
+
+/* ── настройки ── */
+function loadSettings(st){
+  const s = st.settings;
+  $$(".mopt").forEach(m => m.classList.toggle("on", +m.dataset.m === +(s.mode || 1)));
+  if (document.activeElement !== $("#outDir")) $("#outDir").value = s.out_dir || "";
+  $$("[data-s]").forEach(i => i.checked = !!s[i.dataset.s]);
+  if (s.quiet_hours) { const [a, b] = s.quiet_hours.split("-"); $("#qhFrom").value = a.padStart(5, "0"); $("#qhTo").value = b.padStart(5, "0"); }
+  $("#schedOn").checked = !!s.schedule_on; if (s.schedule_time) $("#schedTime").value = s.schedule_time;
+  $("#schedRow").classList.toggle("hidden", st.platform !== "nt");
+  const pdf = $('[data-s="pdf"]'); pdf.disabled = !st.browser_pdf;
+  $("#pdfNote").textContent = st.browser_pdf ? "задания, тесты, страницы — ещё и в PDF" : "нужен Microsoft Edge или Google Chrome";
+  if (!settingsLoaded) { (s.course_ids || []).forEach(id => selected.add(+id)); settingsLoaded = true; }
+}
+$$(".mopt").forEach(m => m.onclick = () => { $$(".mopt").forEach(x => x.classList.toggle("on", x === m)); api("/api/settings", {mode: +m.dataset.m}); });
+$$("[data-s]").forEach(i => i.onchange = () => api("/api/settings", {[i.dataset.s]: i.checked}));
+$("#outDir").onchange = e => api("/api/settings", {out_dir: e.target.value.trim()}).then(loadCourses);
+$("#pickDir").onclick = async () => { const r = await api("/api/pick_folder", {}); if (r.ok) { $("#outDir").value = r.path; loadCourses(); } };
+$("#openDir").onclick = () => api("/api/open", {path: ""});
+const saveHours = () => api("/api/settings", {quiet_hours: $("#qhFrom").value + "-" + $("#qhTo").value}).then(r => { if (!r.ok) toast(r.error, "bad"); });
+$("#qhFrom").onchange = saveHours; $("#qhTo").onchange = saveHours;
+async function saveSched(){ const r = await api("/api/schedule", {enabled: $("#schedOn").checked, time: $("#schedTime").value});
+  if (!r.ok) { toast("Планировщик: " + r.error, "bad"); $("#schedOn").checked = false; } else if ($("#schedOn").checked) toast("Ночная синхронизация: каждый день в " + $("#schedTime").value, "ok"); }
+$("#schedOn").onchange = saveSched; $("#schedTime").onchange = () => { if ($("#schedOn").checked) saveSched(); };
+
+/* ── запуск ── */
+async function start(sync, ignoreGeo=false, ids=null){
+  const body = {sync, course_ids: ids || [...selected], wait_for_server: $('[data-s="wait_for_server"]').checked, ignore_geo: ignoreGeo};
+  const r = await api("/api/start", body);
+  if (r.geo) { if (confirm(r.geo + "\n\nВсё равно начать?")) return start(sync, true, ids); return; }
+  if (!r.ok) return toast(r.error || "Не удалось начать", "bad");
+  if (r.armed) toast("Сервер сейчас недоступен — начну автоматически, как только он оживёт.");
+  $("#dock").classList.remove("collapsed");
+}
+$("#startBtn").onclick = () => start(false);
+$("#syncBtn").onclick = () => start(true);
+$("#pauseBtn").onclick = () => api(S.job.state === "paused" ? "/api/resume" : "/api/pause", {});
+$("#skipBtn").onclick = () => api("/api/skip", {});
+$("#stopBtn").onclick = () => { if (confirm("Остановить загрузку? Прогресс сохранится, при следующем запуске продолжу с этого места.")) api(S.job.armed ? "/api/disarm" : "/api/stop", {}); };
+$("#collapse").onclick = () => $("#dock").classList.toggle("collapsed");
+$$(".tab").forEach(t => t.onclick = () => { tab = t.dataset.tab; $$(".tab").forEach(x => x.classList.toggle("on", x === t));
+  $("#dlist").classList.toggle("hidden", tab !== "files"); $("#elist").classList.toggle("hidden", tab !== "errors"); $("#log").classList.toggle("hidden", tab !== "log");
+  $("#dock").classList.remove("collapsed"); if (tab === "log") $("#log").scrollTop = 1e9; });
+
+/* ── менеджер загрузок ── */
+const EXT = {pdf:["#d93a3a","PDF"],doc:["#2b6cd6","DOC"],docx:["#2b6cd6","DOC"],xls:["#1a9e5c","XLS"],xlsx:["#1a9e5c","XLS"],ppt:["#e8710a","PPT"],pptx:["#e8710a","PPT"],
+  html:["#7c4dff","HTML"],htm:["#7c4dff","HTML"],png:["#0f9d8a","IMG"],jpg:["#0f9d8a","IMG"],jpeg:["#0f9d8a","IMG"],zip:["#5f6b7a","ZIP"],url:["#5f6b7a","URL"],txt:["#5f6b7a","TXT"]};
+const PREVIEW = new Set(["pdf","html","htm","png","jpg","jpeg","gif","svg","txt","webp"]);
+const extOf = p => (p.split(".").pop() || "").toLowerCase();
+function dlRow(d){
+  if (d.status === "fail") return `<div class="dl"><div class="ext" style="background:var(--bad)">!</div><div style="min-width:0"><div class="t">${esc(d.title)}<span class="badge b-fail">не скачано</span></div>
+    <div class="s">${esc(d.error)} · ${esc(d.course)} · ${d.t}</div></div><div class="acts">${d.url ? `<button data-url="${esc(d.url)}">На сайте</button>` : ""}</div></div>`;
+  const e = extOf(d.path), [col, lab] = EXT[e] || ["#8a93a3", e.slice(0,4).toUpperCase() || "FILE"];
+  const badge = d.status === "new" ? '<span class="badge b-new">новый</span>' : d.status === "page" ? '<span class="badge b-new">страница</span>' : '<span class="badge b-copy">скопирован</span>';
+  return `<div class="dl"><div class="ext" style="background:${col}">${lab}</div><div style="min-width:0"><div class="t" title="${esc(d.path)}">${esc(d.path.split("/").pop())}${badge}</div>
+    <div class="s">${esc(d.course)} · ${hsize(d.size)} · ${d.t}</div></div>
+    <div class="acts">${PREVIEW.has(e) ? `<button data-prev="${esc(d.path)}">Просмотр</button>` : ""}<button data-ext="${esc(d.path)}">Открыть</button><button data-rev="${esc(d.path)}">В папке</button></div></div>`;
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-prev],[data-ext],[data-rev],[data-url]"); if (!b) return;
+  if (b.dataset.url) return openUrl(b.dataset.url);   // в обычном браузере, где вы уже вошли на сайт
+  if (b.dataset.prev) return preview(b.dataset.prev);
+  api("/api/open", {path: b.dataset.ext || b.dataset.rev, reveal: !!b.dataset.rev}).then(r => { if (!r.ok) toast(r.error, "bad"); });
+});
+let mPath = "";
+function preview(p){ mPath = p; $("#mTitle").textContent = p.split("/").pop(); $("#mFrame").src = fileUrl(p); $("#modal").classList.remove("hidden"); }
+$("#mClose").onclick = () => { $("#modal").classList.add("hidden"); $("#mFrame").src = "about:blank"; };
+$("#mOpen").onclick = () => api("/api/open", {path: mPath});
+$("#mReveal").onclick = () => api("/api/open", {path: mPath, reveal: true});
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("#mClose").click(); });
+
+const STATE_TXT = {idle:["Ожидание",""], running:["Идёт загрузка","run"], paused:["Пауза","pause"], stopping:["Останавливаю…","pause"],
+                   waiting_network:["Жду сервер","down"], waiting_window:["Тихие часы — жду","wait"]};
+function renderJob(j){
+  let [txt, cls] = STATE_TXT[j.state] || [j.state, ""];
+  if (j.state === "idle" && j.armed) [txt, cls] = ["Жду, когда сервер поднимется", "wait"];
+  else if (j.state === "idle" && j.result) [txt, cls] = [j.result.ok ? "Готово" : (j.result.aborted === "stopped" ? "Остановлено" : "Прервано"), j.result.ok ? "done" : "down"];
+  $("#jobState").textContent = txt; $("#jobState").className = "state " + cls;
+  const c = j.counts || {};
+  $("#counts").textContent = (c.new || c.skipped || c.failed) ? `новых ${c.new} · ${hsize(c.bytes)} · уже было ${c.skipped}` + (c.failed ? ` · ошибок ${c.failed}` : "") : "";
+  const busy = j.state !== "idle";
+  $("#pauseBtn").disabled = !busy || j.state === "stopping"; $("#skipBtn").disabled = !j.file; $("#stopBtn").disabled = !busy && !j.armed;
+  $("#pauseBtn span").textContent = j.state === "paused" ? "Продолжить" : "Пауза";
+  $("#nowCourse").textContent = j.course ? `${j.course.name} (${j.course.i}/${j.course.n})` : "—";
+  $("#nowItem").textContent = j.item ? `${j.item.kind} · ${j.item.name} (${j.item.i}/${j.item.n})` : "—";
+  const f = j.file, bar = $("#nowBar");
+  if (f) {
+    $("#nowFile").textContent = f.title;
+    bar.classList.toggle("indet", !f.total); $("#nowBar i").style.width = f.total ? (100 * f.done / f.total).toFixed(1) + "%" : "";
+    $("#nowBytes").textContent = f.total ? `${hsize(f.done)} из ${hsize(f.total)} · ${(100 * f.done / f.total).toFixed(0)}%` : hsize(f.done);
+    $("#nowSpeed").textContent = f.speed > 1 ? `${hsize(f.speed)}/с` + (f.eta != null ? ` · осталось ${dur(f.eta)}` : "") : "";
+  } else {
+    $("#nowFile").textContent = busy ? (j.state === "waiting_network" ? "сервер недоступен, проверяю каждые 30–60 с" : "открываю страницы курса…") : "—";
+    bar.classList.toggle("indet", busy && j.state === "running"); $("#nowBar i").style.width = busy ? "" : "0"; $("#nowBytes").textContent = ""; $("#nowSpeed").textContent = "";
+  }
+  const top = j.downloads.length ? j.downloads[0].id : 0;
+  if (top !== lastDl) {
+    lastDl = top;
+    const ok = j.downloads.filter(d => d.status !== "fail"), bad = j.downloads.filter(d => d.status === "fail");
+    $("#dlist").innerHTML = ok.length ? ok.map(dlRow).join("") : '<div class="empty">Здесь появятся скачанные файлы.</div>';
+    $("#elist").innerHTML = bad.length ? bad.map(dlRow).join("") : '<div class="empty">Ошибок нет.</div>';
+    $$('.tab[data-tab="errors"]')[0].textContent = bad.length ? `Ошибки (${bad.length})` : "Ошибки";
+  }
+  if (j.lines.length) {
+    const log = $("#log"), atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 30;
+    log.insertAdjacentHTML("beforeend", j.lines.map(l => `<div class="${l.level}"><span class="ts">${l.t}</span>${esc(l.msg)}</div>`).join(""));
+    while (log.childElementCount > 1500) log.firstElementChild.remove();
+    if (atEnd) log.scrollTop = 1e9;
+  }
+  if (lastJob !== "idle" && j.state === "idle") { if (j.result) toast(j.result.text, j.result.ok ? "ok" : "bad"); loadCourses();
+    if (view === "schedule") loadSchedule(); if (CV) openCourse(CV.c.id); }
+  lastJob = j.state; updateSelInfo();
+}
+
+/* ── светофор, IP, баннер ── */
+function renderNet(st){
+  const n = st.net, dot = $("#net .dot");
+  dot.className = "dot " + ({ok:"ok", slow:"slow", down:"down"}[n.status] || "");
+  $("#net .txt").textContent = {ok:"Moodle доступен", slow:"Moodle отвечает медленно", down:"Moodle недоступен", unknown:"Проверяю сервер…"}[n.status] + (n.detail ? " · " + n.detail : "");
+  $("#net").title = n.checked ? "Последняя проверка: " + n.checked + " (раз в 30 с)" : "";
+  const g = st.geo, ip = $("#ip");
+  if (g.skipped || !g.cc) ip.classList.add("hidden");
+  if (g.checked && g.cc) { ip.classList.remove("hidden"); ip.innerHTML = g.warning ? `<span class="dot down"></span>IP ${esc(g.cc)} — выключите VPN` : `<span class="dot ok"></span>IP ${esc(g.ip || "")} · ${esc(g.cc)}`; }
+  let html = "";
+  if (g.warning) html += `<div class="banner bad"><div><b>Похоже, включён VPN</b>${esc(g.warning)}</div><span class="spacer"></span>
+    <div style="display:flex;flex-direction:column;gap:6px"><button class="btn" id="geoHide">Скрыть: у меня DIRECT для СевГУ</button><button class="btn ghost" id="geoRe">Проверить снова</button></div></div>`;
+  if (st.job.result && st.job.result.aborted === "session" && st.job.state === "idle") html += `<div class="banner"><div><b>Сессия Moodle истекла</b>Войдите снова — скачанное не потеряется, продолжу с того же места.</div></div>`;
+  if ($("#bannerWrap").dataset.h !== html) { $("#bannerWrap").innerHTML = html; $("#bannerWrap").dataset.h = html; const b = $("#geoRe"); if (b) b.onclick = () => api("/api/geo", {});
+    const h = $("#geoHide"); if (h) h.onclick = () => api("/api/settings", {no_geo_check: true}).then(() => toast("Проверка IP выключена. Включить снова: «Дополнительно» → «Не проверять страну IP»."));
+  }
+}
+
+/* ── вкладки ── */
+let view = "courses";
+function showView(v){
+  view = v; $$("#mainTabs button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+  $("#coursesView").classList.toggle("hidden", v !== "courses"); $("#scheduleView").classList.toggle("hidden", v !== "schedule");
+  $("#electivesView").classList.toggle("hidden", v !== "electives");
+  if (v === "schedule") loadSchedule(); if (v === "electives") loadElectives();
+}
+$$("#mainTabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
+const openUrl = url => api("/api/open_url", {url});
+
+/* ── курс «как на сайте» ── */
+const ICON = {resource:["#d93a3a","M7 3h7l5 5v13H7z M14 3v5h5"], folder:["#e8a10a","M3 7h6l2 2h10v10H3z"], url:["#2f6fde","M10 14l4-4 M8 16l-2 2a3 3 0 0 1-4-4l3-3 M16 8l2-2a3 3 0 0 1 4 4l-3 3"],
+  page:["#5f6b7a","M6 3h12v18H6z M9 8h6 M9 12h6 M9 16h4"], assign:["#0f9d8a","M9 4h6v3H9z M6 6h12v15H6z M9 13l2 2 4-4"], quiz:["#d63384","M5 12l4 4 10-10"],
+  forum:["#7c4dff","M4 5h16v10H8l-4 4z"], imscp:["#e8710a","M4 8l8-4 8 4-8 4z M4 8v8l8 4 8-4V8"], scorm:["#e8710a","M4 8l8-4 8 4-8 4z M4 8v8l8 4 8-4V8"],
+  book:["#2f6fde","M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z M5 17a3 3 0 0 1 3-3h11"], lesson:["#2f6fde","M4 5h16v11H4z M9 20h6 M12 16v4"],
+  text:["#8a93a3","M5 7h14 M5 12h14 M5 17h9"], file:["#d93a3a","M7 3h7l5 5v13H7z M14 3v5h5"], attendance:["#1a9e5c","M4 6h16v14H4z M4 10h16 M9 15l2 2 4-4"]};
+const MODT = {resource:"Файл",folder:"Папка",url:"Ссылка",page:"Страница",assign:"Задание",quiz:"Тест",forum:"Форум",imscp:"Пакет",scorm:"SCORM",book:"Книга",lesson:"Лекция",
+  text:"Пояснение",file:"Файл",attendance:"Посещаемость"};
+const KC = {"Лекции":"ЛК","ПЗ":"ПЗ","ЛЗ":"ЛЗ","Прочее":"ДР"};
+const icon = m => { const [c, d] = ICON[m] || ["#8a93a3","M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0"];
+  return `<div class="micon" style="background:${c}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg></div>`; };
+let CV = null, cvQ = "", cvK = "";
+async function openCourse(id, live = false){
+  const c = courses.find(x => x.id === id) || {id, fullname: "Курс"};
+  $("#grid").classList.add("hidden"); $(".content .toolbar").classList.add("hidden"); $("#courseView").classList.remove("hidden");
+  $("#courseView").innerHTML = `<div class="empty"><span class="spin" style="display:inline-block;vertical-align:-3px"></span> ${live || !c.downloaded ? "Открываю курс на сайте (несколько секунд — бережные паузы)…" : "Открываю курс…"}</div>`;
+  $(".content").scrollTop = 0;
+  const d = await api("/api/course?id=" + id + (live ? "&live=1" : ""));
+  CV = {c, d}; cvQ = ""; cvK = ""; renderCourse();
+}
+function closeCourse(){ CV = null; $("#courseView").classList.add("hidden"); $("#grid").classList.remove("hidden"); $(".content .toolbar").classList.remove("hidden"); }
+function renderCourse(){
+  const {c, d} = CV, el = $("#courseView");
+  const img = c.image ? (c.image.startsWith("data:") ? c.image : c.image + "&t=" + encodeURIComponent(T)) : "";
+  let html = `<button class="btn ghost" id="cvBack" style="margin-bottom:10px">← Все курсы</button><div class="cv-head"><div class="cv-cover" style="${coverStyle(c)}">${img ? `<img src="${esc(img)}" alt="" onerror="this.remove()">` : ""}</div>
+    <div class="cv-info"><div style="min-width:260px;flex:1"><div class="cat">${esc(c.category || "")}</div><h2>${esc(d.fullname || c.fullname)}</h2>
+      <div class="mmeta">${d.error ? "" : d.downloaded ? `Сохранено на компьютере · обновлено ${esc(d.updated)}` : "Ещё не скачан — показана структура с сайта, файлы откроются после загрузки"}</div>
+      ${c.progress != null ? `<div class="prog" style="margin-top:8px;max-width:340px"><i style="width:${Math.round(c.progress)}%"></i></div>` : ""}</div>
+    <div class="cv-acts"><button class="btn primary" id="cvDl">${d.downloaded ? "Обновить курс" : "Скачать курс"}</button>
+      ${(d.url || c.url) ? `<button class="btn" id="cvSite">Открыть на сайте</button>` : ""}${d.dir ? `<button class="btn" id="cvDir">Папка курса</button>` : ""}
+      <button class="btn ghost" id="cvLive" title="Перечитать разделы и элементы с сайта">↻ С сайта</button></div></div></div>`;
+  if (d.error) { el.innerHTML = html + `<div class="empty">${esc(d.error)}</div>`; bindCV(); return; }
+  html += `<div class="toolbar"><div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="cvQ" placeholder="Поиск в курсе" value="${esc(cvQ)}"></div>
+    <div class="chips">${["", "ЛК", "ПЗ", "ЛЗ", "ДР"].map(k => `<button class="chip ${cvK === k ? "on" : ""}" data-k="${k}">${k || "Все"}</button>`).join("")}</div></div>`;
+  const okItem = it => (!cvK || KC[it.kind] === cvK) && (!cvQ || (it.name + " " + (it.description || "") + " " + (it.files || []).map(f => f.title).join(" ")).toLowerCase().includes(cvQ));
+  const secs = d.sections.map(s => ({...s, items: s.items.filter(okItem)})).filter(s => s.items.length);
+  html += `<div class="cv-body"><nav class="toc">${secs.map(s => `<a href="#" data-sec="${s.number}">${esc(s.name)}</a>`).join("")}</nav><div>`;
+  for (const s of secs) {
+    html += `<section class="msec" id="msec-${s.number}"><h3>${esc(s.name)}</h3>`;
+    for (const it of s.items) {
+      const files = (it.files || []).map(f => { const p = (d.dir ? d.dir + "/" : "") + f.path, e = extOf(p);
+        return `<div class="mf"><span class="fn" title="${esc(f.title)}">${esc(f.title)}</span><span class="mmeta">${hsize(f.size)}</span>${PREVIEW.has(e) ? `<button data-prev="${esc(p)}">Просмотр</button>` : ""}<button data-ext="${esc(p)}">Открыть</button><button data-rev="${esc(p)}">В папке</button></div>`; }).join("");
+      const site = it.url ? `<button data-url="${esc(it.url)}">На сайте</button>` : "";
+      const extl = it.external ? `<button data-url="${esc(it.external)}">Ссылка</button>` : "";
+      const note = it.online_only ? `<div class="mmeta">только онлайн${it.url ? "" : " · недоступно"}</div>` : it.error ? `<div class="mmeta" style="color:var(--bad)">${esc(it.error)}</div>` : (!d.downloaded ? `<div class="mmeta">не скачано</div>` : "");
+      html += `<div class="mi ${it.online_only && !it.url ? "dim" : ""}">${icon(it.modtype)}<div style="min-width:0"><div class="mname"><span class="kb ${KC[it.kind] || "ДР"}">${KC[it.kind] || "ДР"}</span>${esc(it.name)}</div>
+        <div class="mmeta">${esc(MODT[it.modtype] || it.modtype)}${it.context && it.context !== it.name ? " · из блока «" + esc(it.context) + "»" : ""}</div>
+        ${it.description ? `<div class="mdesc">${esc(it.description)}</div>` : ""}${files ? `<div class="mfiles">${files}</div>` : ""}${note}</div><div class="side-b" style="display:flex;gap:4px">${extl}${site}</div></div>`;
+    }
+    html += `</section>`;
+  }
+  el.innerHTML = html + (secs.length ? "" : `<div class="empty">Ничего не найдено.</div>`) + "</div></div>";
+  bindCV();
+}
+function bindCV(){
+  const {c, d} = CV, on = (id, f) => { const b = $("#" + id); if (b) b.onclick = f; };
+  on("cvBack", closeCourse); on("cvSite", () => openUrl(d.url || c.url)); on("cvDir", () => api("/api/open", {path: d.dir}));
+  on("cvLive", () => openCourse(c.id, true));
+  on("cvDl", () => { selected.add(c.id); saveSel(); start(false, false, [c.id]); });
+  const q = $("#cvQ"); if (q) q.oninput = e => { cvQ = e.target.value.trim().toLowerCase(); const pos = e.target.selectionStart; renderCourse(); const n = $("#cvQ"); n.focus(); n.setSelectionRange(pos, pos); };
+  $$("#courseView .chip").forEach(b => b.onclick = () => { cvK = b.dataset.k; renderCourse(); });
+  $$("#courseView .toc a").forEach(a => a.onclick = e => { e.preventDefault(); const t = $("#msec-" + a.dataset.sec); if (t) t.scrollIntoView({behavior: "smooth", block: "start"}); });
+}
+
+/* ── расписание ── */
+let SCH = null, schRange = "2weeks";
+const themeHash = () => { const t = localStorage.getItem("mo_theme") || "auto"; const a = localStorage.getItem("mo_accent") || ACCENTS[0];
+  return "#" + (t !== "auto" ? "theme=" + t + "&" : "") + "accent=" + encodeURIComponent(a); };
+async function loadSchedule(reloadFrame = true){
+  SCH = await api("/api/schedule");
+  if (document.activeElement !== $("#schGroup")) $("#schGroup").value = SCH.group;
+  $("#schSources").innerHTML = Object.entries(SCH.titles).map(([k, t]) => `<label><span class="sw-t"><input type="checkbox" data-src="${k}" ${SCH.sources.includes(k) ? "checked" : ""}><span></span></span><span>${esc(t)}</span></label>`).join("");
+  $("#schUrls").innerHTML = Object.entries(SCH.urls).map(([k, u]) => `<div class="field"><label>${esc(k)}</label><input class="txt" data-url="${k}" value="${esc(u)}"></div>`).join("");
+  $("#schPdf").checked = SCH.pdf; $("#schAuto").checked = SCH.auto;
+  $("#schInfo").textContent = SCH.saved ? `сохранено ${SCH.updated} · пар: ${SCH.count} · ${SCH.first.split("-").reverse().join(".")} — ${SCH.last.split("-").reverse().join(".")}` : "";
+  $("#schEmpty").classList.toggle("hidden", SCH.saved); $("#schFrame").classList.toggle("hidden", !SCH.saved);
+  if (SCH.saved && reloadFrame) $("#schFrame").src = fileUrl(SCH.dir + "/index.html") + "&v=" + Date.now() + themeHash();
+}
+function schPayload(start){
+  const urls = {}; $$("#schUrls [data-url]").forEach(i => urls[i.dataset.url] = i.value.trim());
+  return {schedule_group: $("#schGroup").value.trim(), schedule_sources: $$("#schSources [data-src]").filter(i => i.checked).map(i => i.dataset.src),
+          schedule_urls: urls, schedule_pdf: $("#schPdf").checked, schedule_auto: $("#schAuto").checked, start,
+          range: schRange, from: $("#schFrom").value, to: $("#schTo").value};
+}
+$$("#schRanges button").forEach(b => b.onclick = () => { schRange = b.dataset.r; $$("#schRanges button").forEach(x => x.classList.toggle("on", x === b)); $("#schCustom").classList.toggle("hidden", schRange !== "custom"); });
+$("#schSave").onclick = async () => { const p = schPayload(true); if (!p.schedule_sources.length) return toast("Выберите хотя бы один источник", "bad");
+  if (schRange === "custom" && !(p.from && p.to)) return toast("Укажите даты «с» и «по»", "bad");
+  const r = await api("/api/schedule/save", p); if (!r.ok) return toast(r.error || "Не удалось начать", "bad"); $("#dock").classList.remove("collapsed"); toast("Сохраняю расписание…"); };
+["#schPdf", "#schAuto"].forEach(id => $(id).onchange = () => api("/api/schedule/save", schPayload(false)));
+$("#schGroup").onchange = () => api("/api/schedule/save", schPayload(false));
+$("#schOpen").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/index.html"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); });
+$("#schIcs").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/raspisanie.ics"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); else toast("Откроется программа календаря — подтвердите импорт"); });
+$("#schSnaps").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/снимки"}).then(r => { if (!r.ok) toast("Снимков пока нет", "bad"); });
+
+/* ── элективы ── */
+let EL = null;
+async function loadElectives(){ EL = await api("/api/electives"); renderElectives(); }
+function renderElectives(){
+  const s = EL || {};
+  if (document.activeElement !== $("#elUrl")) $("#elUrl").value = s.url || "";
+  $("#elWatch").checked = !!s.watch; $("#elHours").value = String(s.watch_hours || 6);
+  $("#elPassBox").classList.toggle("hidden", !!s.has_creds && !s.need_password);
+  $("#elTitle").textContent = s.title || "Спортивные элективы";
+  $("#elInfo").textContent = s.updated ? "обновлено " + s.updated : "";
+  $("#elMsgs").innerHTML = (s.messages || []).length ? `<div class="msgs">${s.messages.map(esc).join("<br>")}</div>` : "";
+  const acts = s.actions || [];
+  $("#elCards").innerHTML = acts.length ? acts.map(a => {
+    const mine = a.leave, btn = a.disabled && !mine ? `<button class="btn" disabled>${esc(a.label || "Недоступно")}</button>`
+      : a.kind === "js" ? `<button class="btn" data-url="${esc(s.final_url || s.url)}">Только на сайте</button>`
+      : `<button class="btn ${mine ? "danger" : "primary"}" data-act="${a.id}" ${a.disabled ? "disabled" : ""}>${esc(a.disabled && !mine ? (a.label || "Недоступно") : a.label)}</button>`;
+    return `<div class="ecard ${mine ? "mine" : ""}"><div class="ctx">${esc(a.context || "(без описания)")}</div><div class="row2">${btn}${mine ? '<span class="mmeta">вы записаны</span>' : ""}</div></div>`; }).join("")
+    : `<div class="empty">${s.updated ? "На странице не нашлось кнопок записи. Откройте офлайн-копию или сайт — и пришлите файл electives_page.html из папки .moodle_offline, чтобы я настроил разбор." : "Нажмите «Обновить варианты» — программа откроет страницу элективов под вашей учётной записью."}</div>`;
+}
+async function elRefresh(password){
+  const b = $("#elRefresh"); b.disabled = true; b.innerHTML = '<span class="spin" style="display:inline-block;vertical-align:-3px"></span> Открываю страницу…';
+  const r = await api("/api/electives/refresh", {password: password || "", electives_url: $("#elUrl").value.trim()}).catch(e => ({ok: false, error: String(e)}));
+  b.disabled = false; b.textContent = "Обновить варианты";
+  if (!r.ok) { toast("Элективы: " + r.error, "bad"); if (r.need_password) { EL = {...(EL || {}), need_password: true}; renderElectives(); } return; }
+  EL = r.state; renderElectives(); toast(r.new ? `Новых вариантов: ${r.new}` : "Список обновлён", "ok");
+}
+$("#elRefresh").onclick = () => elRefresh();
+$("#elPassGo").onclick = () => elRefresh($("#elPass").value);
+$("#elSite").onclick = () => openUrl((EL && (EL.final_url || EL.url)) || $("#elUrl").value);
+$("#elSnap").onclick = () => { if (!EL || !EL.updated) return toast("Сначала обновите варианты", "bad"); preview((EL.dir || "Элективы") + (EL.pdf ? "/страница.pdf" : "/страница.html")); };
+const elSave = () => api("/api/electives/refresh", {settings_only: true, electives_watch: $("#elWatch").checked, electives_watch_hours: +$("#elHours").value, electives_url: $("#elUrl").value.trim()});
+$("#elWatch").onchange = elSave; $("#elHours").onchange = elSave; $("#elUrl").onchange = elSave;
+$("#elCards").addEventListener("click", async e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const a = (EL.actions || []).find(x => x.id === b.dataset.act); if (!a) return;
+  if (!confirm(`${a.label}?\n\n${a.context}`)) return;
+  b.disabled = true; b.textContent = "Отправляю…";
+  const r = await api("/api/electives/act", {id: a.id, password: $("#elPass").value || ""});
+  if (!r.ok) { toast("Не получилось: " + (r.error || "ошибка"), "bad"); b.disabled = false; b.textContent = a.label; return; }
+  EL = r.state; renderElectives(); toast((r.messages || []).join(" ") || "Готово — проверьте статус на карточке", "ok");
+});
+
+/* ── опрос сервера ── */
+async function poll(){
+  let delay = 1200;
+  try {
+    const st = await api("/api/state?since=" + seq); S = st; seq = st.job.seq;
+    const L = st.login;
+    if (L.state !== lastLogin) {
+      const ok = L.state === "ok";
+      $("#loginView").classList.toggle("hidden", ok); $("#coursesView").classList.toggle("hidden", !ok); $("#user").classList.toggle("hidden", !ok);
+      $("#dock").classList.toggle("hidden", !ok && st.job.state === "idle");
+      $("#mainTabs").classList.toggle("hidden", !ok);
+      if (!ok) { $("#scheduleView").classList.add("hidden"); $("#electivesView").classList.add("hidden"); }
+      else showView(view);
+      if (ok) loadCourses();
+      if (!ok && lastLogin === null) { $("#lUrl").value = L.base || "https://do.sevsu.ru"; $("#lUser").value = L.username || ""; $("#lRemember").checked = L.remember; }
+      lastLogin = L.state;
+    }
+    if (L.state === "logging" && $("#loginBtn").disabled === false && !$("#lPass").value) { $("#loginBtn").innerHTML = '<span class="spin"></span> Вхожу по сохранённому входу…'; }
+    if (L.state !== "logging" && /сохранённ/.test($("#loginBtn").textContent)) $("#loginBtn").textContent = "Войти";
+    $("#uname").textContent = L.user || L.username; $("#avatar").textContent = (L.user || L.username || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+    $("#rememberHint").textContent = L.can_encrypt ? "«Запомнить меня»: логин и пароль шифруются средствами Windows (DPAPI) и доступны только вашей учётной записи на этом ПК."
+                                                   : "«Запомнить меня»: сохраню только cookie сессии; когда она истечёт, пароль спросят снова.";
+    loadSettings(st); renderNet(st); renderJob(st.job);
+    delay = st.job.state !== "idle" ? 600 : 1200;
+  } catch (e) {
+    $("#net .dot").className = "dot down"; $("#net .txt").textContent = "Программа закрыта — перезапустите её";
+    delay = 3000;
+  }
+  setTimeout(poll, delay);
+}
+poll();
+</script>
+</body>
+</html>
