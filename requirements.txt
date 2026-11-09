@@ -1,0 +1,7 @@
+# Нужные библиотеки. Установка одной командой:  pip install -r requirements.txt
+requests>=2.31          # HTTP-запросы, cookies, сессия
+beautifulsoup4>=4.12    # разбор HTML-страниц Moodle
+tqdm>=4.66              # прогресс-бар в консольной версии
+python-dotenv>=1.0      # чтение настроек из файла .env (необязательно)
+truststore>=0.9; python_version >= "3.10"   # сертификаты из системы Windows (как у браузера)
+# Необязательно (ускоряет разбор больших страниц):  pip install lxml
