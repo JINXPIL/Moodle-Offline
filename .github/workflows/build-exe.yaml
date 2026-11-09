@@ -1,0 +1,20 @@
+# Сборка MoodleOffline.exe на серверах GitHub (вкладка Actions → артефакт MoodleOffline-windows)
+name: build-exe
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pyinstaller
+      - run: pyinstaller --noconfirm --onefile --windowed --name MoodleOffline --add-data "ui;ui" gui.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MoodleOffline-windows
+          path: dist/MoodleOffline.exe
