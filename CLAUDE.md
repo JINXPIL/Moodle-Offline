@@ -10,7 +10,7 @@
 - `schedule.py` — расписание: официальный JSON-API schedule.sevsu.ru, личное timetable.sevsu.ru, просмотрщик (HTML со встроенными данными).
 - `electives.py` — элективы: страница iot.sevsu.ru — это SPA, работает через браузер.
 - `cdp.py` — свой минимальный клиент DevTools Protocol для фонового Edge/Chrome (без сторонних библиотек).
-- `*.bat`, `run.sh` — запуск и сборка. `.github/workflows/build-exe.yaml` — сборка exe в GitHub Actions по тегу `v*`.
+- `*.bat`, `run.sh` — запуск и сборка. `.github/workflows/build-exe.yaml` — сборка exe в GitHub Actions: вручную (артефакт) или по тегу `v*` (ещё и выкладывает exe в Releases).
 
 ## Правила
 - Отвечать и писать комментарии/README по-русски. Объяснения короткие, простым языком.
