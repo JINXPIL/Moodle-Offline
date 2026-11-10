@@ -38,6 +38,8 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qs, parse_qsl, quote, unquote, urlencode, urljoin, urlparse, urlunparse
 
+import dl_rules   # правила скачивания (что брать, что пропускать, шаблоны имён)
+
 # В собранном .exe без консоли stdout/stderr отсутствуют — подменяем, чтобы print() не падал.
 if sys.stdout is None:
     sys.stdout = open(os.devnull, "w", encoding="utf-8")
@@ -78,7 +80,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.1.1"
+VERSION = "1.2.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -90,6 +92,7 @@ STATE_FILE = ".moodle_state.json"   # что уже скачано (для до�
 LOG_FILE = "_журнал.log"
 FAILED_FILE = "_не_скачано.txt"
 NEW_FILE = "_новое.txt"
+RULES_FILE = "_пропущено_правилами.txt"
 BACKUP_DIR = "_бэкапы"
 
 # Паузы «как у человека» (секунды, случайно в диапазоне): страницы и файлы отдельно.
@@ -215,6 +218,10 @@ class Stopped(Exception):
 
 class SkipFile(Exception):
     pass
+
+
+class RuleSkip(Exception):
+    """Файл пропущен по правилам скачивания (не ошибка)."""
 
 
 class IncompleteRead(Exception):
@@ -548,6 +555,8 @@ class Item:
     online_only: bool = False
     error: str | None = None
     cached: bool = False
+    rule_skip: str | None = None   # причина, если элемент пропущен по правилам
+    rule_notes: list = field(default_factory=list)   # какие файлы элемента пропущены по правилам
 
 
 @dataclass
@@ -580,13 +589,16 @@ class Course:
 @dataclass
 class JobOptions:
     out_dir: Path = DEFAULT_OUT
-    mode: int = 1                  # 1 — каталог с оглавлением, 2 — папки Курс/Раздел/Тип
+    mode: int = 1                  # 1 — каталог с оглавлением, 2 — папки Курс/Раздел/Тип, 3 — свой шаблон
     sync: bool = False             # быстрая синхронизация
     dry_run: bool = False
     pdf: bool = False
     zip: bool = False
     original_names: bool = False
     index_in_mode2: bool = False
+    rules: dict | None = None      # правила скачивания (см. dl_rules)
+    dir_template: str = ""         # режим 3: шаблон папок, например {section_no}. {section}/{kind}
+    file_template: str = ""        # режим 3: шаблон имени файла, например {section_no}_{item}
 
 
 @dataclass
@@ -1654,7 +1666,7 @@ class MoodleClient:
         return course
 
     # ── скачивание файла: .tmp → переименование, докачка Range, проверка SHA-1 ─
-    def download(self, url, dest: Path, *, title="", referer=None, quiet=False) -> dict:
+    def download(self, url, dest: Path, *, title="", referer=None, quiet=False, max_bytes=0) -> dict:
         tmp = dest.with_name(dest.name + ".tmp")
         fmkdir(dest.parent)
         attempts = 0
@@ -1699,6 +1711,9 @@ class MoodleClient:
                         pos, mode = 0, "wb"
                         cl = r.headers.get("Content-Length", "")
                         total = int(cl) if cl.isdigit() else None
+                    if max_bytes and total is not None and total > max_bytes:
+                        funlink(tmp)
+                        raise RuleSkip(f"файл {hsize(total)} больше лимита {hsize(max_bytes)}")
                     etag = r.headers.get("ETag", "").strip()
                     etag = etag[2:] if etag.startswith("W/") else etag
                     etag = etag.strip('"').lower()
@@ -2055,12 +2070,17 @@ def extract_refs(text: str, ext: str) -> list[str]:
 #  РАСКЛАДКА ФАЙЛОВ (режимы 1 и 2)
 # ════════════════════════════════════════════════════════════════════════════
 class Layout:
-    """Режим 1: «Курс/03_ЛЗ_02 Название.pdf» + оглавление. Режим 2: «Курс/03. Раздел/ЛЗ/Название.pdf»."""
+    """Режим 1: «Курс/03_ЛЗ_02 Название.pdf» + оглавление. Режим 2: «Курс/03. Раздел/ЛЗ/Название.pdf».
+    Режим 3: то же, но папки и имена файлов собираются по шаблонам пользователя (см. dl_rules.PLACEHOLDERS)."""
 
-    def __init__(self, out: Path, course: Course, mode: int, original_names=False):
+    def __init__(self, out: Path, course: Course, mode: int, original_names=False, dir_tpl="", file_tpl=""):
         self.out = out
         self.mode = mode
         self.original_names = original_names
+        dir_tpl, file_tpl = (dir_tpl or "").strip(), (file_tpl or "").strip()
+        # папка может быть пустой (всё в одну папку), но только если задано имя файла
+        self.dir_tpl = dir_tpl if (dir_tpl or file_tpl) else dl_rules.DEFAULT_DIR_TPL
+        self.file_tpl = file_tpl or dl_rules.DEFAULT_FILE_TPL
         self.course_rel = PurePosixPath(safe_name(course.fullname or f"Курс {course.id}", 70))
         self.claimed: set[str] = set()
         self._item_dirs: dict[str, PurePosixPath] = {}
@@ -2085,16 +2105,35 @@ class Layout:
         self.claim(cand)
         return cand
 
+    @property
+    def tree(self) -> bool:
+        """Файлы лежат по папкам (режимы 2 и 3), а не в одной куче с префиксами."""
+        return self.mode in (2, 3)
+
     def section_dir(self, sec) -> PurePosixPath:
         return PurePosixPath(safe_name(f"{sec.number:02d}. {sec.name}", 60)) if self.mode == 2 else PurePosixPath()
 
+    def _values(self, sec, it, item="") -> dict:
+        return {"section_no": f"{sec.number:02d}", "section": sec.name, "kind": it.kind,
+                "kind_code": KIND_CODE[it.kind], "seq": f"{it.seq:02d}", "item": item or it.name,
+                "type": MOD_TITLES.get(it.modtype, it.modtype)}
+
     def base_dir(self, sec, it) -> PurePosixPath:
-        return self.section_dir(sec) / it.kind if self.mode == 2 else PurePosixPath()
+        if self.mode == 2:
+            return self.section_dir(sec) / it.kind
+        if self.mode == 3:
+            return PurePosixPath(*dl_rules.dir_parts(self.dir_tpl, self._values(sec, it), lambda x: safe_name(x, 60)))
+        return PurePosixPath()
 
     def prefix(self, sec, it) -> str:
         return f"{sec.number:02d}_{KIND_CODE[it.kind]}_{it.seq:02d}"
 
-    def _decorate(self, sec, it, name) -> str:
+    def _decorate(self, sec, it, name, with_ext=False) -> str:
+        if self.mode == 3:
+            stem, ext = split_ext(name) if with_ext else (name, "")
+            vals = {k: safe_name(v, 80) for k, v in self._values(sec, it, stem).items()}
+            vals["item"] = stem   # название чистится позже, вместе со всем именем
+            return (dl_rules.render_template(self.file_tpl, vals).strip() or stem) + ext
         return f"{self.prefix(sec, it)} {name}" if self.mode == 1 else name
 
     def single_file(self, sec, it, server_name, use_item_name=True) -> PurePosixPath:
@@ -2103,7 +2142,7 @@ class Layout:
             base = it.name if (ext and it.name.lower().endswith(ext.lower())) else it.name + ext
         else:
             base = server_name
-        return self._unique(self.base_dir(sec, it) / safe_filename(self._decorate(sec, it, base)))
+        return self._unique(self.base_dir(sec, it) / safe_filename(self._decorate(sec, it, base, with_ext=True)))
 
     def item_dir(self, sec, it) -> PurePosixPath:
         if it.key not in self._item_dirs:
@@ -2115,7 +2154,7 @@ class Layout:
         return [d.as_posix()] if d else []
 
     def folder_file(self, sec, it, subdirs, filename) -> PurePosixPath:
-        if self.mode == 2:
+        if self.tree:
             rel = self.item_dir(sec, it).joinpath(*[safe_name(x, 60) for x in subdirs]) / safe_filename(filename)
         else:
             rel = self.base_dir(sec, it) / safe_filename(self._decorate(sec, it, " - ".join([*subdirs, filename])))
@@ -2260,10 +2299,18 @@ class Processor:
         self.control = control
         self.failures = []
         self.new_files = []
-        self.stats = {"new": 0, "skipped": 0, "copied": 0, "failed": 0, "bytes": 0, "cached_items": 0, "items": 0}
-        self.browser = find_browser() if opts.pdf else None
+        self.stats = {"new": 0, "skipped": 0, "copied": 0, "failed": 0, "bytes": 0, "cached_items": 0, "items": 0,
+                      "rule_skipped": 0}
+        self.rule_skips = []
+        self.cr = dl_rules.CourseRules()
+        self.sig = ""
+        self.pdf_on = bool(opts.pdf)
+        self._cur = None
+        rules = opts.rules if isinstance(opts.rules, dict) else {}
+        want_pdf = bool(opts.pdf) or any((r or {}).get("pdf") for r in (rules.get("courses") or {}).values())
+        self.browser = find_browser() if want_pdf else None
         self.pdf_fail = 0
-        if opts.pdf and not self.browser:
+        if want_pdf and not self.browser:
             rep.log("PDF: не найден Microsoft Edge / Google Chrome — страницы сохраню только в HTML.", "warn")
         self.course = None
         self.layout = None
@@ -2272,13 +2319,52 @@ class Processor:
     def _ikey(self, it) -> str:
         return f"{self.opts.mode}:{self.course.id}:{it.key}"
 
+    def _setup_rules(self, course: Course):
+        self.cr = dl_rules.CourseRules(dl_rules.effective(self.opts.rules, course.id))
+        self.pdf_on = bool(self.cr.pdf if self.cr.pdf is not None else self.opts.pdf)
+        sig = self.cr.sig
+        if self.opts.mode == 3:   # сменили шаблон имён — быстрая синхронизация должна пересобрать раскладку
+            sig += "|" + hashlib.sha1(f"{self.opts.dir_template}\n{self.opts.file_template}".encode()).hexdigest()[:8]
+        self.sig = sig
+        if self.cr.active:
+            e = self.cr.eff
+            bits = []
+            if self.cr.ext_mode != "all":
+                bits.append(("только " if self.cr.ext_mode == "only" else "без ") + ", ".join(e["ext_list"]))
+            if self.cr.max_bytes:
+                bits.append(f"файлы до {e['max_mb']} МБ")
+            if e["skip_mods"]:
+                bits.append("без типов: " + ", ".join(e["skip_mods"]))
+            if e["skip_sections"]:
+                bits.append("без разделов: " + ", ".join(e["skip_sections"]))
+            if e["skip_names"]:
+                bits.append("без названий: " + ", ".join(e["skip_names"]))
+            self.rep.log("Правила скачивания: " + "; ".join(bits))
+        if self.pdf_on and not self.browser:
+            self.rep.log("PDF для этого курса включён, но не найден Edge / Chrome — сохраню только HTML.", "warn")
+
+    def _rule_note(self, it, what, why):
+        """Запоминает, что файл или элемент пропущен по правилам (не ошибка)."""
+        s = self._cur[0] if self._cur else None
+        self.stats["rule_skipped"] += 1
+        self.rule_skips.append({"course": self.course.fullname, "section": f"{s.number:02d}. {s.name}" if s else "—",
+                                "item": it.name, "what": what, "reason": why})
+        self.rep.log(f"  ⊘ пропущено правилами: {short(what, 80)} — {why}", "info")
+
+    def _item_rule_reason(self, s, it) -> str | None:
+        if not self.cr.active:
+            return None
+        return self.cr.section_skip(s.name) or self.cr.item_skip(it.modtype, it.name)
+
     def run_course(self, course: Course, layout: Layout):
         self.course, self.layout = course, layout
+        self._setup_rules(course)
         items = [(s, it) for s in course.sections for it in s.items]
         if self.opts.sync:
             for s, it in items:
                 rec = self.state.get_item(self._ikey(it))
-                if rec and rec.get("complete") and it.modtype not in RECHECK_IN_SYNC:
+                if (rec and rec.get("complete") and it.modtype not in RECHECK_IN_SYNC
+                        and rec.get("rules", "") == self.sig):
                     it.cached = True
                     it.files = rec.get("files", [])
                     it.external = rec.get("external")
@@ -2297,6 +2383,15 @@ class Processor:
                 continue
             self.control.checkpoint()
             self.stats["items"] += 1
+            self._cur = (s, it)
+            why = self._item_rule_reason(s, it)
+            if why:
+                it.files, it.error, it.online_only, it.rule_skip = [], None, True, why
+                self._rule_note(it, it.name, why)
+                self.state.set_item(self._ikey(it), {
+                    "name": it.name, "files": [], "external": it.external, "online_only": True, "complete": True,
+                    "dirs": [], "rules": self.sig, "ts": int(time.time())})
+                continue
             self.rep.item(n, total, s, it)
             it.files, it.error = [], None
             try:
@@ -2309,7 +2404,7 @@ class Processor:
                 self.fail(s, it, it.url, describe_error(e))
             self.state.set_item(self._ikey(it), {
                 "name": it.name, "files": it.files, "external": it.external, "online_only": it.online_only,
-                "complete": it.error is None, "dirs": layout.item_dirs(it), "ts": int(time.time())})
+                "complete": it.error is None, "dirs": layout.item_dirs(it), "rules": self.sig, "ts": int(time.time())})
 
     def handle(self, s, it):
         if it.online_only:
@@ -2326,8 +2421,10 @@ class Processor:
         self.rep.log(f"  ✗ {err}" + (f" — {url}" if url else ""), "error")
         self.rep.failed(self.failures[-1])
 
-    def fetch(self, url, rel: PurePosixPath, it, title, *, listed=True, quiet=False, referer=None) -> dict:
-        """Скачивает файл или берёт уже скачанный. Возвращает запись {path,title,size}."""
+    def fetch(self, url, rel: PurePosixPath, it, title, *, listed=True, quiet=False, referer=None, apply_rules=None) -> dict | None:
+        """Скачивает файл или берёт уже скачанный. Возвращает запись {path,title,size}.
+        None — файл пропущен по правилам (apply_rules: проверять ли правила; по умолчанию — для видимых в списке файлов)."""
+        check = listed if apply_rules is None else apply_rules
         key = file_key(url)
         dest = self.layout.abs(rel)
         rel_out = (self.layout.course_rel / rel).as_posix()
@@ -2350,8 +2447,20 @@ class Processor:
             if not quiet:
                 self.rep.log(f"  = уже есть: {short(rel.name, 80)}", "debug")
         else:
-            info = self.client.download(url, dest, title=title or rel.name, quiet=quiet,
-                                        referer=referer or (it.url if it.url else self.course.url))
+            if check and self.cr.active:
+                why = self.cr.file_skip(rel.name)
+                if why:
+                    it.rule_notes.append(f"{title or rel.name}: {why}")
+                    self._rule_note(it, title or rel.name, why)
+                    return None
+            try:
+                info = self.client.download(url, dest, title=title or rel.name, quiet=quiet,
+                                            referer=referer or (it.url if it.url else self.course.url),
+                                            max_bytes=self.cr.max_bytes if check else 0)
+            except RuleSkip as e:
+                it.rule_notes.append(f"{title or rel.name}: {e}")
+                self._rule_note(it, title or rel.name, str(e))
+                return None
             size = info["size"]
             self.state.add_file(key, rel_out, size)
             self.stats["new"] += 1
@@ -2621,7 +2730,8 @@ class Processor:
                     fname = name_from_url(u)
                     is_img = tag == "img" or split_ext(fname)[1].lower() in IMG_EXT
                     rel = self.layout.asset_file(rel_html, fname)
-                    rec = self._fetch_soft(s, it, u, rel, fname, listed=False, quiet=is_img, referer=page_url)
+                    rec = self._fetch_soft(s, it, u, rel, fname, listed=False, quiet=is_img, referer=page_url,
+                                           apply_rules=not is_img)
                     if rec:
                         el[attr] = quote(posixpath.relpath(rec["path"], rel_html.parent.as_posix()))
                         if not is_img:
@@ -2639,7 +2749,7 @@ class Processor:
                        "page" if changed else "skipped")
         it.files.append({"path": rel_html.as_posix(), "title": "страница (HTML)" + (suffix and f" {suffix.strip(' —')}"),
                          "size": fsize(abs_html)})
-        if self.browser:
+        if self.browser and self.pdf_on:
             rel_pdf = rel_html.with_suffix(".pdf")
             abs_pdf = self.layout.abs(rel_pdf)
             if changed or not fexists(abs_pdf):
@@ -2892,7 +3002,8 @@ def write_course_index(course: Course, layout: Layout):
                 name_md = re.sub(r"([\[\]*_`<>])", r"\\\1", it.name)
                 ctx = f" _(из блока «{it.context}»)_" if it.context and it.context != it.name else ""
                 if it.online_only:
-                    md.append(f"- {name_md}{ctx} — только онлайн ({MOD_TITLES.get(it.modtype, it.modtype)})"
+                    md.append(f"- {name_md}{ctx} — " + ("пропущено правилами скачивания" if it.rule_skip
+                                                         else f"только онлайн ({MOD_TITLES.get(it.modtype, it.modtype)})")
                               + (f": <{it.url}>" if it.url else " (недоступно)"))
                 elif len(it.files) == 1 and not it.error:
                     f = it.files[0]
@@ -2903,6 +3014,8 @@ def write_course_index(course: Course, layout: Layout):
                         md.append(f"  - {_mdlink(f['title'], f['path'])} · {hsize(f['size'])}")
                 if it.external:
                     md.append(f"  - внешняя ссылка: <{it.external}>")
+                for note in it.rule_notes:
+                    md.append(f"  - ⊘ пропущено правилами: {note}")
                 if it.error:
                     md.append(f"  - ⚠ скачано не полностью: {it.error}")
                 # HTML-строка
@@ -2911,8 +3024,11 @@ def write_course_index(course: Course, layout: Layout):
                     f'<span class="size">{hsize(f["size"])}</span></li>' for f in it.files)
                 extra = ""
                 if it.online_only:
-                    extra += (f'<div class="online">Только онлайн ({esc(MOD_TITLES.get(it.modtype, it.modtype))}) — '
+                    extra += (f'<div class="online">' + ("Пропущено правилами скачивания" if it.rule_skip
+                                                          else f"Только онлайн ({esc(MOD_TITLES.get(it.modtype, it.modtype))})") + ' — '
                               + (f'<a href="{esc(it.url)}">открыть на сайте</a>' if it.url else "недоступно") + "</div>")
+                for note in it.rule_notes:
+                    extra += f'<div class="online">Пропущено правилами: {esc(note)}</div>'
                 if it.external:
                     extra += f'<div class="online">Внешняя ссылка: <a href="{esc(it.external)}">{esc(short(it.external, 90))}</a></div>'
                 if it.error:
@@ -2997,6 +3113,20 @@ def write_reports(out: Path, proc: Processor | None, res: JobResult):
     else:
         lines.append("Новых файлов нет.")
     write_text_atomic(out / NEW_FILE, "\n".join(lines) + "\n")
+    skips = proc.rule_skips if proc else []
+    if skips:
+        lines = [f"Пропущено по правилам скачивания (запуск {stamp}).",
+                 "Это не ошибки. Чтобы скачать, поменяйте правила и запустите загрузку ещё раз.", ""]
+        by_course = {}
+        for f in skips:
+            by_course.setdefault(f["course"], []).append(f)
+        for c, fl in by_course.items():
+            lines.append(f"[{c}] — {len(fl)}")
+            lines += [f"  {f['section']} · {f['what']} — {f['reason']}" for f in fl]
+            lines.append("")
+        write_text_atomic(out / RULES_FILE, "\n".join(lines) + "\n")
+    else:
+        funlink(out / RULES_FILE)
 
 
 def print_tree(course: Course, rep: Reporter):
@@ -3044,7 +3174,7 @@ def run_job(client: MoodleClient, courses: list[Course], opts: JobOptions, rep: 
                 print_tree(c, rep)
                 res.courses_done += 1
                 continue
-            layout = Layout(out, c, opts.mode, opts.original_names)
+            layout = Layout(out, c, opts.mode, opts.original_names, opts.dir_template or "", opts.file_template or "")
             proc.run_course(c, layout)
             try:
                 write_course_json(c, layout)
@@ -3055,7 +3185,7 @@ def run_job(client: MoodleClient, courses: list[Course], opts: JobOptions, rep: 
             n_files = sum(len(it.files) for s in c.sections for it in s.items)
             state.set_course(c.id, {"name": c.fullname, "dir": layout.course_rel.as_posix(), "files": n_files,
                                     "updated": datetime.now().strftime("%d.%m.%Y %H:%M"), "mode": opts.mode})
-            if opts.zip:
+            if proc.cr.zip if proc.cr.zip is not None else opts.zip:
                 try:
                     zip_course(out, layout, rep)
                 except OSError as e:
@@ -3090,6 +3220,8 @@ def summary_text(res: JobResult, opts: JobOptions) -> str:
     st = res.stats or {}
     parts = [f"Новых файлов: {st.get('new', 0)} ({hsize(st.get('bytes', 0))})",
              f"уже было: {st.get('skipped', 0) + st.get('copied', 0)}"]
+    if st.get("rule_skipped"):
+        parts.append(f"пропущено правилами: {st['rule_skipped']} (список в {RULES_FILE})")
     if res.failures:
         parts.append(f"не скачано: {len(res.failures)} (список в {FAILED_FILE})")
     return ", ".join(parts)
@@ -3245,7 +3377,11 @@ def cli_main(argv=None) -> int:
     p.add_argument("--user", help="логин")
     p.add_argument("--cookie", help="значение cookie MoodleSession из браузера (вход без пароля)")
     p.add_argument("--out", help="папка для сохранения")
-    p.add_argument("--mode", type=int, choices=(1, 2), help="1 — каталог с оглавлением, 2 — папки Курс/Раздел/Тип")
+    p.add_argument("--mode", type=int, choices=(1, 2, 3),
+                   help="1 — каталог с оглавлением, 2 — папки Курс/Раздел/Тип, 3 — свой шаблон (--dir-template, --file-template)")
+    p.add_argument("--dir-template", help="шаблон папок для режима 3, например \"{section_no}. {section}/{kind}\" "
+                                          "(поля: " + ", ".join("{" + k + "}" for k in dl_rules.PLACEHOLDERS) + ")")
+    p.add_argument("--file-template", help="шаблон имени файла для режима 3, например \"{seq} {item}\"")
     p.add_argument("--courses", help="ID курсов через запятую (число из адреса course/view.php?id=…)")
     p.add_argument("--all", action="store_true", help="все курсы")
     p.add_argument("--sync", action="store_true", help="быстрая синхронизация: только новое, с сохранёнными настройками")
@@ -3421,6 +3557,8 @@ def cli_main(argv=None) -> int:
 
     # ── режим, папка, PDF, ZIP ──
     mode = args.mode or (settings.get("mode") if action == "sync" else None)
+    if not mode and (args.dir_template is not None or args.file_template is not None):
+        mode = 3
     if not mode:
         if interactive:
             print("\nКак раскладывать файлы:")
@@ -3440,6 +3578,16 @@ def cli_main(argv=None) -> int:
     if zp is None:
         zp = ask_yes("Упаковывать каждый курс в ZIP-бэкап после загрузки?", False) if interactive and action != "sync" else False
 
+    if args.dir_template is not None:
+        settings["layout_dir"] = args.dir_template
+    if args.file_template is not None:
+        settings["layout_file"] = args.file_template
+    if mode == 3:
+        for tpl in (settings.get("layout_dir") or "", settings.get("layout_file") or ""):
+            for msg in dl_rules.template_errors(tpl):
+                rep.log(f"Шаблон: {msg}", "warn")
+    for msg in dl_rules.validate(settings.get("rules")):
+        rep.log(f"Правила: {msg}", "warn")
     settings.update({"mode": mode, "out_dir": str(out), "pdf": bool(pdf), "zip": bool(zp),
                      "course_ids": [c.id for c in selected]})
     vault.save_settings(settings)
@@ -3448,7 +3596,9 @@ def cli_main(argv=None) -> int:
                                                                 "cookies": client.export_cookies()})
 
     opts = JobOptions(out_dir=out, mode=mode, sync=(action == "sync"), dry_run=(action == "dry"), pdf=bool(pdf),
-                      zip=bool(zp), original_names=args.original_names, index_in_mode2=args.index)
+                      zip=bool(zp), original_names=args.original_names, index_in_mode2=args.index,
+                      rules=settings.get("rules"), dir_template=settings.get("layout_dir") or "",
+                      file_template=settings.get("layout_file") or "")
     rep.log(f"\nКурсов: {len(selected)} · режим {mode} · папка: {out}"
             + (f" · тихие часы {fmt_window(window)}" if window else ""))
     t0 = time.monotonic()

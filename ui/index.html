@@ -243,6 +243,22 @@ input.txt:focus,select.txt:focus{border-color:var(--accent)}
 .toast.bad{border-left-color:var(--bad)}.toast.ok{border-left-color:var(--ok)}
 @keyframes tin{from{transform:translateY(8px);opacity:0}}
 @media (max-width:980px){.cv-body{grid-template-columns:1fr}.toc{display:none}.layout{grid-template-columns:1fr}.side{padding:0 18px 24px}.dock-body{grid-template-columns:1fr}.now{display:none}}
+textarea.txt{border-radius:10px;border:1px solid var(--line);background:var(--raised);color:inherit;padding:8px 10px;width:100%;outline:none;font:inherit;min-height:64px;resize:vertical}
+input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.rules-box{width:min(800px,94vw);height:min(840px,92vh)}
+.rules-body{flex:1;overflow:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px}
+.rules-foot{display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line)}
+.rules-foot .hint{flex:1;margin:0}
+.rsec{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--surface)}
+.rsec h4{margin:0 0 8px;font:600 13px var(--font-display)}
+.rsec.off{opacity:.55;pointer-events:none}
+.rchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.rchips .chip{height:28px;padding:0 10px;font-size:12px}
+.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 12px}
+.modgrid label{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.tplex{font-size:12px;color:var(--muted);margin-top:6px;word-break:break-all}
+.rtwo{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:700px){.rtwo{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -314,12 +330,23 @@ input.txt:focus,select.txt:focus{border-color:var(--accent)}
             <div class="mode" id="modeBox">
               <div class="mopt" data-m="1"><div class="radio"></div><div><b>Каталог с оглавлением</b><span>Файлы с префиксами «03_ЛЗ_02 …» и index.html / README.md с названиями как на сайте</span></div></div>
               <div class="mopt" data-m="2"><div class="radio"></div><div><b>Папки по типам</b><span>Курс / 03. Раздел / Лекции · ПЗ · ЛЗ / файлы</span></div></div>
+              <div class="mopt" data-m="3"><div class="radio"></div><div><b>Свой шаблон</b><span>Сами решаете, как называть папки и файлы</span></div></div>
+            </div>
+            <div class="field hidden" id="tplBox">
+              <label>Папки (через «/», пусто — всё в одну папку)</label><input class="txt" id="tplDir" spellcheck="false">
+              <label style="margin-top:10px">Имя файла</label><input class="txt" id="tplFile" spellcheck="false">
+              <div class="rchips" id="tplChips"></div>
+              <select class="txt" id="tplPresets" style="margin-top:8px"></select>
+              <div class="tplex" id="tplEx"></div>
+              <p class="hint" id="tplErr" style="color:var(--bad)"></p>
             </div>
             <div class="field"><label>Папка для сохранения</label>
               <div class="path"><input id="outDir"><button class="btn" id="pickDir" title="Выбрать папку">…</button><button class="btn" id="openDir" title="Открыть в проводнике"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button></div>
             </div>
             <div class="row"><div class="lbl">PDF-копии страниц<small id="pdfNote">задания, тесты, страницы — ещё и в PDF</small></div><label class="sw-t"><input type="checkbox" data-s="pdf"><span></span></label></div>
             <div class="row"><div class="lbl">ZIP-бэкап курса<small>архив с датой в папке _бэкапы</small></div><label class="sw-t"><input type="checkbox" data-s="zip"><span></span></label></div>
+            <button class="btn big ghost" id="rulesBtn" style="margin-top:10px">Правила скачивания…</button>
+            <p class="hint" id="rulesInfo">Какие файлы брать, что пропускать, свои правила для каждого курса.</p>
           </div>
           <div class="panel">
             <h3>Бережный режим</h3>
@@ -432,6 +459,34 @@ input.txt:focus,select.txt:focus{border-color:var(--accent)}
   </section>
 </div>
 <div class="modal hidden" id="modal"><div class="modal-box"><header><b id="mTitle"></b><button class="btn" id="mOpen">Открыть в программе</button><button class="btn" id="mReveal">Показать в папке</button><button class="icon-btn" id="mClose"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><iframe id="mFrame"></iframe></div></div>
+<div class="modal hidden" id="rulesModal"><div class="modal-box rules-box">
+  <header><b>Правила скачивания</b><button class="btn" id="rClose">Закрыть</button></header>
+  <div class="rules-body">
+    <div class="rsec"><h4>Для чего правила</h4>
+      <select class="txt" id="rScope"></select>
+      <label class="row hidden" id="rOwnWrap" style="border:0;padding:10px 0 0;cursor:pointer"><span class="lbl">Свои правила для этого курса<small>без галочки курс использует общие правила</small></span><span class="sw-t"><input type="checkbox" id="rOwn"><span></span></span></label></div>
+    <div id="rForm" style="display:flex;flex-direction:column;gap:14px">
+      <div class="rsec"><h4>Готовые наборы</h4><div class="rchips" id="rPresets"></div><p class="hint" id="rPresetHint"></p></div>
+      <div class="rsec"><h4>Какие файлы брать</h4>
+        <div class="seg" id="rExtMode"><button data-v="all">Все</button><button data-v="only">Только эти</button><button data-v="except">Все, кроме этих</button></div>
+        <input class="txt" id="rExt" style="margin-top:10px" placeholder="pdf, docx, @документы" spellcheck="false">
+        <div class="rchips" id="rGroups"></div>
+        <p class="hint">Расширения через запятую. «@документы», «@видео» и другие группы вставляются кнопками выше.</p></div>
+      <div class="rsec"><h4>Размер файла</h4>
+        <div class="path"><input class="txt" id="rMax" type="number" min="0" step="1" style="max-width:140px"><span class="hint" style="margin:auto 0">МБ — файлы больше пропускаются (0 — без ограничения)</span></div></div>
+      <div class="rsec"><h4>Какие элементы курса не скачивать</h4><div class="modgrid" id="rMods"></div></div>
+      <div class="rtwo">
+        <div class="rsec"><h4>Пропускать разделы со словами</h4><textarea class="txt" id="rSecs" placeholder="по одному слову в строке" spellcheck="false"></textarea></div>
+        <div class="rsec"><h4>Пропускать по названию</h4><textarea class="txt" id="rNames" placeholder="по одному слову в строке" spellcheck="false"></textarea></div>
+      </div>
+      <p class="hint" style="margin:-6px 0 0">Слова ищутся в любом месте названия, регистр не важен. Для сложных случаев: <code>re:</code> и регулярное выражение, например <code>re:^Список</code>. Уже скачанные файлы не удаляются.</p>
+      <div class="rsec hidden" id="rCourseOnly"><h4>Только для этого курса</h4>
+        <div class="rtwo"><div><label class="hint" style="margin:0 0 4px;display:block">PDF-копии страниц</label><select class="txt" id="rPdf"></select></div>
+        <div><label class="hint" style="margin:0 0 4px;display:block">ZIP-бэкап курса</label><select class="txt" id="rZip"></select></div></div></div>
+    </div>
+  </div>
+  <div class="rules-foot"><span class="hint" id="rMsg"></span><button class="btn" id="rCancel">Отмена</button><button class="btn primary" id="rSave">Сохранить</button></div>
+</div></div>
 <div class="toasts" id="toasts"></div>
 
 <script>
@@ -545,6 +600,8 @@ async function loadCourses(){ courses = await api("/api/courses"); renderGrid();
 function loadSettings(st){
   const s = st.settings;
   $$(".mopt").forEach(m => m.classList.toggle("on", +m.dataset.m === +(s.mode || 1)));
+  $("#tplBox").classList.toggle("hidden", +(s.mode || 1) !== 3);
+  if (!RU && !RU_LOADING) loadRules();
   if (document.activeElement !== $("#outDir")) $("#outDir").value = s.out_dir || "";
   $$("[data-s]").forEach(i => i.checked = !!s[i.dataset.s]);
   if (s.quiet_hours) { const [a, b] = s.quiet_hours.split("-"); $("#qhFrom").value = a.padStart(5, "0"); $("#qhTo").value = b.padStart(5, "0"); }
@@ -554,7 +611,7 @@ function loadSettings(st){
   $("#pdfNote").textContent = st.browser_pdf ? "задания, тесты, страницы — ещё и в PDF" : "нужен Microsoft Edge или Google Chrome";
   if (!settingsLoaded) { (s.course_ids || []).forEach(id => selected.add(+id)); settingsLoaded = true; }
 }
-$$(".mopt").forEach(m => m.onclick = () => { $$(".mopt").forEach(x => x.classList.toggle("on", x === m)); api("/api/settings", {mode: +m.dataset.m}); });
+$$(".mopt").forEach(m => m.onclick = () => { $$(".mopt").forEach(x => x.classList.toggle("on", x === m)); $("#tplBox").classList.toggle("hidden", +m.dataset.m !== 3); api("/api/settings", {mode: +m.dataset.m}); });
 $$("[data-s]").forEach(i => i.onchange = () => api("/api/settings", {[i.dataset.s]: i.checked}));
 $("#outDir").onchange = e => api("/api/settings", {out_dir: e.target.value.trim()}).then(loadCourses);
 $("#pickDir").onclick = async () => { const r = await api("/api/pick_folder", {}); if (r.ok) { $("#outDir").value = r.path; loadCourses(); } };
@@ -564,6 +621,144 @@ $("#qhFrom").onchange = saveHours; $("#qhTo").onchange = saveHours;
 async function saveSched(){ const r = await api("/api/schedule", {enabled: $("#schedOn").checked, time: $("#schedTime").value});
   if (!r.ok) { toast("Планировщик: " + r.error, "bad"); $("#schedOn").checked = false; } else if ($("#schedOn").checked) toast("Ночная синхронизация: каждый день в " + $("#schedTime").value, "ok"); }
 $("#schedOn").onchange = saveSched; $("#schedTime").onchange = () => { if ($("#schedOn").checked) saveSched(); };
+
+
+/* ── правила скачивания и шаблоны имён ── */
+let RU = null, RU_LOADING = false, ruScope = "default", ruDraft = null, lastTpl = null;
+const SAMPLE = {section_no: "03", section: "Основы теории информации", kind: "Лекции", kind_code: "ЛК", seq: "02", item: "Лекция 2. Системы счисления.pdf", type: "файл"};
+async function loadRules(){ RU_LOADING = true; try { RU = await api("/api/rules"); buildTplUi(); fillTpl(); updRulesInfo(); } finally { RU_LOADING = false; } }
+const renderTpl = (t, v) => (t || "").replace(/\{(\w+)\}/g, (m, k) => v[k] ?? "");
+function tplExample(){
+  const parts = ($("#tplDir").value || "").replace(/\\/g, "/").split("/").map(x => renderTpl(x, SAMPLE).trim()).filter(Boolean);
+  const mm = SAMPLE.item.match(/^(.*?)(\.[A-Za-z0-9]{1,5})$/), stem = mm ? mm[1] : SAMPLE.item, ext = mm ? mm[2] : "";
+  const name = (renderTpl($("#tplFile").value || "{item}", {...SAMPLE, item: stem}).trim() || stem) + ext;
+  $("#tplEx").textContent = "Пример: " + ["Название курса", ...parts, name].join(" / ");
+}
+function fillTpl(){
+  if (!RU) return;
+  if (document.activeElement !== $("#tplDir")) $("#tplDir").value = RU.layout_dir;
+  if (document.activeElement !== $("#tplFile")) $("#tplFile").value = RU.layout_file;
+  tplExample();
+}
+function buildTplUi(){
+  const ph = RU.meta.placeholders;
+  $("#tplChips").innerHTML = Object.keys(ph).map(k => `<button class="chip" data-ph="${k}" title="${esc(ph[k])}">{${k}}</button>`).join("");
+  $("#tplPresets").innerHTML = '<option value="">Готовые шаблоны…</option>' + RU.meta.layout_presets.map((p, i) => `<option value="${i}">${esc(p.title)}</option>`).join("");
+}
+$("#tplDir").onfocus = () => lastTpl = $("#tplDir"); $("#tplFile").onfocus = () => lastTpl = $("#tplFile");
+$("#tplChips").onclick = e => {
+  const b = e.target.closest("[data-ph]"); if (!b) return;
+  const el = lastTpl || $("#tplFile"), a = el.selectionStart ?? el.value.length, z = el.selectionEnd ?? a, t = "{" + b.dataset.ph + "}";
+  el.value = el.value.slice(0, a) + t + el.value.slice(z); el.focus(); el.setSelectionRange(a + t.length, a + t.length); tplExample(); saveTpl();
+};
+$("#tplPresets").onchange = e => {
+  const p = RU.meta.layout_presets[+e.target.value]; e.target.value = ""; if (!p) return;
+  $("#tplDir").value = p.dir; $("#tplFile").value = p.file; tplExample(); saveTpl();
+};
+async function saveTpl(){
+  const r = await api("/api/rules/save", {layout_dir: $("#tplDir").value, layout_file: $("#tplFile").value});
+  $("#tplErr").textContent = r.ok ? "" : r.error;
+  if (r.ok && RU) { RU.layout_dir = $("#tplDir").value.trim(); RU.layout_file = $("#tplFile").value.trim(); }
+}
+$("#tplDir").oninput = $("#tplFile").oninput = tplExample;
+$("#tplDir").onchange = $("#tplFile").onchange = saveTpl;
+
+function ruleSummary(r){
+  if (!r) return "";
+  const b = [];
+  if (r.ext_mode === "only" && r.ext_list.length) b.push("только " + r.ext_list.join(", "));
+  if (r.ext_mode === "except" && r.ext_list.length) b.push("без " + r.ext_list.join(", "));
+  if (+r.max_mb) b.push("до " + r.max_mb + " МБ");
+  if (r.skip_mods.length) b.push("без типов: " + r.skip_mods.length);
+  if (r.skip_sections.length) b.push("без разделов: " + r.skip_sections.length);
+  if (r.skip_names.length) b.push("без названий: " + r.skip_names.length);
+  return b.join(" · ");
+}
+function updRulesInfo(){
+  if (!RU) return;
+  const d = ruleSummary(RU.rules.default), n = Object.keys(RU.rules.courses).length;
+  $("#rulesInfo").textContent = (d ? "Сейчас: " + d : "Сейчас: качаю всё") + (n ? ` · своих правил у курсов: ${n}` : "");
+}
+
+const clone = o => JSON.parse(JSON.stringify(o));
+const lines = v => (v || "").split(/[\n,;]+/).map(x => x.trim()).filter(Boolean);
+function ruScopeOptions(){
+  const seen = new Set(), opts = ['<option value="default">Для всех курсов</option>'];
+  courses.forEach(c => { seen.add(String(c.id)); opts.push(`<option value="${c.id}">Только для: ${esc(c.fullname)}${RU.rules.courses[c.id] ? " ●" : ""}</option>`); });
+  Object.keys(RU.rules.courses).filter(id => !seen.has(id)).forEach(id => opts.push(`<option value="${id}">Только для курса ${id} ●</option>`));
+  $("#rScope").innerHTML = opts.join("");
+  $("#rScope").value = ruScope;
+}
+function ruFill(r){
+  $$("#rExtMode button").forEach(b => b.classList.toggle("on", b.dataset.v === r.ext_mode));
+  $("#rExt").value = r.ext_list.join(", ");
+  $("#rMax").value = r.max_mb || 0;
+  $$("#rMods input").forEach(i => i.checked = r.skip_mods.includes(i.value));
+  $("#rSecs").value = r.skip_sections.join("\n");
+  $("#rNames").value = r.skip_names.join("\n");
+  const tri = v => v === true ? "1" : v === false ? "0" : "";
+  $("#rPdf").value = tri(r.pdf); $("#rZip").value = tri(r.zip);
+}
+function ruRead(){
+  const on = $("#rExtMode button.on");
+  const tri = v => v === "1" ? true : v === "0" ? false : null;
+  return {ext_mode: on ? on.dataset.v : "all", ext_list: lines($("#rExt").value), max_mb: +($("#rMax").value || 0),
+    skip_mods: $$("#rMods input:checked").map(i => i.value), skip_sections: lines($("#rSecs").value), skip_names: lines($("#rNames").value),
+    pdf: ruScope === "default" ? null : tri($("#rPdf").value), zip: ruScope === "default" ? null : tri($("#rZip").value)};
+}
+function ruCommit(){   // записать форму в черновик (без отправки на сервер)
+  if (ruScope === "default") ruDraft.default = ruRead();
+  else if ($("#rOwn").checked) ruDraft.courses[ruScope] = ruRead();
+  else delete ruDraft.courses[ruScope];
+}
+function ruShow(){
+  const course = ruScope !== "default", own = !!ruDraft.courses[ruScope];
+  $("#rOwnWrap").classList.toggle("hidden", !course);
+  $("#rOwn").checked = own;
+  $("#rCourseOnly").classList.toggle("hidden", !course);
+  const r = course ? (own ? ruDraft.courses[ruScope] : ruDraft.default) : ruDraft.default;
+  ruFill({...RU.meta.defaults, ...r});
+  $("#rForm").querySelectorAll(".rsec").forEach(x => x.classList.toggle("off", course && !own));
+  $("#rMsg").textContent = "";
+}
+async function openRules(){
+  if (!RU) await loadRules();
+  RU = await api("/api/rules"); ruDraft = clone(RU.rules); ruScope = "default";
+  $("#rPresets").innerHTML = RU.meta.presets.map(p => `<button class="chip" data-p="${p.key}" title="${esc(p.hint)}">${esc(p.title)}</button>`).join("");
+  $("#rGroups").innerHTML = Object.keys(RU.meta.ext_groups).map(g => `<button class="chip" data-g="@${g}" title="${esc(RU.meta.ext_groups[g].join(', '))}">@${g}</button>`).join("");
+  $("#rMods").innerHTML = RU.meta.mods.map(m => `<label><span class="sw-t"><input type="checkbox" value="${m.key}"><span></span></span>${esc(m.title)}</label>`).join("");
+  const tri = '<option value="">Как в общих настройках</option><option value="1">Включить</option><option value="0">Выключить</option>';
+  $("#rPdf").innerHTML = tri; $("#rZip").innerHTML = tri;
+  ruScopeOptions(); ruShow(); $("#rulesModal").classList.remove("hidden");
+}
+$("#rulesBtn").onclick = openRules;
+$("#rClose").onclick = $("#rCancel").onclick = () => $("#rulesModal").classList.add("hidden");
+$("#rScope").onchange = e => { ruCommit(); ruScope = e.target.value; ruScopeOptions(); ruShow(); };
+$("#rOwn").onchange = () => {
+  if ($("#rOwn").checked) ruDraft.courses[ruScope] = {...RU.meta.defaults, ...clone(ruDraft.default), pdf: null, zip: null};
+  else delete ruDraft.courses[ruScope];
+  ruShow();
+};
+$("#rExtMode").onclick = e => { const b = e.target.closest("button"); if (b) $$("#rExtMode button").forEach(x => x.classList.toggle("on", x === b)); };
+$("#rGroups").onclick = e => {
+  const b = e.target.closest("[data-g]"); if (!b) return;
+  const cur = lines($("#rExt").value); if (!cur.includes(b.dataset.g)) cur.push(b.dataset.g);
+  $("#rExt").value = cur.join(", ");
+  if ($("#rExtMode button.on").dataset.v === "all") $$("#rExtMode button").forEach(x => x.classList.toggle("on", x.dataset.v === "only"));
+};
+$("#rPresets").onclick = e => {
+  const b = e.target.closest("[data-p]"); if (!b) return;
+  const p = RU.meta.presets.find(x => x.key === b.dataset.p);
+  const keep = ruRead(); ruFill({...RU.meta.defaults, ...p.rules, pdf: keep.pdf, zip: keep.zip});
+  $("#rPresetHint").textContent = `«${p.title}»: ${p.hint}. Нажмите «Сохранить», чтобы применить.`;
+};
+$("#rSave").onclick = async () => {
+  ruCommit();
+  const r = await api("/api/rules/save", {rules: ruDraft});
+  if (!r.ok) { $("#rMsg").style.color = "var(--bad)"; $("#rMsg").textContent = r.error; return; }
+  RU.rules = clone(ruDraft); updRulesInfo(); $("#rulesModal").classList.add("hidden");
+  toast("Правила сохранены. Они применятся при следующей загрузке; быстрая синхронизация сама докачает то, что раньше пропускалось.", "ok");
+};
 
 /* ── запуск ── */
 async function start(sync, ignoreGeo=false, ids=null){

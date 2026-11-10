@@ -9,6 +9,7 @@
 - `gui.py` + `ui/index.html` — локальный веб-интерфейс и его API; офлайн-режим, сохранённый вход (шифрование DPAPI на Windows).
 - `schedule.py` — расписание: официальный JSON-API schedule.sevsu.ru, личное timetable.sevsu.ru, просмотрщик (HTML со встроенными данными).
 - `electives.py` — элективы: страница iot.sevsu.ru — это SPA, работает через браузер.
+- `dl_rules.py` — правила скачивания (что брать, что пропускать) и шаблоны имён папок/файлов (режим 3); без сторонних библиотек.
 - `cdp.py` — свой минимальный клиент DevTools Protocol для фонового Edge/Chrome (без сторонних библиотек).
 - `*.bat`, `run.sh` — запуск и сборка. `.github/workflows/build-exe.yaml` — сборка exe в GitHub Actions: вручную (артефакт) или по тегу `v*` (ещё и выкладывает exe в Releases).
 
