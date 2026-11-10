@@ -7,6 +7,8 @@
 Материалы Moodle/
 _бэкапы/
 .moodle_state.json
+.moodle_news.json
+.moodle_search.sqlite*
 _журнал.log
 _не_скачано.txt
 _новое.txt

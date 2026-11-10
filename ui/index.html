@@ -273,6 +273,27 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
 .nk{font-size:11px;font-weight:700;letter-spacing:.02em;padding:2px 8px;border-radius:999px;color:#fff;margin-right:6px;white-space:nowrap}
 .nsk{display:grid;grid-template-columns:1fr 70px 70px;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .nsk.h{border-top:0;font-size:12px;color:var(--muted);padding-top:0}
+.sqbox{display:flex;gap:8px;margin-bottom:12px}
+.sqbox .txt{flex:1;height:44px;font-size:16px}
+.sqbox .btn{height:44px;padding:0 20px}
+.sqf{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.sqf .chip{height:28px;padding:0 11px;font-size:12.5px}
+.sr{padding:12px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);margin-bottom:8px;box-shadow:var(--shadow)}
+.sr .st{font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.sr .sx{font-weight:400;font-size:12px;color:var(--muted);margin-left:6px;white-space:nowrap}
+.sr .sm{font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.sr .sp{display:flex;gap:8px;font-size:13px;line-height:1.45;margin-top:6px;padding:6px 8px;border-radius:8px;background:var(--raised);cursor:pointer;overflow-wrap:anywhere}
+.sr .sp:hover{outline:1px solid var(--line-strong)}
+.sr .sloc{flex:none;font-size:11.5px;font-weight:600;color:var(--muted);white-space:nowrap;padding-top:1px}
+.sr .sn{font-size:12px;color:var(--muted);margin-top:6px}
+.sr .sn a{color:var(--accent);cursor:pointer;text-decoration:underline}
+.sr .na{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.sr .na .btn{height:30px;font-size:12px;padding:0 10px}
+mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1px}
+.sqs{font-size:13px;line-height:1.5}
+.sqw{font-size:12.5px;margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(232,113,10,.12)}
+.sqp{font-size:12px;line-height:1.4;padding:5px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}
+.sqp b{font-weight:600}
 .nsk.h span+span,.nsk .sw-t{justify-self:center}
 .nsk small{display:block;color:var(--muted);font-size:12px}
 .nch{border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:8px}
@@ -287,7 +308,7 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
 <div id="app">
   <header class="top">
     <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>Moodle Offline</div>
-    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on">Курсы</button><button data-view="schedule">Расписание</button><button data-view="electives">Элективы</button><button data-view="news">Что нового<span class="nbadge hidden" id="newsBadge"></span></button></div>
+    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on">Курсы</button><button data-view="search">Поиск</button><button data-view="schedule">Расписание</button><button data-view="electives">Элективы</button><button data-view="news">Что нового<span class="nbadge hidden" id="newsBadge"></span></button></div>
     <div class="pill" id="net" title="Проверка доступности Moodle раз в 30 секунд"><span class="dot"></span><span class="txt">Проверяю сервер…</span></div>
     <div class="pill hidden" id="ip"></div>
     <div class="spacer"></div>
@@ -474,6 +495,29 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
         </aside>
       </div>
     </section>
+    <section class="view hidden" id="searchView">
+      <div class="layout">
+        <div class="content">
+          <div class="sqbox"><input class="txt" id="sqIn" placeholder="Поиск по скачанным материалам" autocomplete="off" spellcheck="false"><button class="btn primary" id="sqGo">Найти</button></div>
+          <div class="sqf"><select class="txt" id="sqCourse" style="width:auto;max-width:260px"></select>
+            <span id="sqTypes" style="display:contents"></span>
+            <div class="spacer"></div>
+            <select class="txt" id="sqOrder" style="width:auto"><option value="rank">Сначала самые подходящие</option><option value="new">Сначала новые файлы</option></select></div>
+          <div class="hint" id="sqInfo" style="margin:0 0 10px"></div>
+          <div id="sqList"></div>
+        </div>
+        <aside class="side">
+          <div class="panel">
+            <h3>Индекс поиска</h3>
+            <div id="sqStatus"></div>
+            <button class="btn primary big" id="sqUpdate" style="margin-top:12px">Обновить индекс</button>
+            <button class="btn big" id="sqRebuild" style="margin-top:8px">Пересобрать с нуля</button>
+            <button class="btn big" id="sqSettings" style="margin-top:8px">Настройки поиска</button>
+            <p class="hint">Ищу по тексту внутри файлов (PDF, Word, PowerPoint, Excel, страницы курса, текст и код) и по названиям всех файлов. Работает без интернета и без входа в Moodle. Индекс лежит в вашей папке с материалами.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
   </main>
   <section class="dock collapsed" id="dock">
     <div class="dock-head">
@@ -556,6 +600,20 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
       <div class="path"><input class="txt" id="nsLines" type="number" min="3" max="50" style="max-width:90px"><span class="hint" style="margin:auto 0">строк в одном уведомлении (остальное свернётся в «…и ещё N»)</span></div></div>
   </div>
   <div class="rules-foot"><span class="hint" id="nsMsg"></span><button class="btn" id="nsCancel">Отмена</button><button class="btn primary" id="nsSave">Сохранить</button></div>
+</div></div>
+<div class="modal hidden" id="searchModal"><div class="modal-box rules-box">
+  <header><b>Поиск — настройки</b><button class="btn" id="ssClose">Закрыть</button></header>
+  <div class="rules-body">
+    <div class="rsec"><label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Обновлять индекс после каждой загрузки<small>новое и изменённое читается в фоне; загрузку это не задерживает</small></span><span class="sw-t"><input type="checkbox" id="ssAuto"><span></span></span></label></div>
+    <div class="rsec"><h4>Что читать внутри файлов</h4><div class="modgrid" id="ssTypes"></div>
+      <p class="hint">Остальные файлы (и всё, что выключено здесь) находятся только по названию. Старые форматы .doc, .ppt, .xls внутри не читаются — пересохраните их как .docx, .pptx, .xlsx.</p></div>
+    <div class="rsec"><h4>Ограничения</h4>
+      <div class="path"><input class="txt" id="ssMb" type="number" min="1" max="1000" style="width:90px;flex:none"><span class="hint" style="margin:auto 0">МБ — файлы крупнее ищутся только по названию</span></div>
+      <div class="path" style="margin-top:8px"><input class="txt" id="ssPages" type="number" min="10" max="20000" style="width:90px;flex:none"><span class="hint" style="margin:auto 0">страниц PDF читать у одного файла (новое значение действует на файлы, которые читаются заново; чтобы применить ко всем — «Пересобрать с нуля»)</span></div></div>
+    <div class="rsec"><h4>Не индексировать курсы</h4><div class="modgrid" id="ssCourses"></div><p class="hint">Эти курсы пропадут из поиска, сами файлы не трогаются.</p></div>
+    <div class="rsec"><h4>Что не прочиталось</h4><div id="ssProblems"></div></div>
+  </div>
+  <div class="rules-foot"><span class="hint" id="ssMsg"></span><button class="btn" id="ssCancel">Отмена</button><button class="btn primary" id="ssSave">Сохранить</button></div>
 </div></div>
 <div class="toasts" id="toasts"></div>
 
@@ -870,7 +928,7 @@ document.addEventListener("click", e => {
   api("/api/open", {path: b.dataset.ext || b.dataset.rev, reveal: !!b.dataset.rev}).then(r => { if (!r.ok) toast(r.error, "bad"); });
 });
 let mPath = "";
-function preview(p){ mPath = p; $("#mTitle").textContent = p.split("/").pop(); $("#mFrame").src = fileUrl(p); $("#modal").classList.remove("hidden"); }
+function preview(p, hash = ""){ mPath = p; $("#mTitle").textContent = p.split("/").pop(); $("#mFrame").src = fileUrl(p) + hash; $("#modal").classList.remove("hidden"); }
 $("#mClose").onclick = () => { $("#modal").classList.add("hidden"); $("#mFrame").src = "about:blank"; };
 $("#mOpen").onclick = () => api("/api/open", {path: mPath});
 $("#mReveal").onclick = () => api("/api/open", {path: mPath, reveal: true});
@@ -948,7 +1006,8 @@ function showView(v){
   view = v; $$("#mainTabs button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
   $("#coursesView").classList.toggle("hidden", v !== "courses"); $("#scheduleView").classList.toggle("hidden", v !== "schedule");
   $("#electivesView").classList.toggle("hidden", v !== "electives"); $("#newsView").classList.toggle("hidden", v !== "news");
-  if (v === "schedule") loadSchedule(); if (v === "electives") loadElectives(); if (v === "news") loadNews();
+  $("#searchView").classList.toggle("hidden", v !== "search");
+  if (v === "schedule") loadSchedule(); if (v === "electives") loadElectives(); if (v === "news") loadNews(); if (v === "search") openSearchTab();
 }
 $$("#mainTabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
 const openUrl = url => api("/api/open_url", {url});
@@ -1043,6 +1102,161 @@ $("#nsTest").onclick = async () => {
     const r = await api("/api/news/test", {channels: chans}), N = {toast: "окно", telegram: "Telegram", webhook: "webhook"};
     $("#nsTestMsg").textContent = r.error || Object.entries(r.results).map(([k, v]) => `${N[k]}: ${v.ok ? "✓" : "✗"} ${v.msg}`).join(" · ");
   } finally { $("#nsTest").disabled = false; }
+};
+
+/* ── поиск по материалам ── */
+const SG = {docs: ["Документы", "#d93a3a"], slides: ["Презентации", "#e8710a"], tables: ["Таблицы", "#0f9d8a"], pages: ["Страницы", "#2f6fde"],
+            text: ["Текст и код", "#5f6b7a"], other: ["Остальное", "#8a93a3"]};
+const SPROB = {err: "не прочитан", empty: "нет текста", legacy: "старый формат", big: "слишком большой", nolib: "нет библиотеки PDF"};
+let SI = null, SP = {}, SQseq = 0, SQtimer = null, SQres = null, SQgroups = new Set(), spWas = false;
+const hl = t => esc(t).replace(/\u0001/g, "<mark>").replace(/\u0002/g, "</mark>");
+const sWhen = ts => ts ? new Date(ts * 1000).toLocaleString("ru-RU", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) : "—";
+async function loadSearchInfo(){
+  SI = await api("/api/search/status");
+  const cur = $("#sqCourse").value;
+  $("#sqCourse").innerHTML = '<option value="">Все курсы</option>' + (SI.status.courses || []).map(c => `<option value="${esc(c.name)}">${esc(c.name)} (${c.count})</option>`).join("");
+  $("#sqCourse").value = cur;
+  $("#sqTypes").innerHTML = SI.groups.map(g => `<button class="chip ${SQgroups.has(g.key) ? "on" : ""}" data-g="${g.key}">${esc(g.title)}</button>`).join("");
+  renderSearchSide();
+}
+function renderSearchSide(){
+  if (!SI) return;
+  const st = SI.status, p = SP || {}, run = !!p.running; let h = "";
+  if (run) {
+    const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
+    h = `<div class="bar ${p.total ? "" : "indet"}"><i style="width:${pct}%"></i></div><div class="sqs" style="margin-top:6px">${p.phase === "scan" ? "Смотрю, что изменилось…" : `Читаю файлы: ${p.done} из ${p.total}`}<br><span class="hint" style="margin:0">${esc((p.current || "").split("/").pop())}</span></div>
+      <button class="btn" id="sqStop" style="margin-top:8px">Остановить</button>`;
+  } else if (!st.exists) {
+    h = `<div class="sqs">Индекс ещё не построен. Нажмите «Обновить индекс» — это один раз, потом читается только новое.</div>`;
+  } else {
+    const bs = st.by_status || {}, bits = [];
+    if (bs.empty) bits.push(`без текста (сканы): ${bs.empty}`); if (bs.err) bits.push(`не прочитано: ${bs.err}`);
+    if (bs.legacy) bits.push(`старых .doc/.ppt/.xls: ${bs.legacy}`); if (bs.big) bits.push(`слишком больших: ${bs.big}`);
+    h = `<div class="sqs"><b>${st.docs}</b> файлов · <b>${st.chunks}</b> фрагментов · ${hsize(st.bytes)}<br><span class="hint" style="margin:0">обновлён ${sWhen(st.updated)}</span></div>`
+      + (bits.length ? `<div class="hint" style="margin-top:6px">${bits.join(" · ")}. <a href="#" class="link" id="sqWhy">Какие именно</a></div>` : "");
+    if (bs.nolib) h += `<div class="sqw">PDF сейчас ищутся только по названию: не найдена библиотека pypdfium2 (в готовой программе она есть; при запуске из исходников: <code>pip install pypdfium2</code>).</div>`;
+    if (!st.fts) h += `<div class="sqw">В этом Python нет SQLite FTS5 — поиск работает, но на больших папках медленнее.</div>`;
+    if (SI.last && !SI.last.ok) h += `<div class="sqw">${esc(SI.last.text)}</div>`;
+  }
+  $("#sqStatus").innerHTML = h;
+  $("#sqUpdate").disabled = $("#sqRebuild").disabled = run;
+  const stop = $("#sqStop"); if (stop) stop.onclick = () => api("/api/search/stop", {});
+  const why = $("#sqWhy"); if (why) why.onclick = e => { e.preventDefault(); openSearchSettings(); };
+}
+function renderSearchRun(p){
+  SP = p; const run = !!p.running;
+  if (view === "search" && SI) renderSearchSide();
+  if (spWas && !run) {
+    if (view === "search") {
+      loadSearchInfo().then(() => { if ($("#sqIn").value.trim()) doSearch(); });
+      if (p.last) toast(p.last.text, p.last.ok ? "ok" : "bad");
+    } else SI = null;   // индекс обновился, пока смотрели другую вкладку: подтянем при открытии «Поиска»
+  }
+  spWas = run;
+}
+async function openSearchTab(){
+  if (!SI) await loadSearchInfo(); else renderSearchSide();
+  loadSearchInfo();   // свежие цифры
+  setTimeout(() => $("#sqIn").focus(), 50);
+  if (!$("#sqIn").value.trim()) renderSearchEmpty();
+}
+function renderSearchEmpty(){
+  $("#sqInfo").textContent = "";
+  const has = SI && SI.status.exists;
+  $("#sqList").innerHTML = `<div class="empty" style="text-align:left;max-width:560px;margin:0 auto">
+    <b>${has ? "Что искать" : "Сначала построим индекс"}</b><br><br>
+    ${has ? `Слова из лекций и заданий, названия файлов, фамилии из таблиц.<br><br>
+    • несколько слов — найдутся места, где есть <b>все</b> сразу<br>
+    • <b>"точная фраза"</b> — слова подряд, в таком порядке<br>
+    • <b>-слово</b> — исключить то, где оно встречается<br>
+    • окончания не важны: «лекция» найдёт «лекции» и «лекций»; е и ё — одно и то же` : "Справа нажмите «Обновить индекс»: программа прочитает всё, что уже скачано. Это работает без интернета."}</div>`;
+}
+async function doSearch(){
+  const q = $("#sqIn").value.trim(); if (!q) { renderSearchEmpty(); return; }
+  const my = ++SQseq;
+  const r = await api(`/api/search?q=${encodeURIComponent(q)}&course=${encodeURIComponent($("#sqCourse").value)}&groups=${[...SQgroups].join(",")}&order=${$("#sqOrder").value}&limit=40`);
+  if (my !== SQseq) return;   // пока ждали, запрос поменялся
+  SQres = r; renderSearchResults(r);
+}
+function sResCard(r, i){
+  const [gt, col] = SG[r.group] || SG.other, ext = (r.ext || "").replace(".", "").toUpperCase() || "ФАЙЛ";
+  const hits = r.hits.map((h, j) => `<div class="sp" data-i="${i}" data-j="${j}">${h.loc ? `<span class="sloc">${esc(h.loc)}</span>` : ""}<span>${hl(h.snip)}</span></div>`).join("");
+  const more = r.more ? `<div class="sn">…и ещё ${r.more} ${r.more % 10 === 1 && r.more !== 11 ? "фрагмент" : (r.more % 10 >= 2 && r.more % 10 <= 4 && (r.more < 10 || r.more > 20)) ? "фрагмента" : "фрагментов"} в этом файле</div>` : "";
+  const dups = r.dups.length ? `<div class="sn">Такой же файл есть ещё в: ${r.dups.slice(0, 3).map((d, k) => `<a data-i="${i}" data-d="${k}">${esc(d.split("/").slice(0, -1).join(" › "))}</a>`).join(", ")}${r.dups.length > 3 ? ` и ещё ${r.dups.length - 3}` : ""}</div>` : "";
+  return `<div class="sr" data-i="${i}"><div class="st"><span class="nk" style="background:${col}" title="${esc(gt)}">${esc(ext)}</span>${hl(r.name)}<span class="sx">${hsize(r.size)}</span></div>
+    <div class="sm">${esc(r.course)}${r.where ? " › " + hl(r.where) : ""}${r.by_name ? " · совпало название" : ""}</div>${hits}${more}${dups}
+    <div class="na"><button class="btn" data-a="open">Открыть</button><button class="btn" data-a="reveal">Показать в папке</button></div></div>`;
+}
+function renderSearchResults(r){
+  if (!r.ok) {
+    $("#sqInfo").textContent = "";
+    $("#sqList").innerHTML = r.no_index ? `<div class="empty">Индекс ещё не построен.<br><br><button class="btn primary" id="sqBuild">Построить индекс</button></div>` : `<div class="empty">${esc(r.error || "Ошибка поиска")}</div>`;
+    const b = $("#sqBuild"); if (b) b.onclick = () => startIndex(false);
+    return;
+  }
+  let info = r.total ? `Найдено файлов: ${r.total}${r.total > r.results.length ? `, показаны первые ${r.results.length}` : ""} · ${r.ms} мс` : "";
+  if (r.relaxed) info += " · всех слов сразу нет ни в одном месте — показаны места, где есть хотя бы одно";
+  if (r.truncated) info += " · совпадений очень много — уточните запрос";
+  $("#sqInfo").textContent = info;
+  if (!r.results.length) {
+    const bs = (SI && SI.status.by_status) || {}, skipped = (bs.empty || 0) + (bs.err || 0) + (bs.legacy || 0) + (bs.nolib || 0);
+    $("#sqList").innerHTML = `<div class="empty">Ничего не найдено.<br><span class="hint">Попробуйте другое слово, уберите фильтры или «-исключения».${skipped ? ` Часть файлов не читается (сканы, старые форматы, ошибки) — <a href="#" class="link" id="sqWhy2">какие именно</a>.` : ""}</span></div>`;
+    const w = $("#sqWhy2"); if (w) w.onclick = e => { e.preventDefault(); openSearchSettings(); };
+    return;
+  }
+  $("#sqList").innerHTML = r.results.map(sResCard).join("");
+}
+function sOpen(path, loc){
+  const m = /^стр\. (\d+)/.exec(loc || "");
+  if (/\.pdf$/i.test(path)) return preview(path, m ? "#page=" + m[1] : "");
+  if (PREVIEWABLE.test(path)) return preview(path);
+  api("/api/open", {path}).then(x => { if (!x.ok) toast(x.error || "Файл не найден", "bad"); else if (loc) toast(`Открываю в программе. Нужное место: ${loc}`); });
+}
+async function startIndex(full){
+  const r = await api("/api/search/index", {full});
+  if (!r.ok) { toast(r.error || "Не получилось начать", "bad"); return; }
+  SP = {running: true, phase: "scan", done: 0, total: 0, current: ""}; spWas = true; renderSearchSide();
+}
+$("#sqIn").oninput = () => { clearTimeout(SQtimer); SQtimer = setTimeout(doSearch, 280); };
+$("#sqIn").onkeydown = e => { if (e.key === "Enter") { clearTimeout(SQtimer); doSearch(); } };
+$("#sqGo").onclick = doSearch;
+$("#sqCourse").onchange = $("#sqOrder").onchange = doSearch;
+$("#sqTypes").onclick = e => { const b = e.target.closest("[data-g]"); if (!b) return; const g = b.dataset.g; SQgroups.has(g) ? SQgroups.delete(g) : SQgroups.add(g); b.classList.toggle("on"); doSearch(); };
+$("#sqUpdate").onclick = () => startIndex(false);
+$("#sqRebuild").onclick = () => { if (confirm("Пересобрать индекс с нуля? Все файлы будут прочитаны заново — это может занять несколько минут.")) startIndex(true); };
+$("#sqSettings").onclick = openSearchSettings;
+$("#sqList").onclick = e => {
+  const a = e.target.closest("[data-d]"), card = e.target.closest(".sr"); if (!card || !SQres) return;
+  const r = SQres.results[+card.dataset.i]; if (!r) return;
+  if (a) return sOpen(r.dups[+a.dataset.d], "");
+  const b = e.target.closest("button[data-a]"), hit = e.target.closest(".sp");
+  if (hit) return sOpen(r.path, r.hits[+hit.dataset.j].loc);
+  if (b && b.dataset.a === "open") sOpen(r.path, r.hits[0] ? r.hits[0].loc : "");
+  if (b && b.dataset.a === "reveal") api("/api/open", {path: r.path, reveal: true}).then(x => x.ok || toast(x.error || "Файл не найден", "bad"));
+};
+
+let SS0 = null;
+async function openSearchSettings(){
+  await loadSearchInfo(); const c = SI.cfg, st = SI.status; SS0 = JSON.stringify([c.types, c.max_mb, c.exclude_courses]);
+  $("#ssAuto").checked = c.auto;
+  $("#ssTypes").innerHTML = SI.groups.filter(g => g.key !== "other").map(g => `<label><span class="sw-t"><input type="checkbox" data-ty="${g.key}" ${c.types.includes(g.key) ? "checked" : ""}><span></span></span><span>${esc(g.title)} <small class="hint" style="margin:0">${g.exts.join(" ")}</small></span></label>`).join("");
+  $("#ssMb").value = c.max_mb; $("#ssPages").value = c.max_pages;
+  const names = [...new Set([...(st.courses || []).map(x => x.name), ...c.exclude_courses])].sort((a, b) => a.localeCompare(b, "ru"));
+  $("#ssCourses").innerHTML = names.length ? names.map(n => `<label><span class="sw-t"><input type="checkbox" data-ex="${esc(n)}" ${c.exclude_courses.includes(n) ? "checked" : ""}><span></span></span><span>${esc(n)}</span></label>`).join("") : '<span class="hint">Папок курсов пока нет.</span>';
+  const pr = st.problems || [];
+  $("#ssProblems").innerHTML = pr.length ? pr.map(x => `<div class="sqp"><b>${esc(SPROB[x.status] || x.status)}</b> · ${esc(x.path)}${x.note ? `<br><span class="hint" style="margin:0">${esc(x.note)}</span>` : ""}</div>`).join("")
+      + (pr.length >= 60 ? '<p class="hint">Показаны первые 60.</p>' : "") : '<span class="hint">Все файлы, которые можно прочитать, прочитаны.</span>';
+  $("#ssMsg").textContent = ""; $("#searchModal").classList.remove("hidden");
+}
+$("#ssClose").onclick = $("#ssCancel").onclick = () => $("#searchModal").classList.add("hidden");
+$("#ssSave").onclick = async () => {
+  const cfg = {auto: $("#ssAuto").checked, types: $$("[data-ty]").filter(i => i.checked).map(i => i.dataset.ty), max_mb: +$("#ssMb").value || 50, max_pages: +$("#ssPages").value || 500,
+               exclude_courses: $$("[data-ex]").filter(i => i.checked).map(i => i.dataset.ex)};
+  const r = await api("/api/search/settings", {cfg});
+  if (!r.ok) { $("#ssMsg").textContent = r.error || "Не сохранилось"; return; }
+  $("#searchModal").classList.add("hidden"); toast("Настройки поиска сохранены", "ok");
+  if (JSON.stringify([r.cfg.types, r.cfg.max_mb, r.cfg.exclude_courses]) !== SS0 && SI && SI.status.exists) startIndex(false);   // применить к уже собранному индексу
+  else loadSearchInfo();
 };
 
 /* ── курс «как на сайте» ── */
@@ -1205,7 +1419,7 @@ async function poll(){
       $("#loginView").classList.toggle("hidden", ok); $("#coursesView").classList.toggle("hidden", !ok); $("#user").classList.toggle("hidden", !ok);
       $("#dock").classList.toggle("hidden", !ok && st.job.state === "idle");
       $("#mainTabs").classList.toggle("hidden", !ok);
-      if (!ok) { $("#scheduleView").classList.add("hidden"); $("#electivesView").classList.add("hidden"); $("#newsView").classList.add("hidden"); }
+      if (!ok) { $("#scheduleView").classList.add("hidden"); $("#electivesView").classList.add("hidden"); $("#newsView").classList.add("hidden"); $("#searchView").classList.add("hidden"); }
       else showView(view);
       if (ok) loadCourses();
       if (!ok && lastLogin === null) { $("#lUrl").value = L.base || "https://do.sevsu.ru"; $("#lUser").value = L.username || ""; $("#lRemember").checked = L.remember; }
@@ -1216,7 +1430,7 @@ async function poll(){
     $("#uname").textContent = (L.user || L.username || "Гость") + (L.state === "offline" ? " · офлайн" : ""); $("#avatar").textContent = (L.user || L.username || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
     $("#rememberHint").textContent = L.can_encrypt ? "«Запомнить меня»: логин и пароль шифруются средствами Windows (DPAPI) и доступны только вашей учётной записи на этом ПК."
                                                    : "«Запомнить меня»: сохраню только cookie сессии; когда она истечёт, пароль спросят снова.";
-    loadSettings(st); renderNet(st); renderJob(st.job); renderNewsBadge(st.news_unread || 0);
+    loadSettings(st); renderNet(st); renderJob(st.job); renderNewsBadge(st.news_unread || 0); renderSearchRun(st.search || {});
     delay = st.job.state !== "idle" ? 600 : 1200;
   } catch (e) {
     $("#net .dot").className = "dot down"; $("#net .txt").textContent = "Программа закрыта — перезапустите её";
