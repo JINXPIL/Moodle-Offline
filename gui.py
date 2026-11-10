@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import dl_rules
 import moodle_offline as mo
+import news
 import electives as el
 import schedule as sched
 
@@ -173,6 +174,7 @@ class App:
         self.electives_checked = 0.0
         self.offline = {"reason": "", "since": "", "cached": ""}   # офлайн-режим: работаем с сохранённым
         self.relogin_tried = 0.0
+        self._news = None             # (путь, NewsLog)
 
     # ── настройки ──
     def save_settings(self):
@@ -684,7 +686,7 @@ class App:
                                  sync=bool(params.get("sync")), pdf=bool(st.get("pdf")), zip=bool(st.get("zip")),
                                  original_names=bool(st.get("original_names")), index_in_mode2=bool(st.get("index_in_mode2")),
                                  rules=st.get("rules"), dir_template=st.get("layout_dir") or "",
-                                 file_template=st.get("layout_file") or "")
+                                 file_template=st.get("layout_file") or "", news=st.get("news"))
             self.rep.log(f"{'Быстрая синхронизация' if opts.sync else 'Загрузка'}: курсов {len(selected)}, "
                          f"режим {opts.mode}, папка {opts.out_dir}")
             res = mo.run_job(client, selected, opts, self.rep, self.control)
@@ -693,9 +695,14 @@ class App:
                     "stopped": "Остановлено"}.get(res.aborted, "Готово")
             text = f"{head} за {took}. {mo.summary_text(res, opts)}"
             self.last_result = {"ok": res.aborted is None, "text": text, "aborted": res.aborted,
-                                "failures": len(res.failures), "new": len(res.new_files)}
+                                "failures": len(res.failures), "new": len(res.new_files), "news": len(res.events)}
             self.rep.log(text)
-            if res.aborted != "stopped":
+            try:
+                sent = mo.deliver_news(res.events, st, self.vault, self.rep) if res.events else {}
+            except Exception as e:   # уведомления не должны ломать итог загрузки
+                sent = {}
+                self.rep.log(f"Уведомления о новом не отправлены: {mo.describe_error(e)}", "warn")
+            if res.aborted != "stopped" and not (sent.get("toast") and res.aborted is None):   # окно «Что нового» уже показано
                 mo.notify(mo.APP_NAME, text, ok=res.aborted is None)
         except Exception as e:
             msg = mo.describe_error(e)
@@ -739,6 +746,86 @@ class App:
                 self.control = None
 
     # ── правила скачивания ──
+    # ── «Что нового» ──
+    def news_log(self) -> news.NewsLog:
+        path = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT) / mo.NEWS_FILE
+        with self.lock:
+            if not self._news or self._news[0] != path:
+                self._news = (path, news.NewsLog(path))
+            return self._news[1]
+
+    def news_unread(self) -> int:
+        try:
+            return self.news_log().unread()
+        except OSError:
+            return 0
+
+    def news_list(self, q):
+        return self.news_log().listing(kind=q.get("kind") or "", course=int(q.get("course") or 0) or 0,
+                                       unread_only=q.get("unread") == "1", limit=min(int(q.get("limit") or 300), 1000))
+
+    def news_read(self, b):
+        ids = b.get("ids")
+        log = self.news_log()
+        n = log.mark_read(None if ids in (None, "all") else [str(x) for x in ids])
+        if b.get("clear"):
+            log.clear_read()
+        return {"ok": True, "marked": n, "unread": log.unread()}
+
+    def news_settings_info(self):
+        cfg = news.normalize(self.settings.get("news"))
+        sec = self.vault.load_notify()
+        tok, hook = sec.get("telegram_token", ""), sec.get("webhook_url", "")
+        courses = {c.id: c.fullname for c in self.courses}
+        for c in self.news_log().listing(limit=1)["courses"]:
+            if c["id"] and c["id"] not in courses:
+                courses[c["id"]] = c["name"]
+        return {"cfg": cfg, "kinds": news.kinds_meta(),
+                "formats": [{"key": k, "title": v} for k, v in news.WEBHOOK_FORMATS.items()],
+                "secrets": {"telegram_token": {"set": bool(tok), "hint": news.mask_secret(tok)},
+                            "webhook_url": {"set": bool(hook), "hint": news.mask_url(hook)}},
+                "env": {"telegram": bool(os.environ.get("MOODLE_TELEGRAM_TOKEN")), "webhook": bool(os.environ.get("MOODLE_WEBHOOK_URL"))},
+                "courses": [{"id": i, "name": n} for i, n in sorted(courses.items(), key=lambda kv: kv[1].lower())]}
+
+    def news_settings_save(self, b):
+        cfg = b.get("cfg") if isinstance(b.get("cfg"), dict) else None
+        errs = news.validate(cfg) if cfg is not None else []
+        hook = (b.get("webhook_url") or "").strip()
+        if hook and news.check_webhook_url(hook):
+            errs.append(news.check_webhook_url(hook))
+        if errs:
+            return {"ok": False, "error": "; ".join(errs)}
+        with self.lock:
+            if cfg is not None:
+                self.settings["news"] = news.normalize(cfg)
+                self.save_settings()
+            sec = self.vault.load_notify()
+            tok = (b.get("telegram_token") or "").strip()
+            changed = False
+            if b.get("clear_telegram_token"):
+                changed = sec.pop("telegram_token", None) is not None or changed
+            elif tok:
+                sec["telegram_token"], changed = tok, True
+            if b.get("clear_webhook_url"):
+                changed = sec.pop("webhook_url", None) is not None or changed
+            elif hook:
+                sec["webhook_url"], changed = hook, True
+            if changed:
+                self.vault.save_notify(sec)
+        return {"ok": True}
+
+    def news_test(self, b):
+        cfg = news.normalize(self.settings.get("news"))
+        chans = [c for c in (b.get("channels") or []) if c in ("toast", "telegram", "webhook")]
+        if not chans:
+            return {"ok": False, "error": "не выбран ни один способ уведомления"}
+        ev = news.make_event("announcement", 0, "Проверка связи", "Тестовое уведомление",
+                             detail="Если вы это видите — уведомления настроены верно.", key=str(time.time()))
+        r = mo.send_news([ev], cfg, self.vault, self.rep, toast=True, channels=chans,
+                         use_proxy=bool(self.settings.get("use_system_proxy")))
+        res = {k: v for k, v in r.items() if v}
+        return {"ok": all(v["ok"] for v in res.values()), "results": res}
+
     def rules_info(self):
         st = self.settings
         return {
@@ -918,6 +1005,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.electives_state())
         if u.path == "/api/rules":
             return self._send(200, APP.rules_info())
+        if u.path == "/api/news":
+            return self._send(200, APP.news_list(q))
+        if u.path == "/api/news/settings":
+            return self._send(200, APP.news_settings_info())
         if u.path == "/api/cover":
             r = APP.cover(int(q.get("id", 0) or 0))
             if not r:
@@ -980,6 +1071,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True})
         if p == "/api/rules/save":
             return self._send(200, APP.rules_save(b))
+        if p == "/api/news/read":
+            return self._send(200, APP.news_read(b))
+        if p == "/api/news/settings":
+            return self._send(200, APP.news_settings_save(b))
+        if p == "/api/news/test":
+            return self._send(200, APP.news_test(b))
         if p == "/api/start":
             if b.get("course_ids") is not None:
                 APP.settings["course_ids"] = b["course_ids"]
@@ -1076,6 +1173,7 @@ class Handler(BaseHTTPRequestHandler):
                                                 "quiet_hours_on", "schedule_on", "schedule_time", "wait_for_server",
                                                 "use_system_proxy", "original_names", "index_in_mode2", "no_geo_check")},
             "platform": os.name, "browser_pdf": bool(mo.find_browser()),
+            "news_unread": APP.news_unread(),
         }
 
 

@@ -193,7 +193,7 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .log .ts{color:var(--faint);margin-right:8px}
 
 /* вкладки, экран курса, расписание, элективы */
-.mtabs{margin-left:6px}.mtabs button{padding:6px 14px}
+.mtabs{margin-left:6px}.mtabs button{padding:6px 14px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center}
 .cv-head{border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);margin-bottom:14px}
 .cv-cover{height:120px;background-size:cover;background-position:center;position:relative}
 .cv-cover img{width:100%;height:100%;object-fit:cover}
@@ -259,13 +259,35 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
 .tplex{font-size:12px;color:var(--muted);margin-top:6px;word-break:break-all}
 .rtwo{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:700px){.rtwo{grid-template-columns:1fr}}
+.nbadge{display:inline-block;flex:none;min-width:18px;height:18px;line-height:18px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:700;text-align:center;padding:0 5px;margin-left:6px}
+.nw{display:flex;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);margin-bottom:8px;box-shadow:var(--shadow)}
+.nw.unread{border-left:4px solid var(--accent)}
+.nw.read{opacity:.72}
+.nw .nb{flex:1;min-width:0}
+.nw .nt{font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.nw .nm{font-size:12px;color:var(--muted);margin-top:2px}
+.nw .nd{font-size:13px;margin-top:4px;line-height:1.4;overflow-wrap:anywhere}
+.nw .nf{font-size:12px;color:var(--muted);margin-top:4px}
+.nw .na{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.nw .na .btn{height:30px;font-size:12px;padding:0 10px}
+.nk{font-size:11px;font-weight:700;letter-spacing:.02em;padding:2px 8px;border-radius:999px;color:#fff;margin-right:6px;white-space:nowrap}
+.nsk{display:grid;grid-template-columns:1fr 70px 70px;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.nsk.h{border-top:0;font-size:12px;color:var(--muted);padding-top:0}
+.nsk.h span+span,.nsk .sw-t{justify-self:center}
+.nsk small{display:block;color:var(--muted);font-size:12px}
+.nch{border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:8px}
+.nch:first-of-type{border-top:0}
+.nch .hd{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.nch .hd small{display:block;color:var(--muted);font-size:12px}
+.nch .fl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:700px){.nch .fl{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div id="app">
   <header class="top">
     <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>Moodle Offline</div>
-    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on">Курсы</button><button data-view="schedule">Расписание</button><button data-view="electives">Элективы</button></div>
+    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on">Курсы</button><button data-view="schedule">Расписание</button><button data-view="electives">Элективы</button><button data-view="news">Что нового<span class="nbadge hidden" id="newsBadge"></span></button></div>
     <div class="pill" id="net" title="Проверка доступности Moodle раз в 30 секунд"><span class="dot"></span><span class="txt">Проверяю сервер…</span></div>
     <div class="pill hidden" id="ip"></div>
     <div class="spacer"></div>
@@ -432,6 +454,26 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
         </aside>
       </div>
     </section>
+    <section class="view hidden" id="newsView">
+      <div class="layout">
+        <div class="content">
+          <div class="toolbar"><h2>Что нового</h2><span class="hint" id="nwInfo" style="margin:0"></span><div class="spacer"></div>
+            <select class="txt" id="nwKind" style="width:auto"></select>
+            <select class="txt" id="nwCourse" style="width:auto;max-width:240px"></select>
+            <button class="chip" id="nwUnread">Только непрочитанное</button></div>
+          <div id="nwList"></div>
+        </div>
+        <aside class="side">
+          <div class="panel">
+            <h3>Лента изменений</h3>
+            <button class="btn primary big" id="nwReadAll">Отметить всё прочитанным</button>
+            <button class="btn big" id="nwSettings" style="margin-top:8px">Уведомления и настройки</button>
+            <p class="hint">После каждой загрузки или синхронизации я сравниваю курсы с тем, что было раньше: новые материалы и файлы, объявления преподавателей, оценки. Лента хранится у вас в папке с материалами и читается без интернета.</p>
+            <p class="hint">Первая загрузка курса ничего не показывает — она просто запоминает, что уже есть.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
   </main>
   <section class="dock collapsed" id="dock">
     <div class="dock-head">
@@ -486,6 +528,34 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
     </div>
   </div>
   <div class="rules-foot"><span class="hint" id="rMsg"></span><button class="btn" id="rCancel">Отмена</button><button class="btn primary" id="rSave">Сохранить</button></div>
+</div></div>
+<div class="modal hidden" id="newsModal"><div class="modal-box rules-box">
+  <header><b>Что нового — настройки</b><button class="btn" id="nsClose">Закрыть</button></header>
+  <div class="rules-body">
+    <div class="rsec"><label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Следить за новым<small>после загрузки сравниваю курсы с прошлым разом и пишу в ленту</small></span><span class="sw-t"><input type="checkbox" id="nsOn"><span></span></span></label></div>
+    <div class="rsec"><h4>О чём сообщать</h4>
+      <div class="nsk h"><span></span><span>В ленту</span><span>Уведомлять</span></div>
+      <div id="nsKinds"></div>
+      <p class="hint">«В ленту» — запоминать событие во вкладке. «Уведомлять» — ещё и присылать сообщение. Выключенное на сайте не запрашивается: например, без «Оценка» журнал оценок не открывается.</p></div>
+    <div class="rsec"><h4>Куда присылать</h4>
+      <div class="nch"><div class="hd"><div>Окно на компьютере<small>всплывающее уведомление Windows</small></div><label class="sw-t"><input type="checkbox" id="nsToast"><span></span></label></div></div>
+      <div class="nch"><div class="hd"><div>Telegram<small>бот пришлёт сообщение вам в чат</small></div><label class="sw-t"><input type="checkbox" id="nsTg"><span></span></label></div>
+        <div class="fl"><input class="txt" id="nsTgTok" type="password" autocomplete="off" spellcheck="false"><input class="txt" id="nsTgChat" placeholder="chat id, например 123456789" spellcheck="false"></div>
+        <p class="hint" style="margin:0">Создайте бота у @BotFather, напишите ему любое сообщение и укажите его токен и свой chat id (его показывает, например, бот @userinfobot). Токен хранится зашифрованно. <a href="#" class="link" id="nsTgClear" style="display:none">Забыть токен</a></p></div>
+      <div class="nch"><div class="hd"><div>Webhook<small>Discord, Slack, ntfy или свой сервер</small></div><label class="sw-t"><input type="checkbox" id="nsHk"><span></span></label></div>
+        <div class="fl"><input class="txt" id="nsHkUrl" autocomplete="off" spellcheck="false"><select class="txt" id="nsHkFmt"></select></div>
+        <p class="hint" style="margin:0">Адрес webhook — это почти пароль: он даёт право писать в ваш канал, поэтому хранится зашифрованно. <a href="#" class="link" id="nsHkClear" style="display:none">Забыть адрес</a></p></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" id="nsTest">Проверить отправку</button><span class="hint" id="nsTestMsg" style="margin:0"></span></div></div>
+    <div class="rsec"><h4>Не уведомлять по курсам</h4><div class="modgrid" id="nsCourses"></div><p class="hint">В ленте события этих курсов всё равно будут.</p></div>
+    <div class="rsec"><h4>Объявления преподавателей</h4>
+      <textarea class="txt" id="nsWords" placeholder="по одному слову в строке" spellcheck="false"></textarea>
+      <p class="hint">Форумы, в названии которых есть одно из слов, считаются «Объявлениями»: новые темы сохраняю в папку курса «Объявления» вместе с вложениями.</p>
+      <div class="path"><input class="txt" id="nsBack" type="number" min="0" max="20" style="max-width:90px"><span class="hint" style="margin:auto 0">сколько последних объявлений сохранить при первом запуске (0 — не сохранять)</span></div></div>
+    <div class="rsec"><h4>Приватность и размер сообщения</h4>
+      <label class="row" style="border:0;padding:0 0 10px;cursor:pointer"><span class="lbl">Показывать значения оценок в Telegram и webhook<small>по умолчанию выключено: туда уйдёт только «пришла новая оценка по …», а число вы увидите в ленте</small></span><span class="sw-t"><input type="checkbox" id="nsShare"><span></span></span></label>
+      <div class="path"><input class="txt" id="nsLines" type="number" min="3" max="50" style="max-width:90px"><span class="hint" style="margin:auto 0">строк в одном уведомлении (остальное свернётся в «…и ещё N»)</span></div></div>
+  </div>
+  <div class="rules-foot"><span class="hint" id="nsMsg"></span><button class="btn" id="nsCancel">Отмена</button><button class="btn primary" id="nsSave">Сохранить</button></div>
 </div></div>
 <div class="toasts" id="toasts"></div>
 
@@ -877,11 +947,103 @@ let view = "courses";
 function showView(v){
   view = v; $$("#mainTabs button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
   $("#coursesView").classList.toggle("hidden", v !== "courses"); $("#scheduleView").classList.toggle("hidden", v !== "schedule");
-  $("#electivesView").classList.toggle("hidden", v !== "electives");
-  if (v === "schedule") loadSchedule(); if (v === "electives") loadElectives();
+  $("#electivesView").classList.toggle("hidden", v !== "electives"); $("#newsView").classList.toggle("hidden", v !== "news");
+  if (v === "schedule") loadSchedule(); if (v === "electives") loadElectives(); if (v === "news") loadNews();
 }
 $$("#mainTabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
 const openUrl = url => api("/api/open_url", {url});
+
+
+/* ── что нового ── */
+const NW_KIND = {item_new:["Новый материал","#2f6fde"], file_new:["Новый файл","#0f9d8a"], announcement:["Объявление","#7c4dff"],
+                 grade:["Оценка","#e8710a"], item_gone:["Убрано с сайта","#8a93a3"], item_renamed:["Переименовано","#8a93a3"]};
+let NW = null, nwUnreadOnly = false, lastNews = null;
+function renderNewsBadge(n){
+  const b = $("#newsBadge"); b.textContent = n > 99 ? "99+" : n; b.classList.toggle("hidden", !n);
+  if (lastNews !== null && n > lastNews && view !== "news") toast(`Что нового: ещё ${n - lastNews} — вкладка «Что нового»`, "ok");
+  if (lastNews !== null && n !== lastNews && view === "news") loadNews();
+  lastNews = n;
+}
+const PREVIEWABLE = /\.(html?|pdf|txt|png|jpe?g|gif|svg|webp)$/i;
+function nwWhen(ts){ return new Date(ts * 1000).toLocaleString("ru-RU", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}); }
+function nwCard(e){
+  const [lbl, col] = NW_KIND[e.kind] || [e.kind, "#8a93a3"];
+  const files = (e.files || []).length ? `<div class="nf">Файлы: ${e.files.map(esc).join(", ")}</div>` : "";
+  return `<div class="nw ${e.read ? "read" : "unread"}" data-id="${esc(e.id)}"><div class="nb">
+    <div class="nt"><span class="nk" style="background:${col}">${esc(lbl)}</span>${esc(e.title)}</div>
+    <div class="nm">${esc(e.course)} · ${nwWhen(e.ts)}</div>
+    ${e.detail ? `<div class="nd">${esc(e.detail)}</div>` : ""}${files}
+    <div class="na">${e.path ? `<button class="btn" data-a="open">Открыть копию</button>` : ""}${e.url ? `<button class="btn" data-a="site">На сайте</button>` : ""}${e.read ? "" : `<button class="btn ghost" data-a="read">Прочитано</button>`}</div>
+  </div></div>`;
+}
+async function loadNews(){
+  const kind = $("#nwKind").value || "", course = $("#nwCourse").value || "";
+  NW = await api(`/api/news?kind=${encodeURIComponent(kind)}&course=${encodeURIComponent(course)}${nwUnreadOnly ? "&unread=1" : ""}`);
+  if (!$("#nwKind").options.length) $("#nwKind").innerHTML = '<option value="">Все события</option>' + Object.entries(NW_KIND).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join("");
+  const cur = $("#nwCourse").value;
+  $("#nwCourse").innerHTML = '<option value="">Все курсы</option>' + NW.courses.map(c => `<option value="${c.id}">${esc(c.name)} (${c.count})</option>`).join("");
+  $("#nwCourse").value = cur;
+  $("#nwUnread").classList.toggle("on", nwUnreadOnly);
+  $("#nwInfo").textContent = NW.total ? `непрочитано ${NW.unread} из ${NW.total}` : "";
+  $("#nwReadAll").disabled = !NW.unread;
+  $("#nwList").innerHTML = NW.events.length ? NW.events.map(nwCard).join("")
+    : `<div class="empty">${NW.total ? "По этому фильтру ничего нет." : "Пока пусто. Лента заполнится после следующей загрузки или быстрой синхронизации — когда преподаватели что-нибудь добавят."}</div>`;
+  renderNewsBadge(NW.unread);
+}
+$("#nwKind").onchange = $("#nwCourse").onchange = loadNews;
+$("#nwUnread").onclick = () => { nwUnreadOnly = !nwUnreadOnly; loadNews(); };
+$("#nwReadAll").onclick = async () => { await api("/api/news/read", {ids: "all"}); loadNews(); };
+$("#nwList").onclick = async ev => {
+  const b = ev.target.closest("button[data-a]"); if (!b) return;
+  const card = b.closest(".nw"), e = NW.events.find(x => x.id === card.dataset.id); if (!e) return;
+  const a = b.dataset.a;
+  if (a === "site") openUrl(e.url);
+  else if (a === "open") { PREVIEWABLE.test(e.path) ? preview(e.path) : api("/api/open", {path: e.path}).then(r => r.ok || toast(r.error || "Файл не найден", "bad")); }
+  if (a !== "read" && e.read) return;
+  await api("/api/news/read", {ids: [e.id]}); loadNews();
+};
+
+let NS = null;
+const nsSw = (g, k, v) => `<label class="sw-t"><input type="checkbox" data-g="${g}" data-k="${k}" ${v ? "checked" : ""}><span></span></label>`;
+async function openNewsSettings(){
+  NS = await api("/api/news/settings"); const c = NS.cfg;
+  $("#nsOn").checked = c.enabled;
+  $("#nsKinds").innerHTML = NS.kinds.map(k => `<div class="nsk"><div>${esc(k.title)}<small>${esc(k.hint)}</small></div>${nsSw("track", k.key, c.track[k.key])}${nsSw("push", k.key, c.push[k.key])}</div>`).join("");
+  $("#nsToast").checked = c.toast; $("#nsTg").checked = c.telegram; $("#nsHk").checked = c.webhook;
+  $("#nsTgChat").value = c.telegram_chat; $("#nsTgTok").value = ""; $("#nsHkUrl").value = "";
+  const tk = NS.secrets.telegram_token, hk = NS.secrets.webhook_url;
+  $("#nsTgTok").placeholder = tk.set ? `${tk.hint} — сохранён (оставьте пустым, чтобы не менять)` : (NS.env.telegram ? "токен задан переменной окружения" : "токен бота: 123456:ABC…");
+  $("#nsHkUrl").placeholder = hk.set ? `${hk.hint} — сохранён (оставьте пустым, чтобы не менять)` : (NS.env.webhook ? "адрес задан переменной окружения" : "https://…");
+  $("#nsTgClear").style.display = tk.set ? "" : "none"; $("#nsHkClear").style.display = hk.set ? "" : "none";
+  $("#nsHkFmt").innerHTML = NS.formats.map(f => `<option value="${f.key}">${esc(f.title)}</option>`).join(""); $("#nsHkFmt").value = c.webhook_format;
+  $("#nsCourses").innerHTML = NS.courses.length ? NS.courses.map(x => `<label><span class="sw-t"><input type="checkbox" data-mute="${x.id}" ${c.mute.includes(x.id) ? "checked" : ""}><span></span></span>${esc(x.name)}</label>`).join("") : '<span class="hint">Список курсов появится после входа в Moodle.</span>';
+  $("#nsWords").value = c.forum_words.join("\n"); $("#nsBack").value = c.backfill; $("#nsShare").checked = c.share_grades; $("#nsLines").value = c.max_lines;
+  $("#nsMsg").textContent = ""; $("#nsTestMsg").textContent = ""; $("#newsModal").classList.remove("hidden");
+}
+function nsCollect(){
+  const g = k => Object.fromEntries($$(`[data-g="${k}"]`).map(i => [i.dataset.k, i.checked]));
+  return {cfg: {enabled: $("#nsOn").checked, track: g("track"), push: g("push"), toast: $("#nsToast").checked, telegram: $("#nsTg").checked,
+      telegram_chat: $("#nsTgChat").value.trim(), webhook: $("#nsHk").checked, webhook_format: $("#nsHkFmt").value,
+      mute: $$("[data-mute]").filter(i => i.checked).map(i => +i.dataset.mute), share_grades: $("#nsShare").checked,
+      forum_words: $("#nsWords").value.split("\n").map(x => x.trim()).filter(Boolean), backfill: +$("#nsBack").value || 0, max_lines: +$("#nsLines").value || 12},
+    telegram_token: $("#nsTgTok").value.trim(), webhook_url: $("#nsHkUrl").value.trim()};
+}
+async function nsSave(){ const r = await api("/api/news/settings", nsCollect()); if (!r.ok) $("#nsMsg").textContent = r.error || "Не сохранилось"; return r.ok; }
+$("#nwSettings").onclick = openNewsSettings;
+$("#nsClose").onclick = $("#nsCancel").onclick = () => $("#newsModal").classList.add("hidden");
+$("#nsSave").onclick = async () => { if (await nsSave()) { $("#newsModal").classList.add("hidden"); toast("Настройки «Что нового» сохранены", "ok"); } };
+$("#nsTgClear").onclick = async e => { e.preventDefault(); await api("/api/news/settings", {clear_telegram_token: true}); openNewsSettings(); };
+$("#nsHkClear").onclick = async e => { e.preventDefault(); await api("/api/news/settings", {clear_webhook_url: true}); openNewsSettings(); };
+$("#nsTest").onclick = async () => {
+  const chans = [["toast", "#nsToast"], ["telegram", "#nsTg"], ["webhook", "#nsHk"]].filter(([, s]) => $(s).checked).map(([k]) => k);
+  if (!chans.length) { $("#nsTestMsg").textContent = "Включите хотя бы один способ выше."; return; }
+  $("#nsTest").disabled = true; $("#nsTestMsg").textContent = "Отправляю…";
+  try {
+    if (!(await nsSave())) return;
+    const r = await api("/api/news/test", {channels: chans}), N = {toast: "окно", telegram: "Telegram", webhook: "webhook"};
+    $("#nsTestMsg").textContent = r.error || Object.entries(r.results).map(([k, v]) => `${N[k]}: ${v.ok ? "✓" : "✗"} ${v.msg}`).join(" · ");
+  } finally { $("#nsTest").disabled = false; }
+};
 
 /* ── курс «как на сайте» ── */
 const ICON = {resource:["#d93a3a","M7 3h7l5 5v13H7z M14 3v5h5"], folder:["#e8a10a","M3 7h6l2 2h10v10H3z"], url:["#2f6fde","M10 14l4-4 M8 16l-2 2a3 3 0 0 1-4-4l3-3 M16 8l2-2a3 3 0 0 1 4 4l-3 3"],
@@ -1043,7 +1205,7 @@ async function poll(){
       $("#loginView").classList.toggle("hidden", ok); $("#coursesView").classList.toggle("hidden", !ok); $("#user").classList.toggle("hidden", !ok);
       $("#dock").classList.toggle("hidden", !ok && st.job.state === "idle");
       $("#mainTabs").classList.toggle("hidden", !ok);
-      if (!ok) { $("#scheduleView").classList.add("hidden"); $("#electivesView").classList.add("hidden"); }
+      if (!ok) { $("#scheduleView").classList.add("hidden"); $("#electivesView").classList.add("hidden"); $("#newsView").classList.add("hidden"); }
       else showView(view);
       if (ok) loadCourses();
       if (!ok && lastLogin === null) { $("#lUrl").value = L.base || "https://do.sevsu.ru"; $("#lUser").value = L.username || ""; $("#lRemember").checked = L.remember; }
@@ -1054,7 +1216,7 @@ async function poll(){
     $("#uname").textContent = (L.user || L.username || "Гость") + (L.state === "offline" ? " · офлайн" : ""); $("#avatar").textContent = (L.user || L.username || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
     $("#rememberHint").textContent = L.can_encrypt ? "«Запомнить меня»: логин и пароль шифруются средствами Windows (DPAPI) и доступны только вашей учётной записи на этом ПК."
                                                    : "«Запомнить меня»: сохраню только cookie сессии; когда она истечёт, пароль спросят снова.";
-    loadSettings(st); renderNet(st); renderJob(st.job);
+    loadSettings(st); renderNet(st); renderJob(st.job); renderNewsBadge(st.news_unread || 0);
     delay = st.job.state !== "idle" ? 600 : 1200;
   } catch (e) {
     $("#net .dot").className = "dot down"; $("#net .txt").textContent = "Программа закрыта — перезапустите её";
