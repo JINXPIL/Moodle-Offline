@@ -38,6 +38,7 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qs, parse_qsl, quote, unquote, urlencode, urljoin, urlparse, urlunparse
 
+import deadlines  # календарь и дедлайны: сроки из Moodle, повестка, общий .ics
 import dl_rules   # правила скачивания (что брать, что пропускать, шаблоны имён)
 import news       # что нового: события, лента, уведомления
 import search     # поиск по скачанным материалам (офлайн-индекс)
@@ -82,7 +83,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -604,6 +605,8 @@ class JobOptions:
     dir_template: str = ""         # режим 3: шаблон папок, например {section_no}. {section}/{kind}
     file_template: str = ""        # режим 3: шаблон имени файла, например {section_no}_{item}
     news: dict | None = None       # настройки «Что нового» (см. news.DEFAULTS)
+    calendar: dict | None = None   # настройки календаря (см. deadlines.DEFAULTS)
+    calendar_on: bool = False      # после курсов обновить календарь сроков (вызывающий включает сам)
 
 
 @dataclass
@@ -1624,6 +1627,45 @@ class MoodleClient:
                     found[int(cid)] = name
         return [Course(id=k, fullname=v or f"Курс {k}", url=f"{self.base}/course/view.php?id={k}")
                 for k, v in sorted(found.items(), key=lambda kv: kv[1].lower())]
+
+    # ── календарь Moodle: сроки сдачи и события ─────────────────────────────
+    def get_action_events(self, start: float, end: float) -> tuple[list, bool]:
+        """События блока «График» (сроки сдачи заданий, закрытие тестов…): core_calendar_get_action_events_by_timesort.
+        Moodle отдаёт по 50 штук, дальше просим «после такого-то id». Сданные работы Moodle сам убирает из этого списка.
+        → (события как есть, получили ли всё)."""
+        events, after = [], 0
+        for _ in range(20):
+            data = self.ajax("core_calendar_get_action_events_by_timesort",
+                             {"timesortfrom": int(start), "timesortto": int(end), "aftereventid": after,
+                              "limitnum": 50, "limittononsuspendedevents": True})
+            part = (data or {}).get("events") or []
+            events += part
+            after = (data or {}).get("lastid") or 0
+            if len(part) < 50 or not after:
+                return events, True
+        return events, False       # 20 полных страниц подряд — читаем не всё, лучше не делать выводов о «пропавших»
+
+    def get_month_events(self, start: float, end: float) -> list:
+        """Обычные события календаря (ваши записи, события курсов и университета): «месячный вид» — по месяцу за запрос."""
+        out, seen = [], set()
+        a, b = datetime.fromtimestamp(start), datetime.fromtimestamp(end)
+        y, m = a.year, a.month
+        for _ in range(15):
+            if (y, m) > (b.year, b.month):
+                break
+            data = self.ajax("core_calendar_get_calendar_monthly_view",
+                             {"year": y, "month": m, "courseid": 1, "categoryid": 0, "includenavigation": False,
+                              "mini": False, "day": 1})
+            for week in (data or {}).get("weeks") or []:
+                for day in week.get("days") or []:
+                    for ev in day.get("events") or []:
+                        ts = ev.get("timestart") or 0
+                        if ev.get("id") in seen or not (start <= ts <= end):
+                            continue
+                        seen.add(ev.get("id"))
+                        out.append(ev)
+            y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+        return out
 
     # ── разбор страницы курса ───────────────────────────────────────────────
     def parse_course(self, course: Course):
@@ -3187,6 +3229,136 @@ def deliver_news(events: list, settings: dict, vault: "Vault", rep: Reporter, *,
 
 
 # ════════════════════════════════════════════════════════════════════════════
+#  КАЛЕНДАРЬ И ДЕДЛАЙНЫ
+# ════════════════════════════════════════════════════════════════════════════
+def calendar_sync(client: "MoodleClient", out: Path, settings: dict, rep: Reporter, *, now: float | None = None) -> dict:
+    """Читает календарь Moodle, обновляет сроки, Календарь/moodle_calendar.ics и Календарь/index.html.
+    → {"ok", "text", "events": [события для «Что нового»: новый срок, перенос, срок горит], "files", "total", ...}.
+    Сети нужна только для чтения; сломалась сеть или сессия — исключение уходит наверх, сроки остаются прежними."""
+    cfg = deadlines.normalize(settings.get("calendar"))
+    now = now or time.time()
+    lo, hi = now - cfg["days_back"] * 86400, now + cfg["days_ahead"] * 86400
+    store = deadlines.Store(Path(out) / deadlines.DEADLINES_FILE)
+    first = store.first_sync()
+    fetched, kinds, notes, source, complete = [], set(), [], [], True
+    timeline_ok = False
+    rep.log("Календарь Moodle: читаю сроки…")
+    try:
+        raw, full = client.get_action_events(lo, hi)
+        fetched += deadlines.parse_events(raw)
+        kinds |= {"deadline", "open", "completion"}
+        timeline_ok, complete = True, full
+        source.append("timeline")
+        if not full:
+            notes.append("сроков очень много — прочитана только часть")
+    except (NetworkDown, Stopped, SessionExpired, KeyboardInterrupt):
+        raise
+    except Exception as e:
+        notes.append(f"блок «График» недоступен ({describe_error(e)})")
+    if not timeline_ok or "events" in cfg["kinds"]:
+        try:
+            more = deadlines.parse_events(client.get_month_events(lo, hi))
+            if timeline_ok:    # сроки сдачи у «Графика» точнее (сданное он убирает) — из месяца берём только обычные события
+                more = [e for e in more if e["kind"] == "events"]
+                kinds.add("events")
+            else:
+                kinds |= set(deadlines.GROUPS)
+            have = {e["id"] for e in fetched}
+            fetched += [e for e in more if e["id"] not in have]
+            source.append("monthly")
+        except (NetworkDown, Stopped, SessionExpired, KeyboardInterrupt):
+            raise
+        except Exception as e:
+            notes.append(f"месячный вид календаря недоступен ({describe_error(e)})")
+            complete = False
+    if not source:
+        msg = "Календарь Moodle не прочитан: " + "; ".join(notes) + ". Сроки остались прежними."
+        store.touch_sync(now, False, msg)
+        rep.log(msg, "warn")
+        return {"ok": False, "text": msg, "events": [], "files": {}, "total": 0}
+    if source == ["monthly"]:
+        notes.append("читаю «месячный вид»: сданные работы из него не пропадают сами — отмечайте их «сделано»")
+    changes = store.merge(fetched, now, lo, hi, complete=complete, source="+".join(source), note="; ".join(notes), kinds=kinds)
+    for n in notes:
+        rep.log(f"  ! {n}", "warn")
+    if changes["suspicious"]:
+        rep.log("  ! Moodle вернул пустой календарь при множестве известных сроков — не стал считать их убранными.", "warn")
+    events = deadlines.change_events(changes, now, cfg, announce_new=not first)
+    events += deadlines.soon_events(store, cfg, now)
+    files = {}
+    try:
+        files = deadlines.write_outputs(out, store, cfg, now)
+    except OSError as e:
+        rep.log(f"Календарь: файлы не записаны ({e}) — сроки сохранены, пересоберу в следующий раз.", "error")
+    v = deadlines.view(store, [], cfg, now)
+    shown = lambda e: e.get("kind") in cfg["kinds"]          # в итоге считаем только то, что вы смотрите
+    n_new = sum(1 for e in changes["new"] if shown(e))
+    n_moved = sum(1 for _, e in changes["moved"] if shown(e))
+    n_gone = sum(1 for e in changes["gone"] if shown(e))
+    text = (f"Календарь Moodle: сроков впереди — {v['counts']['total']}, просрочено — {v['counts']['overdue']}"
+            + (f"; новых {n_new}" if n_new and not first else "")
+            + (f", перенесено {n_moved}" if n_moved else "")
+            + (f", убрано с сайта {n_gone} (вероятно, сданы)" if n_gone else "")
+            + (" · первый запуск: сроки запомнил" if first else ""))
+    rep.log(text)
+    return {"ok": True, "text": text, "events": events, "files": files, "total": v["counts"]["total"],
+            "new": n_new, "moved": n_moved, "gone": n_gone}
+
+
+def calendar_watch(out: Path, settings: dict, vault: "Vault", rep: Reporter, *, now: float | None = None,
+                   toast_on=True) -> int:
+    """Без сети: смотрит сохранённые сроки и напоминает о тех, до которых осталось меньше порога (сутки, 3 часа…).
+    Вызывается, пока открыто окно программы, и после каждой синхронизации. → сколько напоминаний отправлено."""
+    cfg = deadlines.normalize(settings.get("calendar"))
+    ncfg = news.normalize(settings.get("news"))
+    if not (cfg["notify"] and ncfg["enabled"] and ncfg["track"].get("deadline_soon")):
+        return 0
+    store = deadlines.Store(Path(out) / deadlines.DEADLINES_FILE)
+    if not store.events:
+        return 0
+    evs = deadlines.soon_events(store, cfg, now or time.time())
+    if not evs:
+        return 0
+    try:
+        news.NewsLog(Path(out) / NEWS_FILE).add(evs)
+    except OSError as e:
+        rep.log(f"Не удалось записать ленту «Что нового»: {e}", "error")
+    deliver_news(evs, settings, vault, rep, toast_on=toast_on)
+    return len(evs)
+
+
+def cli_deadlines(args, settings: dict, rep: Reporter) -> int:
+    """--deadlines [ДНЕЙ]: сроки и пары по сохранённым данным; без интернета и без входа."""
+    out = Path(args.out or settings.get("out_dir") or DEFAULT_OUT)
+    cfg = deadlines.normalize(settings.get("calendar"))
+    store = deadlines.Store(out / deadlines.DEADLINES_FILE)
+    lessons = deadlines.load_lessons(out) if cfg["lessons"] else []
+    v = deadlines.view(store, lessons, cfg, time.time(), days=max(1, int(args.deadlines)), with_done=False)
+    print(deadlines.format_view(v))
+    ics = out / deadlines.CALENDAR_DIR / deadlines.ICS_FILE
+    if ics.exists():
+        print(f"\nКалендарь для телефона: {ics}")
+    return 0
+
+
+def cli_calendar_sync(client: "MoodleClient", vault: "Vault", settings: dict, args, rep: Reporter) -> int:
+    """--calendar-sync: только календарь Moodle (после входа), без скачивания материалов."""
+    out = Path(args.out or settings.get("out_dir") or DEFAULT_OUT)
+    ncfg = news.normalize(settings.get("news"))
+    r = calendar_sync(client, out, settings, rep)
+    evs = [e for e in r["events"] if ncfg["enabled"] and ncfg["track"].get(e["kind"])]
+    if evs:
+        try:
+            news.NewsLog(out / NEWS_FILE).add(evs)
+        except OSError as e:
+            rep.log(f"Не удалось записать ленту «Что нового»: {e}", "error")
+        deliver_news(evs, settings, vault, rep, toast_on=not args.no_notify)
+    if r.get("files"):
+        print(f"Календарь для телефона: {r['files']['ics']}\nСтраница для офлайна: {r['files']['page']}")
+    return 0 if r["ok"] else 2
+
+
+# ════════════════════════════════════════════════════════════════════════════
 #  ОГЛАВЛЕНИЯ И ОТЧЁТЫ
 # ════════════════════════════════════════════════════════════════════════════
 INDEX_CSS = """
@@ -3452,6 +3624,16 @@ def run_job(client: MoodleClient, courses: list[Course], opts: JobOptions, rep: 
                     rep.log(f"Не удалось создать архив: {e}. Скачанные файлы в порядке — архив можно пересобрать "
                             f"следующим запуском.", "error")
             res.courses_done += 1
+        if proc and opts.calendar_on and not opts.dry_run:
+            control.checkpoint()
+            try:
+                cal = calendar_sync(client, out, {"calendar": opts.calendar}, rep)
+                if ncfg["enabled"]:
+                    proc.events += [e for e in cal["events"] if ncfg["track"].get(e["kind"])]
+            except (NetworkDown, Stopped, SessionExpired, KeyboardInterrupt):
+                raise
+            except Exception as e:
+                rep.log(f"Календарь: сроки не обновлены ({describe_error(e)}). Скачанное в порядке.", "warn")
     except NetworkDown as e:
         res.aborted, res.message = "network", str(e)
         rep.log(f"Остановлено: {e}. Прогресс сохранён — запустите программу ещё раз, когда связь появится.", "error")
@@ -3716,6 +3898,10 @@ def cli_main(argv=None) -> int:
     p.add_argument("--news-list", action="store_true", help="показать непрочитанное из «Что нового» и выйти")
     p.add_argument("--news-read", action="store_true", help="пометить всё в «Что нового» прочитанным (можно вместе с --news-list)")
     p.add_argument("--notify-test", action="store_true", help="отправить тестовое уведомление по включённым каналам и выйти")
+    p.add_argument("--deadlines", nargs="?", const=14, type=int, metavar="ДНЕЙ",
+                   help="показать сроки сдачи и пары на N дней вперёд (по умолчанию 14) и выйти; без интернета и входа")
+    p.add_argument("--calendar-sync", action="store_true", help="обновить только календарь Moodle (сроки и .ics), без скачивания материалов")
+    p.add_argument("--no-calendar", action="store_true", help="не обновлять календарь сроков в этом запуске")
     p.add_argument("--search", metavar="ЗАПРОС", help="найти в скачанных материалах и выйти (слова — все сразу, \"точная фраза\", -исключить)")
     p.add_argument("--search-course", metavar="КУРС", help="искать только в этом курсе (часть названия папки курса)")
     p.add_argument("--search-limit", type=int, default=10, help="сколько файлов показать (по умолчанию 10)")
@@ -3790,6 +3976,8 @@ def cli_main(argv=None) -> int:
         if args.news_read:
             print(f"\nОтмечено прочитанным: {log.mark_read()}")
         return 0
+    if args.deadlines is not None:     # сроки по сохранённым данным — без интернета и без входа
+        return cli_deadlines(args, settings, rep)
     if args.search or args.search_index or args.search_reindex:   # поиск работает без интернета и без входа
         return cli_search(args, settings, rep)
     window = parse_hours(args.hours or settings.get("quiet_hours") or os.environ.get("MOODLE_HOURS"))
@@ -3859,6 +4047,8 @@ def cli_main(argv=None) -> int:
                 if not args.no_notify:
                     notify(APP_NAME, "Moodle снова доступен! Начинаю загрузку.")
         cli_login(client, vault, settings, args, interactive, rep)
+        if args.calendar_sync:
+            return cli_calendar_sync(client, vault, settings, args, rep)
         rep.log("Получаю список курсов…")
         courses = client.get_courses()
     except (LoginError, MoodleError, RetriesExhausted, NetworkDown) as e:
@@ -3949,7 +4139,9 @@ def cli_main(argv=None) -> int:
                       zip=bool(zp), original_names=args.original_names, index_in_mode2=args.index,
                       rules=settings.get("rules"), dir_template=settings.get("layout_dir") or "",
                       file_template=settings.get("layout_file") or "",
-                      news={**news.normalize(settings.get("news")), "enabled": False} if args.no_news else settings.get("news"))
+                      news={**news.normalize(settings.get("news")), "enabled": False} if args.no_news else settings.get("news"),
+                      calendar=settings.get("calendar"),
+                      calendar_on=(not args.no_calendar and deadlines.normalize(settings.get("calendar"))["auto"]))
     rep.log(f"\nКурсов: {len(selected)} · режим {mode} · папка: {out}"
             + (f" · тихие часы {fmt_window(window)}" if window else ""))
     t0 = time.monotonic()
