@@ -26,6 +26,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+import dl_rules
 import moodle_offline as mo
 import electives as el
 import schedule as sched
@@ -681,7 +682,9 @@ class App:
             st = self.settings
             opts = mo.JobOptions(out_dir=Path(st.get("out_dir") or mo.DEFAULT_OUT), mode=int(st.get("mode", 1)),
                                  sync=bool(params.get("sync")), pdf=bool(st.get("pdf")), zip=bool(st.get("zip")),
-                                 original_names=bool(st.get("original_names")), index_in_mode2=bool(st.get("index_in_mode2")))
+                                 original_names=bool(st.get("original_names")), index_in_mode2=bool(st.get("index_in_mode2")),
+                                 rules=st.get("rules"), dir_template=st.get("layout_dir") or "",
+                                 file_template=st.get("layout_file") or "")
             self.rep.log(f"{'Быстрая синхронизация' if opts.sync else 'Загрузка'}: курсов {len(selected)}, "
                          f"режим {opts.mode}, папка {opts.out_dir}")
             res = mo.run_job(client, selected, opts, self.rep, self.control)
@@ -734,6 +737,40 @@ class App:
             with self.lock:
                 self.job_state = "idle"
                 self.control = None
+
+    # ── правила скачивания ──
+    def rules_info(self):
+        st = self.settings
+        return {
+            "rules": dl_rules.normalize(st.get("rules")),
+            "layout_dir": st.get("layout_dir") if st.get("layout_dir") is not None else dl_rules.DEFAULT_DIR_TPL,
+            "layout_file": st.get("layout_file") or dl_rules.DEFAULT_FILE_TPL,
+            "meta": {
+                "presets": [{"key": k, **v} for k, v in dl_rules.PRESETS.items()],
+                "ext_groups": dl_rules.EXT_GROUPS,
+                "mods": [{"key": k, "title": t} for k, t in dl_rules.MOD_CHOICES],
+                "placeholders": dl_rules.PLACEHOLDERS,
+                "layout_presets": dl_rules.LAYOUT_PRESETS,
+                "defaults": dl_rules.DEFAULT_RULES,
+            }}
+
+    def rules_save(self, b):
+        errs = []
+        if "rules" in b:
+            errs += dl_rules.validate(b["rules"])
+        for k in ("layout_dir", "layout_file"):
+            if k in b:
+                errs += dl_rules.template_errors(str(b[k] or ""))
+        if errs:
+            return {"ok": False, "error": "; ".join(errs)}
+        with self.lock:
+            if "rules" in b:
+                self.settings["rules"] = dl_rules.normalize(b["rules"])
+            for k in ("layout_dir", "layout_file"):
+                if k in b:
+                    self.settings[k] = str(b[k] or "").strip()
+            self.save_settings()
+        return {"ok": True}
 
     def job_status(self):
         st = self.job_state
@@ -879,6 +916,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.schedule_status())
         if u.path == "/api/electives":
             return self._send(200, APP.electives_state())
+        if u.path == "/api/rules":
+            return self._send(200, APP.rules_info())
         if u.path == "/api/cover":
             r = APP.cover(int(q.get("id", 0) or 0))
             if not r:
@@ -939,6 +978,8 @@ class Handler(BaseHTTPRequestHandler):
                         return self._send(200, {"ok": False, "error": str(e)})
                 APP.save_settings()
             return self._send(200, {"ok": True})
+        if p == "/api/rules/save":
+            return self._send(200, APP.rules_save(b))
         if p == "/api/start":
             if b.get("course_ids") is not None:
                 APP.settings["course_ids"] = b["course_ids"]
