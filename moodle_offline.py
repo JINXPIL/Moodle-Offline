@@ -38,6 +38,7 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qs, parse_qsl, quote, unquote, urlencode, urljoin, urlparse, urlunparse
 
+import android    # Android (Termux): открыть страницу, уведомление, «не засыпать»
 import datadir    # где лежат данные программы и перенос с прошлой версии
 import deadlines  # календарь и дедлайны: сроки из Moodle, повестка, общий .ics
 import dl_rules   # правила скачивания (что брать, что пропускать, шаблоны имён)
@@ -85,7 +86,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -3144,8 +3145,8 @@ try {
 """
 
 
-def notify(title: str, message: str, ok: bool = True):
-    """Звук + системное уведомление (Windows: всплывающее окно; Linux: notify-send)."""
+def notify(title: str, message: str, ok: bool = True) -> bool:
+    """Звук + системное уведомление (Windows: всплывающее окно; Linux: notify-send; Android: termux-notification)."""
     try:
         if os.name == "nt":
             import winsound
@@ -3156,6 +3157,8 @@ def notify(title: str, message: str, ok: bool = True):
             subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
                               "-EncodedCommand", encoded], env=env, creationflags=0x08000000,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif android.is_android():
+            return android.notify(title, message)     # нужны приложение Termux:API и пакет termux-api; нет их — False
         else:
             sys.stdout.write("\a")
             sys.stdout.flush()
@@ -3164,6 +3167,7 @@ def notify(title: str, message: str, ok: bool = True):
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
+    return True
 
 
 def search_summary(r: dict) -> str:
@@ -3213,8 +3217,8 @@ def send_news(events: list, cfg: dict, vault: "Vault", rep: Reporter, *, toast=T
     out = {"toast": None, "telegram": None, "webhook": None}
     title, text = news.build_digest(events, hide_secrets=hide, max_lines=cfg["max_lines"], app=APP_NAME)
     if "toast" in want and toast:
-        notify(APP_NAME, "Что нового: " + news.toast_text(events))
-        out["toast"] = {"ok": True, "msg": "показано"}
+        shown = notify(APP_NAME, "Что нового: " + news.toast_text(events))
+        out["toast"] = {"ok": shown, "msg": "показано" if shown else "не получилось: на телефоне нужны приложение Termux:API и пакет termux-api"}
     if "telegram" in want:
         ok, msg = news.send_telegram(token, chat, f"{title}\n\n{text}", use_system_proxy=use_proxy)
         out["telegram"] = {"ok": ok, "msg": msg}
@@ -3571,6 +3575,11 @@ def cli_watch(args, settings: dict, vault: "Vault", rep: Reporter) -> int:
     ticks = 0
     global WATCH_BEAT
     WATCH_BEAT = lock.acquire
+    held = False
+    if android.is_android() and not args.no_wakelock:
+        held = android.wake_lock(True)                 # иначе телефон усыпит Termux, и проверки встанут
+        rep.log("Телефон не будет засыпать, пока идёт слежение (termux-wake-lock)." if held
+                else "Не удалось включить termux-wake-lock: ночью Android может приостановить слежение (см. README, раздел про Android).", "info" if held else "warn")
     rep.log(f"Слежение за {urlparse(base).netloc} запущено (Ctrl+C — остановить).")
     try:
         while True:
@@ -3630,6 +3639,8 @@ def cli_watch(args, settings: dict, vault: "Vault", rep: Reporter) -> int:
         return 130
     finally:
         WATCH_BEAT = None
+        if held:
+            android.wake_lock(False)
         lock.release()
 
 
@@ -4198,6 +4209,7 @@ def cli_main(argv=None) -> int:
     p.add_argument("--no-search-index", action="store_true", help="не обновлять поисковый индекс после загрузки")
     p.add_argument("--watch", action="store_true",
                    help="слежение без окна: проверять Moodle по таймеру из настроек и (если включено) докачивать недостающее; Ctrl+C — стоп")
+    p.add_argument("--no-wakelock", action="store_true", help="Android: не включать termux-wake-lock при слежении (телефон сможет засыпать)")
     p.add_argument("--watch-status", action="store_true", help="показать настройки таймера и итог последнего автообновления и выйти")
     p.add_argument("--auto-update", action="store_true",
                    help="один раз: сверить файлы с диском, докачать недостающее и новое по правилам «Автообновления» (курсы из настроек)")

@@ -315,6 +315,52 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
 .nch .hd small{display:block;color:var(--muted);font-size:12px}
 .nch .fl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 @media (max-width:700px){.nch .fl{grid-template-columns:1fr}}
+
+/* Android (Termux): окно в браузере телефона */
+.only-android{display:none}
+body.android .only-android{display:revert}
+body.android .no-android{display:none!important}
+@media (max-width:700px){
+  html,body{height:auto;min-height:100%}
+  body{overflow:auto;overflow-x:hidden;background-attachment:scroll}
+  #app{display:block;height:auto;min-height:100dvh}
+  .top{position:sticky;top:0;z-index:25;flex-wrap:wrap;gap:6px 10px;padding:8px 12px}
+  .brand{order:1;white-space:nowrap;gap:8px}
+  .spacer{order:2}
+  .user{order:3}#themeBtn{order:4}
+  .mtabs{order:5;flex:1 1 100%;margin:0;overflow-x:auto;scrollbar-width:none}
+  .mtabs::-webkit-scrollbar{display:none}
+  .mtabs button{flex:none;white-space:nowrap}
+  #net{order:6}#ip{order:7}
+  .pill{max-width:100%;min-width:0}
+  .pill .txt{overflow:hidden;text-overflow:ellipsis}
+  .user span#uname{display:none}
+  .pop{right:12px;left:12px;width:auto;top:100px}
+  .banner{margin:10px 12px 0;flex-wrap:wrap}
+  main{overflow:visible}
+  .view{height:auto}
+  .layout{display:block;height:auto}
+  .content{overflow:visible;padding:12px 12px 8px}
+  .side{overflow:visible;padding:0 12px 24px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .toolbar{gap:8px}
+  .toolbar .chips{overflow-x:auto;max-width:100%}
+  .chips .chip{flex:none}
+  .modal-box,.rules-box{width:100vw;height:100dvh;max-width:none;border-radius:0;border:0}
+  .rules-body{padding:12px}
+  .rules-foot{flex-wrap:wrap}
+  .modgrid{grid-template-columns:1fr}
+  .toasts{left:12px;right:12px;bottom:12px}
+  .toast{max-width:none}
+  .dock{position:sticky;bottom:0;z-index:20}
+  .dock-body{height:auto;max-height:50vh;grid-template-columns:1fr;overflow:auto}
+  .now{border-right:0;border-bottom:1px solid var(--line)}
+  .btn,.chip,select.txt,input.txt,.seg button,.tab{min-height:40px}
+  .icon-btn{width:40px;height:40px}
+  .cv-info{padding:12px}
+  .cv-acts{margin-left:0;width:100%}
+  .schedframe{min-height:60vh}
+}
 </style>
 </head>
 <body>
@@ -397,7 +443,8 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
               <p class="hint" id="tplErr" style="color:var(--bad)"></p>
             </div>
             <div class="field"><label>Папка для сохранения</label>
-              <div class="path"><input id="outDir"><button class="btn" id="pickDir" title="Выбрать папку">…</button><button class="btn" id="openDir" title="Открыть в проводнике"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button></div>
+              <div class="path"><input id="outDir"><button class="btn no-android" id="pickDir" title="Выбрать папку">…</button><button class="btn" id="openDir" title="Открыть папку с материалами"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button></div>
+              <p class="hint hidden only-android" id="andHint" style="margin-top:6px"></p>
             </div>
             <div class="row"><div class="lbl">PDF-копии страниц<small id="pdfNote">задания, тесты, страницы — ещё и в PDF</small></div><label class="sw-t"><input type="checkbox" data-s="pdf"><span></span></label></div>
             <div class="row"><div class="lbl">ZIP-бэкап курса<small>архив с датой в папке _бэкапы</small></div><label class="sw-t"><input type="checkbox" data-s="zip"><span></span></label></div>
@@ -414,11 +461,12 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
             <div class="row" style="flex-wrap:wrap"><div class="lbl">Таймер и автообновление<small id="watchInfo">как часто проверять Moodle и докачивать недостающее само</small></div>
               <button class="btn" id="watchOpen">Настроить…</button></div>
             <details class="adv"><summary>Дополнительно</summary>
+              <div class="row only-android"><div class="lbl">Остановить программу<small>выключит сервер в Termux; таймер и автообновление остановятся</small></div><button class="btn danger" id="quitBtn">Остановить</button></div>
               <div class="row"><div class="lbl">Имена файлов как на сервере<small>а не как называется элемент курса</small></div><label class="sw-t"><input type="checkbox" data-s="original_names"><span></span></label></div>
               <div class="row"><div class="lbl">Оглавление и в режиме папок</div><label class="sw-t"><input type="checkbox" data-s="index_in_mode2"><span></span></label></div>
               <div class="row"><div class="lbl">Через системный прокси<small>обычно не нужно — Moodle лучше напрямую</small></div><label class="sw-t"><input type="checkbox" data-s="use_system_proxy"><span></span></label></div>
               <div class="row"><div class="lbl">Не проверять страну IP</div><label class="sw-t"><input type="checkbox" data-s="no_geo_check"><span></span></label></div>
-            <div class="row" style="flex-wrap:wrap"><div class="lbl">Данные программы<small id="dataInfo">вход, настройки и кэш лежат в папке пользователя</small></div>
+            <div class="row no-android" style="flex-wrap:wrap"><div class="lbl">Данные программы<small id="dataInfo">вход, настройки и кэш лежат в папке пользователя</small></div>
                 <button class="btn" id="dataImport" title="Если при смене версии программа не нашла старые данные сама — укажите папку со старой версией">Перенести из старой версии…</button></div>
             </details>
           </div>
@@ -470,6 +518,7 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
     </section>
     <!-- Элективы -->
     <section class="view hidden" id="electivesView">
+      <div class="banner only-android"><div><b>На телефоне вкладка работает не полностью</b>Страницу элективов строит скрипт сайта, и открывается она в Edge/Chrome на компьютере. С телефона можно смотреть то, что уже сохранено.</div></div>
       <div class="layout">
         <div class="content">
           <div class="toolbar"><h2 id="elTitle">Спортивные элективы</h2><span class="hint" id="elInfo" style="margin:0"></span></div>
@@ -684,7 +733,7 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
       <div class="modgrid" style="margin-top:10px">
         <label><span class="sw-t"><input type="checkbox" id="wtCDown"><span></span></span><span>Сообщить, что Moodle не отвечает</span></label>
         <label><span class="sw-t"><input type="checkbox" id="wtCUp"><span></span></span><span>Сообщить, что Moodle снова работает</span></label></div>
-      <p class="hint">Сообщения приходят туда же, куда и «Что нового» (окно Windows, Telegram, webhook — каналы настраиваются в «Что нового»).</p></div>
+      <p class="hint" id="wtCNote">Сообщения приходят туда же, куда и «Что нового» (окно Windows, Telegram, webhook — каналы настраиваются в «Что нового»).</p></div>
     <div class="rsec" id="wtAutoSec"><h4>Автообновление файлов</h4>
       <label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Рубильник: докачивать само по таймеру<small>программа сверит файлы на диске: что есть — не трогает, чего не хватает — докачает; если ничего не скачано — скачает всё выбранное</small></span><span class="sw-t"><input type="checkbox" id="wtAOn"><span></span></span></label>
       <div id="wtABody">
@@ -696,9 +745,10 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
       <label class="row" id="wtAPastRow" style="border:0;padding:0;margin-top:8px;cursor:pointer"><span class="lbl">Брать и прошедшие курсы<small>без этого «все курсы» — только текущие и не скрытые</small></span><span class="sw-t"><input type="checkbox" id="wtAPast"><span></span></span></label>
       <h4 style="margin-top:14px">Когда можно обновлять</h4>
       <div id="wtAWin"></div>
+      <p class="hint only-android">На телефоне пароль не хранится: автообновление работает, пока жива сохранённая сессия Moodle. Когда она истечёт, программа напишет «нужен вход» — откройте окно и войдите.</p>
       <p class="hint">Загрузка идёт тем же бережным способом, что и обычная: по одному файлу, с паузами. Первое обновление начнётся сразу после сохранения (если сейчас разрешённое время), дальше — по таймеру. Чтобы оно шло и при закрытом окне, см. «Работать без окна» ниже.</p></div></div>
     <div class="rsec"><h4>Проверить, чего не хватает</h4>
-      <div class="path"><button class="btn" id="wtAudit">Проверить диск (ничего не качает)</button><button class="btn" id="wtRun">Обновить сейчас</button></div>
+      <div class="path" style="flex-wrap:wrap"><button class="btn" id="wtAudit">Проверить диск (ничего не качает)</button><button class="btn" id="wtRun">Обновить сейчас</button></div>
       <div id="wtAuditOut" class="hint" style="margin-top:8px"></div></div>
     <div class="rsec" id="wtBgSec"><h4>Работать без окна</h4><div id="wtBg"></div></div>
   </div>
@@ -713,7 +763,15 @@ if (T) sessionStorage.setItem("mo_t", T);
 history.replaceState(null, "", "/");
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let ANDROID = false;   // окно открыто в браузере телефона (программа работает в Termux)
+function androidOpen(b){
+  const p = b.path || "", AI = (S && S.android_info) || {}, base = AI.out || "";
+  if (p && !b.reveal && /\.[A-Za-z0-9]{1,6}$/.test(p)) { window.open(fileUrl(p), "_blank"); return {ok: true}; }
+  toast((b.reveal ? "Файл лежит здесь: " : "Папки открывает приложение «Файлы». Путь: ") + (base ? base + (p ? "/" + p : "") : p || "папка с материалами"));
+  return {ok: true};
+}
 async function api(path, body) {
+  if (ANDROID && path === "/api/open") return androidOpen(body || {});
   const opt = {headers: {"X-Token": T}};
   if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
   const r = await fetch(path, opt);
@@ -833,8 +891,23 @@ $("#dataImport").onclick = async () => {
 };
 
 /* ── настройки ── */
+function androidTexts(){
+  $("#nsToast").closest(".hd").firstElementChild.innerHTML = 'Уведомление на телефоне<small>нужны приложение Termux:API и пакет <code>termux-api</code> (в Termux: <code>pkg install termux-api</code>)</small>';
+  $("#wtCNote").textContent = "Сообщения приходят туда же, куда и «Что нового» (уведомление телефона, Telegram, webhook — каналы настраиваются в «Что нового»).";
+}
+function androidHint(st){
+  const AI = st.android_info, el = $("#andHint");
+  if (!AI || !AI.private_out) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  el.innerHTML = AI.shared
+    ? `Материалы лежат внутри Termux — приложение «Файлы» их не видит. <button class="btn" id="andShare">Положить в общую память</button><br>Уже скачанное останется на старом месте.`
+    : `Материалы лежат внутри Termux — приложение «Файлы» их не видит. Чтобы они появились в общей памяти, в Termux выполните <code>termux-setup-storage</code>, разрешите доступ и обновите страницу.`;
+  const b = $("#andShare"); if (b) b.onclick = () => api("/api/settings", {out_dir: AI.suggest}).then(() => { toast("Новая папка: " + AI.suggest, "ok"); loadCourses(); });
+}
 function loadSettings(st){
   const s = st.settings;
+  if (ANDROID !== !!st.android) { ANDROID = !!st.android; document.body.classList.toggle("android", ANDROID); if (ANDROID) androidTexts(); }
+  androidHint(st);
   $$(".mopt").forEach(m => m.classList.toggle("on", +m.dataset.m === +(s.mode || 1)));
   $("#tplBox").classList.toggle("hidden", +(s.mode || 1) !== 3);
   if (!RU && !RU_LOADING) loadRules();
@@ -844,7 +917,7 @@ function loadSettings(st){
   $("#schedOn").checked = !!s.schedule_on; if (s.schedule_time) $("#schedTime").value = s.schedule_time;
   $("#schedRow").classList.toggle("hidden", st.platform !== "nt");
   const pdf = $('[data-s="pdf"]'); pdf.disabled = !st.browser_pdf;
-  $("#pdfNote").textContent = st.browser_pdf ? "задания, тесты, страницы — ещё и в PDF" : "нужен Microsoft Edge или Google Chrome";
+  $("#pdfNote").textContent = st.browser_pdf ? "задания, тесты, страницы — ещё и в PDF" : ANDROID ? "на телефоне недоступно" : "нужен Microsoft Edge или Google Chrome";
   if (!settingsLoaded) { (s.course_ids || []).forEach(id => selected.add(+id)); settingsLoaded = true; }
 }
 $$(".mopt").forEach(m => m.onclick = () => { $$(".mopt").forEach(x => x.classList.toggle("on", x === m)); $("#tplBox").classList.toggle("hidden", +m.dataset.m !== 3); api("/api/settings", {mode: +m.dataset.m}); });
@@ -852,6 +925,8 @@ $$("[data-s]").forEach(i => i.onchange = () => api("/api/settings", {[i.dataset.
 $("#outDir").onchange = e => api("/api/settings", {out_dir: e.target.value.trim()}).then(loadCourses);
 $("#pickDir").onclick = async () => { const r = await api("/api/pick_folder", {}); if (r.ok) { $("#outDir").value = r.path; loadCourses(); } };
 $("#openDir").onclick = () => api("/api/open", {path: ""});
+$("#quitBtn").onclick = async () => { if (!confirm("Остановить программу? Таймер и автообновление перестанут работать, пока вы не запустите её снова в Termux.")) return;
+  await api("/api/quit", {}); toast("Программа остановлена. Эту вкладку можно закрыть."); setTimeout(() => { document.body.innerHTML = '<p style="padding:24px;font:16px system-ui">Программа остановлена. Чтобы запустить снова, откройте Termux и выполните <code>./run.sh</code></p>'; }, 800); };
 const saveHours = () => api("/api/settings", {quiet_hours: $("#qhFrom").value + "-" + $("#qhTo").value}).then(r => { if (!r.ok) toast(r.error, "bad"); });
 $("#qhFrom").onchange = saveHours; $("#qhTo").onchange = saveHours;
 async function saveSched(){ const r = await api("/api/schedule", {enabled: $("#schedOn").checked, time: $("#schedTime").value});
@@ -1121,7 +1196,7 @@ function showView(v){
   if (v === "schedule") loadSchedule(); if (v === "electives") loadElectives(); if (v === "news") loadNews(); if (v === "search") openSearchTab();
 }
 $$("#mainTabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
-const openUrl = url => api("/api/open_url", {url});
+const openUrl = url => ANDROID ? (window.open(url, "_blank"), Promise.resolve({ok: true})) : api("/api/open_url", {url});
 
 
 /* ── что нового ── */
@@ -1517,15 +1592,19 @@ async function openWatch(){
   $("#wtAPast").checked = a.include_past;
   $("#wtAWin").innerHTML = wtWinHtml("wtA", a.window, WT.days); wtWinBind("wtA");
   $$("#wtAScope input").forEach(i => i.onchange = wtSync); $("#wtAOn").onchange = wtSync; wtSync();
-  const as = WT.autostart;
-  $("#wtBg").innerHTML = as.supported
+  const as = WT.autostart, wk = ANDROID ? `<label class="row" style="border:0;padding:0;margin-top:10px;cursor:pointer"><span class="lbl">Не давать телефону засыпать<small>включает wake lock в Termux: проверки и автообновление идут и с выключенным экраном, но батарея садится быстрее</small></span><span class="sw-t"><input type="checkbox" id="wtWake" ${(S && S.settings.android_wakelock) ? "checked" : ""}><span></span></span></label>` : "";
+  const abody = as.kind === "termux-boot"
+    ? `<label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Запускать слежение при включении телефона<small>без окна: проверка Moodle и автообновление идут в фоне. Нужно приложение Termux:Boot (из F-Droid) — установите его и один раз откройте${as.app_ready ? "" : " (папка автозапуска ещё не создана)"}</small></span><span class="sw-t"><input type="checkbox" id="wtAuto" ${as.on ? "checked" : ""}><span></span></span></label>`
+    : as.supported
     ? `<label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Запускать слежение при входе в Windows<small>без окна, в фоне: проверка Moodle и автообновление идут, пока компьютер включён. Выключить — здесь же. Файл автозапуска лежит в вашей папке автозагрузки, права администратора не нужны</small></span><span class="sw-t"><input type="checkbox" id="wtAuto" ${as.on ? "checked" : ""}><span></span></span></label>`
-    : `<p class="hint" style="margin:0">Без окна: <code>python moodle_offline.py --watch -y</code> (Linux, Android/Termux — см. README). Автозапуск из окна есть только в Windows.</p>`;
+    : `<p class="hint" style="margin:0">Без окна: <code>python moodle_offline.py --watch -y</code> (Linux, см. README). Автозапуск из окна есть только в Windows и на Android.</p>`;
+  $("#wtBg").innerHTML = abody + wk;
   if (as.supported) $("#wtAuto").onchange = async e => {
     const r = await api("/api/watch/autostart", {enabled: e.target.checked});
     if (!r.ok) { e.target.checked = !e.target.checked; $("#wtMsg").textContent = r.error || "Не получилось"; return; }
-    toast(e.target.checked ? "Слежение будет запускаться при входе в Windows" : "Автозапуск слежения выключен", "ok");
+    toast(e.target.checked ? (ANDROID ? "Слежение будет запускаться при включении телефона" : "Слежение будет запускаться при входе в Windows") : "Автозапуск слежения выключен", "ok");
   };
+  if (ANDROID) $("#wtWake").onchange = e => { api("/api/settings", {android_wakelock: e.target.checked}); if (S) S.settings.android_wakelock = e.target.checked; };
   $("#wtMsg").textContent = WT.other ? "Автообновление сейчас ведёт другая программа (" + WT.other + "); окно его не запускает." : (WT.why && a.enabled ? "Сейчас: " + WT.why : "");
   $("#wtAuditOut").textContent = ""; $("#watchModal").classList.remove("hidden");
 }
