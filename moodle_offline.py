@@ -40,6 +40,7 @@ from urllib.parse import parse_qs, parse_qsl, quote, unquote, urlencode, urljoin
 
 import dl_rules   # правила скачивания (что брать, что пропускать, шаблоны имён)
 import news       # что нового: события, лента, уведомления
+import search     # поиск по скачанным материалам (офлайн-индекс)
 
 # В собранном .exe без консоли stdout/stderr отсутствуют — подменяем, чтобы print() не падал.
 if sys.stdout is None:
@@ -81,7 +82,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -3104,6 +3105,40 @@ def notify(title: str, message: str, ok: bool = True):
         pass
 
 
+def search_summary(r: dict) -> str:
+    """Одна строка итога индексации для журнала и консоли."""
+    changed = r.get("new", 0) + r.get("changed", 0)
+    parts = []
+    if changed:
+        parts.append(f"прочитано новых и изменённых файлов: {changed}")
+    if r.get("removed"):
+        parts.append(f"убрано пропавших: {r['removed']}")
+    if r.get("empty"):
+        parts.append(f"без текста (сканы и пустые): {r['empty']}")
+    if r.get("err"):
+        parts.append(f"не прочитано: {r['err']}")
+    if r.get("legacy"):
+        parts.append(f"старых .doc/.ppt/.xls: {r['legacy']}")
+    if r.get("nolib"):
+        parts.append(f"PDF без библиотеки pypdfium2: {r['nolib']}")
+    head = "Поиск: индекс " + ("прерван" if r.get("stopped") else "обновлён") + f" за {r.get('secs', 0)} с, файлов в папке: {r.get('files', 0)}"
+    return head + ("; " + "; ".join(parts) if parts else "; изменений нет")
+
+
+def search_pass(out: Path, settings: dict, rep: Reporter, *, full=False, stop=None, progress=None) -> dict:
+    """Обновляет офлайн-индекс поиска по материалам. Любая ошибка индекса — только строка в журнале: загрузке она не мешает."""
+    cfg = search.normalize(settings.get("search"))
+    try:
+        r = search.Index(out).update(cfg, full=full, stop=stop, progress=progress)
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:  # noqa: BLE001
+        rep.log(f"Поиск: индекс не обновлён — {describe_error(e)}", "warn")
+        return {}
+    rep.log(search_summary(r))
+    return r
+
+
 def send_news(events: list, cfg: dict, vault: "Vault", rep: Reporter, *, toast=True, channels=None,
               use_proxy=False) -> dict:
     """Отправляет события по каналам. channels — явный список («toast», «telegram», «webhook»), иначе — включённые в настройках.
@@ -3601,6 +3636,48 @@ def extra_sync(settings, vault, client, out, rep, control, notify_on=True):
             rep.log(f"Элективы не проверены: {describe_error(e)}", "warn")
 
 
+def cli_search(args, settings: dict, rep: Reporter) -> int:
+    out = Path(args.out or settings.get("out_dir") or DEFAULT_OUT)
+    if not out.is_dir():
+        print(f"Папка с материалами не найдена: {out}")
+        return 1
+    ix = search.Index(out)
+    cfg = search.normalize(settings.get("search"))
+    first = not ix.exists()
+    if args.search_index or args.search_reindex or first or (cfg["auto"] and not args.no_search_index):
+        if first:
+            print("Поискового индекса ещё нет — строю (это один раз, потом обновляется только изменённое)…")
+        try:
+            r = ix.update(cfg, full=bool(args.search_reindex))
+        except KeyboardInterrupt:
+            print("\nПрервано. Уже прочитанное сохранено, остальное доделается в следующий раз.")
+            return 130
+        except Exception as e:  # noqa: BLE001
+            print(f"Индекс не обновлён: {describe_error(e)}")
+            return 1
+        if args.search_index or args.search_reindex or first or r["new"] or r["changed"] or r["removed"]:
+            print(search_summary(r))
+    if args.search_index or args.search_reindex:
+        st = ix.status()
+        print(search.format_status(st))
+        if not st.get("pdf") and st.get("by_status", {}).get("nolib"):
+            print("Чтобы искать и внутри PDF: pip install pypdfium2")
+        return 0
+    course = None
+    if args.search_course:
+        names = [c["name"] for c in ix.status(problems=0).get("courses", [])]
+        want = args.search_course.casefold()
+        hit = [n for n in names if n.casefold() == want] or [n for n in names if want in n.casefold()]
+        if len(hit) != 1:
+            print(("Курс «%s» не найден." % args.search_course) if not hit else
+                  "Под «%s» подходит несколько курсов, уточните:\n  " % args.search_course + "\n  ".join(hit))
+            return 1
+        course = hit[0]
+    res = ix.search(args.search, course=course, limit=max(1, args.search_limit))
+    print(search.format_results(res))
+    return 0 if res.get("ok") else 1
+
+
 def cli_main(argv=None) -> int:
     ensure_console_utf8()
     load_env()
@@ -3639,6 +3716,12 @@ def cli_main(argv=None) -> int:
     p.add_argument("--news-list", action="store_true", help="показать непрочитанное из «Что нового» и выйти")
     p.add_argument("--news-read", action="store_true", help="пометить всё в «Что нового» прочитанным (можно вместе с --news-list)")
     p.add_argument("--notify-test", action="store_true", help="отправить тестовое уведомление по включённым каналам и выйти")
+    p.add_argument("--search", metavar="ЗАПРОС", help="найти в скачанных материалах и выйти (слова — все сразу, \"точная фраза\", -исключить)")
+    p.add_argument("--search-course", metavar="КУРС", help="искать только в этом курсе (часть названия папки курса)")
+    p.add_argument("--search-limit", type=int, default=10, help="сколько файлов показать (по умолчанию 10)")
+    p.add_argument("--search-index", action="store_true", help="обновить поисковый индекс материалов и выйти")
+    p.add_argument("--search-reindex", action="store_true", help="построить поисковый индекс заново и выйти")
+    p.add_argument("--no-search-index", action="store_true", help="не обновлять поисковый индекс после загрузки")
     p.add_argument("--save-html", action="store_true", help="сохранять исходный HTML страниц в _debug (для настройки селекторов)")
     p.add_argument("--forget", action="store_true", help="забыть сохранённый вход")
     p.add_argument("--schedule", nargs="?", const="2weeks", choices=("week", "next", "2weeks", "month", "semester", "custom"),
@@ -3707,6 +3790,8 @@ def cli_main(argv=None) -> int:
         if args.news_read:
             print(f"\nОтмечено прочитанным: {log.mark_read()}")
         return 0
+    if args.search or args.search_index or args.search_reindex:   # поиск работает без интернета и без входа
+        return cli_search(args, settings, rep)
     window = parse_hours(args.hours or settings.get("quiet_hours") or os.environ.get("MOODLE_HOURS"))
     control = Control(window)
     control.reporter = rep
@@ -3879,6 +3964,11 @@ def cli_main(argv=None) -> int:
     if action == "sync" and res.aborted is None:
         extra_sync(settings, vault, client, out, rep, control, notify_on=not args.no_notify)
     delivered = deliver_news(res.events, settings, vault, rep, toast_on=not args.no_notify) if res.events else {}
+    if res.aborted != "stopped" and not args.no_search_index and search.normalize(settings.get("search"))["auto"]:
+        try:
+            search_pass(out, settings, rep)
+        except KeyboardInterrupt:
+            rep.log("Индексация для поиска прервана — доделается в следующий раз.", "warn")
     took = fmt_dur(time.monotonic() - t0)
     head = {"network": "Прервано: нет связи", "session": "Прервано: сессия истекла",
             "stopped": "Остановлено"}.get(res.aborted, "Готово")

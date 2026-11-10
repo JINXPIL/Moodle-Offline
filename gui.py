@@ -29,6 +29,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 import dl_rules
 import moodle_offline as mo
 import news
+import search
 import electives as el
 import schedule as sched
 
@@ -175,6 +176,11 @@ class App:
         self.offline = {"reason": "", "since": "", "cached": ""}   # офлайн-режим: работаем с сохранённым
         self.relogin_tried = 0.0
         self._news = None             # (путь, NewsLog)
+        self._search = None           # (путь, search.Index)
+        self.search_ev = threading.Event()      # остановка индексации
+        self.search_thread = None
+        self.search_prog = {"running": False, "phase": "", "done": 0, "total": 0, "current": ""}
+        self.search_last = None       # итог последней индексации: {"ok", "text", ...}
 
     # ── настройки ──
     def save_settings(self):
@@ -704,6 +710,8 @@ class App:
                 self.rep.log(f"Уведомления о новом не отправлены: {mo.describe_error(e)}", "warn")
             if res.aborted != "stopped" and not (sent.get("toast") and res.aborted is None):   # окно «Что нового» уже показано
                 mo.notify(mo.APP_NAME, text, ok=res.aborted is None)
+            if res.aborted != "stopped" and search.normalize(st.get("search"))["auto"]:
+                self.search_start()   # индекс поиска обновляется в фоне; загрузку это не задерживает
         except Exception as e:
             msg = mo.describe_error(e)
             self.last_result = {"ok": False, "text": f"Ошибка: {msg}", "aborted": "error"}
@@ -744,6 +752,62 @@ class App:
             with self.lock:
                 self.job_state = "idle"
                 self.control = None
+
+    # ── поиск по материалам ──
+    def search_index(self) -> search.Index:
+        path = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
+        with self.lock:
+            if not self._search or self._search[0] != path:
+                self._search = (path, search.Index(path))
+            return self._search[1]
+
+    def search_query(self, q):
+        try:
+            limit = int(q.get("limit") or 30)
+        except ValueError:
+            limit = 30
+        groups = [g for g in (q.get("groups") or "").split(",") if g]
+        return self.search_index().search(q.get("q", ""), course=q.get("course") or None, groups=groups,
+                                          limit=min(100, max(1, limit)), order="new" if q.get("order") == "new" else "rank")
+
+    def search_info(self):
+        return {"status": self.search_index().status(), "cfg": search.normalize(self.settings.get("search")),
+                "groups": search.groups_meta(), "progress": dict(self.search_prog), "last": self.search_last}
+
+    def search_progress(self):
+        return {**self.search_prog, "last": self.search_last}
+
+    def search_start(self, full=False):
+        with self.lock:
+            if self.search_thread and self.search_thread.is_alive():
+                return {"ok": False, "error": "индексация уже идёт"}
+            out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
+            if not out.is_dir():
+                return {"ok": False, "error": "папка с материалами не найдена — сначала скачайте что-нибудь"}
+            self.search_ev.clear()
+            self.search_prog = {"running": True, "phase": "scan", "done": 0, "total": 0, "current": ""}
+            self.search_thread = threading.Thread(target=self._search_job, args=(out, bool(full)), daemon=True)
+            self.search_thread.start()
+        return {"ok": True}
+
+    def _search_job(self, out, full):
+        def prog(d):
+            self.search_prog = {**d, "running": True}
+        try:
+            r = mo.search_pass(out, self.settings, self.rep, full=full, stop=self.search_ev, progress=prog)
+            self.search_last = ({"ok": not r.get("stopped"), "text": mo.search_summary(r), **r} if r
+                                else {"ok": False, "text": "Индекс не обновлён — подробности в журнале"})
+        except Exception as e:  # noqa: BLE001
+            self.search_last = {"ok": False, "text": f"Индекс не обновлён: {mo.describe_error(e)}"}
+        finally:
+            self.search_prog = {"running": False, "phase": "done", "done": 0, "total": 0, "current": ""}
+
+    def search_settings_save(self, b):
+        cfg = search.normalize(b.get("cfg"))
+        with self.lock:
+            self.settings["search"] = cfg
+            self.save_settings()
+        return {"ok": True, "cfg": cfg}
 
     # ── правила скачивания ──
     # ── «Что нового» ──
@@ -1009,6 +1073,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.news_list(q))
         if u.path == "/api/news/settings":
             return self._send(200, APP.news_settings_info())
+        if u.path == "/api/search":
+            return self._send(200, APP.search_query(q))
+        if u.path == "/api/search/status":
+            return self._send(200, APP.search_info())
         if u.path == "/api/cover":
             r = APP.cover(int(q.get("id", 0) or 0))
             if not r:
@@ -1077,6 +1145,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.news_settings_save(b))
         if p == "/api/news/test":
             return self._send(200, APP.news_test(b))
+        if p == "/api/search/index":
+            return self._send(200, APP.search_start(bool(b.get("full"))))
+        if p == "/api/search/stop":
+            APP.search_ev.set()
+            return self._send(200, {"ok": True})
+        if p == "/api/search/settings":
+            return self._send(200, APP.search_settings_save(b))
         if p == "/api/start":
             if b.get("course_ids") is not None:
                 APP.settings["course_ids"] = b["course_ids"]
@@ -1174,6 +1249,7 @@ class Handler(BaseHTTPRequestHandler):
                                                 "use_system_proxy", "original_names", "index_in_mode2", "no_geo_check")},
             "platform": os.name, "browser_pdf": bool(mo.find_browser()),
             "news_unread": APP.news_unread(),
+            "search": APP.search_progress(),
         }
 
 
