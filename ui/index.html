@@ -230,6 +230,8 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .ecard .row2{display:flex;gap:8px;align-items:center;margin-top:auto}
 .msgs{margin:0 0 12px;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--ok) 12%,var(--surface));border:1px solid color-mix(in srgb,var(--ok) 35%,transparent)}
 input.txt{height:36px;border-radius:10px;border:1px solid var(--line);background:var(--raised);padding:0 10px;width:100%;outline:none}
+select.txt{height:36px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:inherit;padding:0 8px;width:100%;outline:none;font:inherit}
+input.txt:focus,select.txt:focus{border-color:var(--accent)}
 /* просмотр */
 .modal{position:fixed;inset:0;background:rgba(10,12,16,.45);backdrop-filter:blur(4px);display:grid;place-items:center;z-index:50}
 .modal-box{width:min(1100px,94vw);height:min(860px,90vh);background:var(--surface-solid);border-radius:18px;border:1px solid var(--line);box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
@@ -283,6 +285,8 @@ input.txt{height:36px;border-radius:10px;border:1px solid var(--line);background
         </div>
         <div class="err hidden" id="lErr"></div>
         <button class="btn primary big" id="loginBtn">Войти</button>
+        <button class="btn ghost big" id="offlineBtn" style="margin-top:8px">Без входа — офлайн</button>
+        <p class="hint" id="offlineHint">Moodle не работает? Откроются уже скачанные курсы и файлы, расписание и элективы. Расписание группы можно обновлять и без Moodle.</p>
         <p class="hint" id="rememberHint"></p>
       </div></div>
     </section>
@@ -350,7 +354,13 @@ input.txt{height:36px;border-radius:10px;border:1px solid var(--line);background
         <aside class="side">
           <div class="panel">
             <h3>Группа и источники</h3>
-            <div class="field"><label>Группа (как в адресе расписания)</label><input class="txt" id="schGroup" placeholder="ib-b-25-2-o"></div>
+            <div class="field"><label>Группа</label><input class="txt" id="schGroup" list="schGroupList" placeholder="ИБ/б-25-2-о" autocomplete="off">
+              <datalist id="schGroupList"></datalist>
+              <p class="hint" id="schGroupHint">Пишите как на сайте (ИБ/б-25-2-о) или как в адресе (ib-b-25-2-o) — подойдёт любой вариант.</p></div>
+            <details class="adv" id="schPick"><summary>Выбрать из списка СевГУ</summary>
+              <div class="field"><label>Отдел</label><select class="txt" id="schDept"><option value="">загружаю…</option></select></div>
+              <div class="field"><label>Группа</label><select class="txt" id="schGrpSel"></select></div>
+              <p class="hint" id="schPickHint"></p></details>
             <div class="srclist" id="schSources"></div>
             <details class="adv"><summary>Адреса источников</summary><div id="schUrls"></div>
               <p class="hint">В адресе можно использовать {group}, {week} (номер недели) и {date} (понедельник недели, ГГГГ-ММ-ДД).</p></details>
@@ -478,6 +488,7 @@ async function doLogin(){
   }
   else { $("#lPass").value = ""; }
 }
+$("#offlineBtn").onclick = () => api("/api/offline", {reason: "без входа"});
 $("#loginBtn").onclick = doLogin;
 $("#lPass").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
 $("#logoutBtn").onclick = async () => { if (!confirm("Выйти и забыть сохранённый вход на этом компьютере?")) return; await api("/api/logout", {}); courses = []; renderGrid(); };
@@ -559,8 +570,8 @@ async function start(sync, ignoreGeo=false, ids=null){
   const body = {sync, course_ids: ids || [...selected], wait_for_server: $('[data-s="wait_for_server"]').checked, ignore_geo: ignoreGeo};
   const r = await api("/api/start", body);
   if (r.geo) { if (confirm(r.geo + "\n\nВсё равно начать?")) return start(sync, true, ids); return; }
-  if (!r.ok) return toast(r.error || "Не удалось начать", "bad");
-  if (r.armed) toast("Сервер сейчас недоступен — начну автоматически, как только он оживёт.");
+  if (!r.ok) { if (r.need_login) api("/api/relogin", {}); return toast(r.error || "Не удалось начать", "bad"); }
+  if (r.armed) toast("Moodle сейчас недоступен — начну автоматически, как только он оживёт.");
   $("#dock").classList.remove("collapsed");
 }
 $("#startBtn").onclick = () => start(false);
@@ -655,8 +666,13 @@ function renderNet(st){
   let html = "";
   if (g.warning) html += `<div class="banner bad"><div><b>Похоже, включён VPN</b>${esc(g.warning)}</div><span class="spacer"></span>
     <div style="display:flex;flex-direction:column;gap:6px"><button class="btn" id="geoHide">Скрыть: у меня DIRECT для СевГУ</button><button class="btn ghost" id="geoRe">Проверить снова</button></div></div>`;
+  const off = st.login.offline;
+  if (off) html += `<div class="banner"><div><b>Офлайн-режим — ${esc(off.reason)}</b>Работаю с сохранённым: курсы${off.cached ? " (список от " + esc(off.cached) + ")" : ""}, скачанные файлы, расписание и элективы.
+    ${st.net.status === "down" ? "Как только Moodle оживёт, войду сам и обновлю данные." : "Moodle сейчас отвечает — можно войти."}${st.job.armed ? " Загрузка начнётся сама." : ""}</div><span class="spacer"></span>
+    <button class="btn" id="reloginBtn">Войти</button></div>`;
   if (st.job.result && st.job.result.aborted === "session" && st.job.state === "idle") html += `<div class="banner"><div><b>Сессия Moodle истекла</b>Войдите снова — скачанное не потеряется, продолжу с того же места.</div></div>`;
   if ($("#bannerWrap").dataset.h !== html) { $("#bannerWrap").innerHTML = html; $("#bannerWrap").dataset.h = html; const b = $("#geoRe"); if (b) b.onclick = () => api("/api/geo", {});
+    const rl = $("#reloginBtn"); if (rl) rl.onclick = () => api("/api/relogin", {});
     const h = $("#geoHide"); if (h) h.onclick = () => api("/api/settings", {no_geo_check: true}).then(() => toast("Проверка IP выключена. Включить снова: «Дополнительно» → «Не проверять страну IP»."));
   }
 }
@@ -737,13 +753,26 @@ function bindCV(){
 }
 
 /* ── расписание ── */
-let SCH = null, schRange = "2weeks";
+let SCH = null, schRange = "2weeks", GRP = null;
+async function loadGroups(dept){
+  const r = await api("/api/schedule/groups" + (dept ? "?dept=" + encodeURIComponent(dept) : "")); GRP = r;
+  if (!r.ok) { $("#schPickHint").textContent = "Список групп пока недоступен: " + (r.error || "нет связи с schedule.sevsu.ru"); return; }
+  $("#schDept").innerHTML = r.departments.map(d => `<option value="${esc(d.id)}" ${d.id === r.current ? "selected" : ""}>${esc(d.name)}</option>`).join("");
+  $("#schGrpSel").innerHTML = '<option value="">— выберите группу —</option>' + r.groups.map(g => `<option value="${esc(g.slug)}" ${g.slug === r.selected ? "selected" : ""}>${esc(g.name)}</option>`).join("");
+  $("#schGroupList").innerHTML = r.groups.map(g => `<option value="${esc(g.name)}">${esc(g.slug)}</option>`).join("");
+  $("#schPickHint").textContent = r.offline ? "Сайт сейчас недоступен — показан сохранённый список." : `Групп в отделе: ${r.groups.length}.`;
+}
+$("#schDept").onchange = () => loadGroups($("#schDept").value);
+$("#schGrpSel").onchange = async () => { const o = $("#schGrpSel").selectedOptions[0]; if (!o || !o.value) return;
+  $("#schGroup").value = o.textContent; await api("/api/schedule/save", {schedule_group: o.value}); toast("Группа: " + o.textContent, "ok"); loadSchedule(false); };
 const themeHash = () => { const t = localStorage.getItem("mo_theme") || "auto"; const a = localStorage.getItem("mo_accent") || ACCENTS[0];
   return "#" + (t !== "auto" ? "theme=" + t + "&" : "") + "accent=" + encodeURIComponent(a); };
 async function loadSchedule(reloadFrame = true){
   SCH = await api("/api/schedule");
-  if (document.activeElement !== $("#schGroup")) $("#schGroup").value = SCH.group;
-  $("#schSources").innerHTML = Object.entries(SCH.titles).map(([k, t]) => `<label><span class="sw-t"><input type="checkbox" data-src="${k}" ${SCH.sources.includes(k) ? "checked" : ""}><span></span></span><span>${esc(t)}</span></label>`).join("");
+  if (document.activeElement !== $("#schGroup")) $("#schGroup").value = SCH.group_name || SCH.group;
+  $("#schGroupHint").textContent = SCH.group_name ? `Код в адресе сайта: ${SCH.group}. Можно писать и по-русски, и латиницей.` : "Пишите как на сайте (ИБ/б-25-2-о) или как в адресе (ib-b-25-2-o) — подойдёт любой вариант.";
+  if (!GRP) loadGroups();
+  $("#schSources").innerHTML = (SCH.order || Object.keys(SCH.titles)).map(k => [k, SCH.titles[k]]).map(([k, t]) => `<label><span class="sw-t"><input type="checkbox" data-src="${k}" ${SCH.sources.includes(k) ? "checked" : ""}><span></span></span><span>${esc(t)}${SCH.auth && SCH.auth[k] && !SCH.has_creds ? '<br><small class="muted">войдите в программе с «Запомнить меня» — логин и пароль те же, что в Moodle</small>' : ""}</span></label>`).join("");
   $("#schUrls").innerHTML = Object.entries(SCH.urls).map(([k, u]) => `<div class="field"><label>${esc(k)}</label><input class="txt" data-url="${k}" value="${esc(u)}"></div>`).join("");
   $("#schPdf").checked = SCH.pdf; $("#schAuto").checked = SCH.auto;
   $("#schInfo").textContent = SCH.saved ? `сохранено ${SCH.updated} · пар: ${SCH.count} · ${SCH.first.split("-").reverse().join(".")} — ${SCH.last.split("-").reverse().join(".")}` : "";
@@ -761,7 +790,7 @@ $("#schSave").onclick = async () => { const p = schPayload(true); if (!p.schedul
   if (schRange === "custom" && !(p.from && p.to)) return toast("Укажите даты «с» и «по»", "bad");
   const r = await api("/api/schedule/save", p); if (!r.ok) return toast(r.error || "Не удалось начать", "bad"); $("#dock").classList.remove("collapsed"); toast("Сохраняю расписание…"); };
 ["#schPdf", "#schAuto"].forEach(id => $(id).onchange = () => api("/api/schedule/save", schPayload(false)));
-$("#schGroup").onchange = () => api("/api/schedule/save", schPayload(false));
+$("#schGroup").onchange = async () => { await api("/api/schedule/save", schPayload(false)); loadSchedule(false); };
 $("#schOpen").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/index.html"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); });
 $("#schIcs").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/raspisanie.ics"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); else toast("Откроется программа календаря — подтвердите импорт"); });
 $("#schSnaps").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/снимки"}).then(r => { if (!r.ok) toast("Снимков пока нет", "bad"); });
@@ -783,14 +812,14 @@ function renderElectives(){
       : a.kind === "js" ? `<button class="btn" data-url="${esc(s.final_url || s.url)}">Только на сайте</button>`
       : `<button class="btn ${mine ? "danger" : "primary"}" data-act="${a.id}" ${a.disabled ? "disabled" : ""}>${esc(a.disabled && !mine ? (a.label || "Недоступно") : a.label)}</button>`;
     return `<div class="ecard ${mine ? "mine" : ""}"><div class="ctx">${esc(a.context || "(без описания)")}</div><div class="row2">${btn}${mine ? '<span class="mmeta">вы записаны</span>' : ""}</div></div>`; }).join("")
-    : `<div class="empty">${s.updated ? "На странице не нашлось кнопок записи. Откройте офлайн-копию или сайт — и пришлите файл electives_page.html из папки .moodle_offline, чтобы я настроил разбор." : "Нажмите «Обновить варианты» — программа откроет страницу элективов под вашей учётной записью."}</div>`;
+    : `<div class="empty">${s.updated ? "На странице не нашлось кнопок записи. Посмотрите «Офлайн-копию» — что увидела программа. Если на сайте кнопки есть, пришлите из папки .moodle_offline файлы electives_page.html, electives_text.txt и electives_screen.png (паролей в них нет) — я подгоню разбор." : "Нажмите «Обновить варианты» — программа откроет страницу элективов под вашей учётной записью."}</div>`;
 }
 async function elRefresh(password){
   const b = $("#elRefresh"); b.disabled = true; b.innerHTML = '<span class="spin" style="display:inline-block;vertical-align:-3px"></span> Открываю страницу…';
   const r = await api("/api/electives/refresh", {password: password || "", electives_url: $("#elUrl").value.trim()}).catch(e => ({ok: false, error: String(e)}));
   b.disabled = false; b.textContent = "Обновить варианты";
   if (!r.ok) { toast("Элективы: " + r.error, "bad"); if (r.need_password) { EL = {...(EL || {}), need_password: true}; renderElectives(); } return; }
-  EL = r.state; renderElectives(); toast(r.new ? `Новых вариантов: ${r.new}` : "Список обновлён", "ok");
+  EL = r.state; renderElectives(); toast(r.new ? `Новых вариантов: ${r.new}` : (EL.actions || []).length ? "Список обновлён" : "Кнопки записи не нашлись", (EL.actions || []).length ? "ok" : "bad");
 }
 $("#elRefresh").onclick = () => elRefresh();
 $("#elPassGo").onclick = () => elRefresh($("#elPass").value);
@@ -815,7 +844,7 @@ async function poll(){
     const st = await api("/api/state?since=" + seq); S = st; seq = st.job.seq;
     const L = st.login;
     if (L.state !== lastLogin) {
-      const ok = L.state === "ok";
+      const ok = L.state === "ok" || L.state === "offline";
       $("#loginView").classList.toggle("hidden", ok); $("#coursesView").classList.toggle("hidden", !ok); $("#user").classList.toggle("hidden", !ok);
       $("#dock").classList.toggle("hidden", !ok && st.job.state === "idle");
       $("#mainTabs").classList.toggle("hidden", !ok);
@@ -827,7 +856,7 @@ async function poll(){
     }
     if (L.state === "logging" && $("#loginBtn").disabled === false && !$("#lPass").value) { $("#loginBtn").innerHTML = '<span class="spin"></span> Вхожу по сохранённому входу…'; }
     if (L.state !== "logging" && /сохранённ/.test($("#loginBtn").textContent)) $("#loginBtn").textContent = "Войти";
-    $("#uname").textContent = L.user || L.username; $("#avatar").textContent = (L.user || L.username || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+    $("#uname").textContent = (L.user || L.username || "Гость") + (L.state === "offline" ? " · офлайн" : ""); $("#avatar").textContent = (L.user || L.username || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
     $("#rememberHint").textContent = L.can_encrypt ? "«Запомнить меня»: логин и пароль шифруются средствами Windows (DPAPI) и доступны только вашей учётной записи на этом ПК."
                                                    : "«Запомнить меня»: сохраню только cookie сессии; когда она истечёт, пароль спросят снова.";
     loadSettings(st); renderNet(st); renderJob(st.job);

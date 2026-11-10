@@ -1,0 +1,26 @@
+# Личные данные и настройки — НИКОГДА не коммитить (там сохранённый вход, куки, кэш)
+.moodle_offline/
+.env
+*.vault
+
+# Скачанные материалы курсов и расписание
+Материалы Moodle/
+_бэкапы/
+.moodle_state.json
+_журнал.log
+_не_скачано.txt
+_новое.txt
+
+# Файлы диагностики с реальных страниц (могут содержать личные данные)
+electives_page.html
+electives_text.txt
+electives_screen.png
+
+# Python / сборка
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+*.spec
+*.zip
