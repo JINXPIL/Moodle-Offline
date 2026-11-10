@@ -38,6 +38,7 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qs, parse_qsl, quote, unquote, urlencode, urljoin, urlparse, urlunparse
 
+import datadir    # где лежат данные программы и перенос с прошлой версии
 import deadlines  # календарь и дедлайны: сроки из Moodle, повестка, общий .ics
 import dl_rules   # правила скачивания (что брать, что пропускать, шаблоны имён)
 import news       # что нового: события, лента, уведомления
@@ -83,13 +84,30 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
-DATA_DIR = APP_DIR / ".moodle_offline"          # настройки, сохранённый вход, кэш обложек
-DEFAULT_OUT = APP_DIR / "Материалы Moodle"
+PLAN = datadir.make_plan(APP_DIR, FROZEN)       # у .exe данные лежат в папке пользователя, а не рядом с программой
+DATA_DIR = PLAN.data_dir                        # настройки, сохранённый вход, кэш обложек
+DEFAULT_OUT = PLAN.default_out                  # куда сохранять материалы, если путь не выбран
+
+
+def prepare_data_dir(rep=None) -> dict | None:
+    """Вызывается при запуске (окно и консоль): если это новая версия .exe, переносит данные прошлой.
+    Копирует, ничего не удаляя. → сведения о переносе или None."""
+    if DATA_DIR != PLAN.data_dir:           # тесты и свои настройки подменяют папку — не трогаем
+        return None
+    try:
+        info = datadir.migrate_if_needed(PLAN)
+    except Exception as e:                  # перенос не должен мешать запуску
+        if rep:
+            rep.log(f"Не удалось перенести данные прошлой версии: {e}", "warn")
+        return None
+    if info and rep:
+        rep.log(f"Данные прошлой версии перенесены из {info['from']} (файлов: {info['files']}). Старая папка осталась как была.")
+    return info
 
 STATE_FILE = ".moodle_state.json"   # что уже скачано (для докачки и синхронизации)
 LOG_FILE = "_журнал.log"
@@ -3910,6 +3928,9 @@ def cli_main(argv=None) -> int:
     p.add_argument("--no-search-index", action="store_true", help="не обновлять поисковый индекс после загрузки")
     p.add_argument("--save-html", action="store_true", help="сохранять исходный HTML страниц в _debug (для настройки селекторов)")
     p.add_argument("--forget", action="store_true", help="забыть сохранённый вход")
+    p.add_argument("--import-data", metavar="ПАПКА",
+                   help="перенести данные прошлой версии (папка со старым .exe или её `.moodle_offline`) и выйти")
+    p.add_argument("--data-info", action="store_true", help="показать, где хранятся данные программы, и выйти")
     p.add_argument("--schedule", nargs="?", const="2weeks", choices=("week", "next", "2weeks", "month", "semester", "custom"),
                    help="сохранить расписание для офлайна: week, next, 2weeks (по умолчанию), month, semester, custom")
     p.add_argument("--from", dest="date_from", help="начало периода для --schedule custom, ГГГГ-ММ-ДД")
@@ -3919,6 +3940,20 @@ def cli_main(argv=None) -> int:
     p.add_argument("-v", "--verbose", action="store_true", help="подробный вывод")
     args = p.parse_args(argv)
 
+    if args.data_info:
+        print(f"Режим: {PLAN.mode}\nДанные (вход, настройки, кэш): {DATA_DIR}\nМатериалы по умолчанию: {DEFAULT_OUT}\nПрограмма: {APP_DIR}")
+        return 0
+    if args.import_data:
+        try:
+            info = datadir.import_from(Path(args.import_data), datadir.Plan(PLAN.mode, APP_DIR, DATA_DIR, DEFAULT_OUT), overwrite=True)
+        except ValueError as e:
+            print(f"Ошибка: {e}")
+            return 2
+        print(f"Перенесено из {info['from']}: файлов {info['files']}.")
+        if info["out_dir"]:
+            print(f"Материалы остались на месте: {info['out_dir']}")
+        return 0
+    prepare_data_dir(ConsoleReporter(verbose=args.verbose, notify_on_recover=False))
     vault = Vault()
     settings = vault.load_settings()
     if args.forget:
