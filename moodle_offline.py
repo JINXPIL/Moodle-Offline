@@ -78,7 +78,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.0.0"
+VERSION = "1.1.1"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -936,6 +936,7 @@ class MoodleClient:
         self.page_delay = page_delay
         self.file_delay = file_delay
         self.wait_minutes = wait_minutes
+        self.no_wait = False          # True — при падении сервера не ждать, а сразу сообщить (вход при запуске)
         self.control = control or Control()
         self.rep = reporter or Reporter()
         self.debug_dir = debug_dir
@@ -1093,7 +1094,7 @@ class MoodleClient:
                     continue
                 status, _ = self.probe()
                 if status == "down":       # пропала сеть / свет / сервер — ждём, а не долбим
-                    if down_cycles >= 5 or not self.wait_for_server(f"Нет связи с {self.host}"):
+                    if self.no_wait or down_cycles >= 5 or not self.wait_for_server(f"Нет связи с {self.host}"):
                         raise NetworkDown(f"нет связи с {self.host}") from e
                     down_cycles += 1
                     attempt = 0
@@ -1109,7 +1110,7 @@ class MoodleClient:
                     raise RetriesExhausted(f"сервер раз за разом отвечает {code} на этот адрес")
                 down_cycles += 1
                 name = "Bad Gateway" if code == 502 else "Gateway Timeout" if code == 504 else "сервер недоступен"
-                if not self.wait_for_server(f"Сервер Moodle упал ({code} {name})"):
+                if self.no_wait or not self.wait_for_server(f"Сервер Moodle упал ({code} {name})"):
                     raise NetworkDown(f"сервер отвечает {code}")
                 continue
             if (code in SLEEP_STATUS and attempt < self.retries) or (code in RETRY_STATUS and attempt < 2):
@@ -1220,7 +1221,7 @@ class MoodleClient:
                      "a[href*='/auth/oauth2/login.php'], a[href*='/auth/saml2/'], a[href*='authCAS='], a[href*='/auth/cas/'], "
                      "a[href*='/auth/shibboleth/'], a[href*='/auth/mo_saml/'], a[href*='/auth/oidc/'], a[href*='/auth/esia/']")
     IDP_TEXT = re.compile(r"войти через|вход через|войти с помощью|единой учетн|единой учётн|единый вход|ЕЛК|личн\w* кабинет|"
-                          r"СевГУ ID|госуслуг|ЕСИА|\bSSO\b|keycloak|microsoft|office ?365", re.I)
+                          r"СевГУ ID|СевГУ\.?\s*Аккаунт|госуслуг|ЕСИА|\bSSO\b|keycloak|microsoft|office ?365", re.I)
 
     @staticmethod
     def _is_guest_form(form) -> bool:
@@ -1257,6 +1258,8 @@ class MoodleClient:
                 continue
             seen.add(u)
             out.append((clean_text(a.get_text(" ")) or clean_text(a.get("title")) or urlparse(u).netloc, u))
+        # у СевГУ на странице входа две кнопки: «СевГУ.Аккаунт» (единый вход вуза) и «Online EDU» — сначала вузовская
+        out.sort(key=lambda x: 0 if re.search(r"севгу|sevsu|аккаунт|единый|единой", x[0], re.I) else 1)
         return out
 
     @staticmethod
@@ -3200,10 +3203,16 @@ def extra_sync(settings, vault, client, out, rep, control, notify_on=True):
     if settings.get("schedule_auto", True) and settings.get("schedule_group"):
         try:
             import schedule as sched
-            sched.ScheduleJob(out, settings["schedule_group"], settings.get("schedule_sources") or sched.SOURCE_ORDER,
-                              rep, control, urls=settings.get("schedule_urls"), pdf=bool(settings.get("schedule_pdf", True)),
-                              use_system_proxy=bool(settings.get("use_system_proxy")),
-                              page_delay=parse_delay(settings.get("page_delay"), PAGE_DELAY)).run("2weeks")
+            sec = vault.load_secret()
+            creds = (sec["username"], sec["password"]) if sec.get("username") and sec.get("password") else None
+            job = sched.ScheduleJob(out, settings["schedule_group"], settings.get("schedule_sources") or sched.DEFAULT_SOURCES,
+                                    rep, control, urls=settings.get("schedule_urls"), pdf=bool(settings.get("schedule_pdf", True)),
+                                    use_system_proxy=bool(settings.get("use_system_proxy")),
+                                    page_delay=parse_delay(settings.get("page_delay"), PAGE_DELAY),
+                                    creds=creds, cookies=sec.get("sso_cookies"))
+            job.run("2weeks")
+            if job.cookies_out and settings.get("remember"):
+                vault.save_secret({**vault.load_secret(), "sso_cookies": job.cookies_out[-60:]})
         except (Stopped, KeyboardInterrupt):
             raise
         except Exception as e:
@@ -3214,9 +3223,12 @@ def extra_sync(settings, vault, client, out, rep, control, notify_on=True):
             sec = vault.load_secret()
             creds = client.creds or ((sec.get("username"), sec.get("password")) if sec.get("password") else None)
             e = el.Electives(out, DATA_DIR, rep, control, url=settings.get("electives_url"), creds=creds,
-                             cookies=(sec.get("portals") or {}).get(urlparse(settings.get("electives_url") or el.ELECTIVES_URL).hostname),
+                             cookies=sec.get("sso_cookies") or (sec.get("portals") or {}).get(
+                                 urlparse(settings.get("electives_url") or el.ELECTIVES_URL).hostname),
                              use_system_proxy=bool(settings.get("use_system_proxy")))
             st = e.refresh()
+            if e.cookies_out and settings.get("remember"):
+                vault.save_secret({**vault.load_secret(), "sso_cookies": e.cookies_out[-60:]})
             if st.get("new") and notify_on:
                 notify(APP_NAME, "Новые элективы: " + "; ".join(short(a["context"], 60) for a in st["new"][:3]))
         except (Stopped, KeyboardInterrupt):
@@ -3281,9 +3293,12 @@ def cli_main(argv=None) -> int:
         import schedule as sched
         out = Path(args.out or settings.get("out_dir") or DEFAULT_OUT)
         rep.open_log(out / LOG_FILE)
+        sec = Vault().load_secret()
         try:
             sched.run_cli(out, args.group or settings.get("schedule_group") or sched.DEFAULT_GROUP,
-                          settings.get("schedule_sources") or sched.SOURCE_ORDER, args.schedule, args.date_from, args.date_to,
+                          settings.get("schedule_sources") or sched.DEFAULT_SOURCES, args.schedule, args.date_from, args.date_to,
+                          creds=(sec["username"], sec["password"]) if sec.get("username") and sec.get("password") else None,
+                          cookies=sec.get("sso_cookies"),
                           pdf=bool(settings.get("schedule_pdf", True)), rep=rep, use_proxy=bool(settings.get("use_system_proxy")),
                           urls=settings.get("schedule_urls"),
                           page_delay=parse_delay(args.page_delay or settings.get("page_delay"), PAGE_DELAY))

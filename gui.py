@@ -32,6 +32,7 @@ import schedule as sched
 
 UI_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "ui"
 TASK_NAME = "MoodleOffline - ночная синхронизация"
+SSO_DOMAIN = "sevsu.ru"      # единый вход вуза: auth.sevsu.ru, iot.sevsu.ru, timetable.sevsu.ru
 HEARTBEAT_IDLE = 30
 HEARTBEAT_BUSY = 60
 
@@ -169,6 +170,8 @@ class App:
         self.shutdown = threading.Event()
         self.el_lock = threading.Lock()
         self.electives_checked = 0.0
+        self.offline = {"reason": "", "since": "", "cached": ""}   # офлайн-режим: работаем с сохранённым
+        self.relogin_tried = 0.0
 
     # ── настройки ──
     def save_settings(self):
@@ -212,6 +215,10 @@ class App:
             if time.monotonic() - self.last_poll > 25 and self.job_state == "idle" and not self.armed:
                 self.shutdown.set()
                 break
+            if (self.login_state == "offline" and self.net["status"] in ("ok", "slow") and self.vault.load_secret()
+                    and not self.offline.get("need_login")
+                    and time.monotonic() - self.relogin_tried > 120):
+                threading.Thread(target=self._recover_from_offline, daemon=True).start()
             hours = int(self.settings.get("electives_watch_hours", 6) or 6)
             if (self.settings.get("electives_watch") and self.job_state == "idle" and self._el_creds()
                     and time.monotonic() - self.electives_checked > hours * 3600):
@@ -220,7 +227,22 @@ class App:
             self.shutdown.wait(5)
 
     def on_server_up(self):
+        if self.login_state == "offline" and self.vault.load_secret() and not self.offline.get("need_login"):
+            threading.Thread(target=self._recover_from_offline, daemon=True).start()
+            return
         if self.armed and self.job_state == "idle":
+            params, self.armed = self.armed, None
+            mo.notify(mo.APP_NAME, "Moodle снова доступен! Начинаю загрузку.")
+            self.rep.log("Moodle снова доступен! Начинаю загрузку.")
+            self.start_job(params)
+
+    def _recover_from_offline(self):
+        """Moodle ожил: входим по сохранённому входу, обновляем курсы и запускаем отложенную загрузку."""
+        if time.monotonic() - self.relogin_tried < 20:
+            return
+        self.relogin_tried = time.monotonic()
+        self.try_saved_login(True)
+        if self.login_state == "ok" and self.armed and self.job_state == "idle":
             params, self.armed = self.armed, None
             mo.notify(mo.APP_NAME, "Moodle снова доступен! Начинаю загрузку.")
             self.rep.log("Moodle снова доступен! Начинаю загрузку.")
@@ -237,14 +259,18 @@ class App:
         return self.geo
 
     # ── вход ──
-    def try_saved_login(self):
+    def try_saved_login(self, from_offline=False):
         secret = self.vault.load_secret()
         if not secret:
             return
         base = secret.get("base_url") or self.settings.get("base_url")
-        self.login_state = "logging"
+        if not from_offline:
+            self.login_state = "logging"
         try:
             client = self.new_client(base)
+            client.no_wait = True          # при запуске не ждём сервер часами: нет сайта — открываемся офлайн
+            if client.probe()[0] == "down":
+                raise mo.NetworkDown("Moodle не отвечает")
             ok = False
             if secret.get("cookies"):
                 client.import_cookies(secret["cookies"])
@@ -254,13 +280,24 @@ class App:
                 client.login(secret["username"], secret["password"])
                 ok = True
             if not ok:
-                self.login_state = "idle"
+                if from_offline:   # сайт ожил, но сохранённый вход устарел — остаёмся офлайн, просим войти
+                    self.offline.update(reason="сохранённый вход устарел — нажмите «Войти»", need_login=True)
+                else:
+                    self.login_state = "idle"
                 return
             if secret.get("username") and secret.get("password"):
                 client.creds = (secret["username"], secret["password"])
             self._after_login(client, secret.get("username", ""), remember=True)
+            client.no_wait = False
+            if from_offline:
+                mo.notify(mo.APP_NAME, "Moodle снова доступен — вошёл, список курсов обновлён.")
         except Exception as e:
-            self.login_state = "idle"
+            net = isinstance(e, (mo.NetworkDown, mo.RetriesExhausted)) or "нет связи" in str(e) or "timed out" in str(e)
+            if net or from_offline:
+                if self.login_state != "offline":
+                    self.go_offline("Moodle недоступен" if net else f"вход не удался: {mo.describe_error(e)}")
+            else:
+                self.login_state = "idle"
             self.rep.log(f"Автовход не удался: {mo.describe_error(e)}", "warn")
 
     def login(self, base, username, password, remember, cookie=""):
@@ -307,15 +344,75 @@ class App:
                 self.user_name = mo.clean_text(um.get_text(" "))
         except Exception:
             pass
+        try:
+            self._save_sso([{"name": c.name, "value": c.value, "domain": c.domain, "path": c.path, "secure": bool(c.secure)}
+                            for c in client.s.cookies if client.hostname not in (c.domain or "")])
+        except Exception:
+            pass
         self.courses = client.get_courses()
         self.login_state = "ok"
+        self.offline = {"reason": "", "since": "", "cached": ""}
+        if remember:
+            self.save_offline_cache()
         self.rep.log(f"Вход выполнен. Курсов: {len(self.courses)}.")
+
+    # ── офлайн-режим: Moodle не работает, а программа — да ──
+    OFFLINE_FILE = mo.DATA_DIR / "offline.json"
+
+    def save_offline_cache(self):
+        try:
+            mo.fmkdir(mo.DATA_DIR)
+            mo.write_text_atomic(self.OFFLINE_FILE, json.dumps({
+                "user": self.user_name, "username": self.settings.get("username", ""),
+                "base": self.client.base if self.client else self.settings.get("base_url"),
+                "saved": datetime.now().strftime("%d.%m.%Y %H:%M"),
+                "courses": [c.to_dict() for c in self.courses]}, ensure_ascii=False))
+        except Exception:
+            pass
+
+    def load_offline_cache(self) -> dict:
+        try:
+            with mo.fopen(self.OFFLINE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    def go_offline(self, reason="без входа"):
+        """Показываем всё сохранённое: курсы (из кэша или из папки загрузок), файлы, расписание, элективы."""
+        cache = self.load_offline_cache()
+        courses = []
+        for d in cache.get("courses", []):
+            try:
+                courses.append(mo.Course(**{k: v for k, v in d.items() if k in mo.Course.__dataclass_fields__}))
+            except TypeError:
+                pass
+        if not courses:   # кэша нет — собираем карточки из уже скачанного
+            out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
+            try:
+                with mo.fopen(out / mo.STATE_FILE, "r", encoding="utf-8") as f:
+                    for cid, sc in (json.load(f).get("courses") or {}).items():
+                        if str(cid).isdigit():
+                            courses.append(mo.Course(id=int(cid), fullname=sc.get("name") or Path(sc.get("dir") or str(cid)).name))
+            except (OSError, ValueError):
+                pass
+        with self.lock:
+            if self.login_state == "ok":
+                return
+            self.courses = courses
+            self.user_name = cache.get("user") or self.settings.get("username", "")
+            self.offline = {"reason": reason, "since": datetime.now().strftime("%H:%M"), "cached": cache.get("saved", "")}
+            self.login_state = "offline"
+        self.rep.log(f"Офлайн-режим ({reason}): курсов в сохранённом списке — {len(courses)}.")
 
     def logout(self):
         self.vault.forget()
         self.settings.pop("remember", None)
         self.save_settings()
         self.client, self.courses, self.login_state, self.user_name = None, [], "idle", ""
+        try:
+            self.OFFLINE_FILE.unlink()
+        except OSError:
+            pass
 
     # ── курсы ──
     def course_list(self):
@@ -380,7 +477,9 @@ class App:
             d["downloaded"] = False
             return d
         if not self.client:
-            return {"error": "нужно войти в Moodle"}
+            return {"error": "Moodle сейчас недоступен — этот курс ещё не открывался и не скачивался. "
+                             "Как только сайт оживёт, программа войдёт сама." if self.login_state == "offline"
+                    else "нужно войти в Moodle"}
         if self.job_state != "idle":
             return {"error": "идёт загрузка — структуру курса покажу, когда она закончится"}
         known = next((c for c in self.courses if c.id == cid), None)
@@ -405,8 +504,11 @@ class App:
     def schedule_status(self):
         out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
         st = self.settings
-        info = {"group": st.get("schedule_group") or sched.DEFAULT_GROUP,
-                "sources": st.get("schedule_sources") or list(sched.SOURCE_ORDER),
+        slug = st.get("schedule_group") or sched.DEFAULT_GROUP
+        info = {"group": slug, "group_name": sched.group_name(slug),
+                "sources": st.get("schedule_sources") or list(sched.DEFAULT_SOURCES),
+                "order": list(sched.SOURCE_ORDER), "short": {k: v["short"] for k, v in sched.SOURCES.items()},
+                "auth": {k: bool(v.get("auth")) for k, v in sched.SOURCES.items()}, "has_creds": self._el_creds() is not None,
                 "urls": {k: (st.get("schedule_urls") or {}).get(k) or v["url"] for k, v in sched.SOURCES.items()},
                 "titles": {k: v["title"] for k, v in sched.SOURCES.items()},
                 "pdf": bool(st.get("schedule_pdf", True)), "auto": bool(st.get("schedule_auto", True)),
@@ -421,6 +523,30 @@ class App:
             pass
         return info
 
+    def schedule_groups(self, dept=None, refresh=False):
+        """Отделы и группы schedule.sevsu.ru для выпадающего списка; кэш на неделю — работает и офлайн."""
+        cache = sched.load_groups_cache()
+        fresh = time.time() - cache.get("ts", 0) < 7 * 86400 and not refresh
+        err = ""
+        try:
+            c = mo.MoodleClient(sched.SEVSU_BASE, page_delay=(0.2, 0.5), wait_minutes=1, control=mo.Control(),
+                                reporter=self.rep, use_system_proxy=bool(self.settings.get("use_system_proxy")))
+            c.no_wait = True
+            if not cache.get("departments") or not fresh:
+                deps, cur = sched.fetch_departments(c, self.settings.get("schedule_group") or sched.DEFAULT_GROUP)
+                if deps:
+                    cache.update(departments=deps, current=cur or cache.get("current", ""), ts=time.time())
+            dept = dept or cache.get("current") or ""
+            if dept and (dept not in cache["groups"] or not fresh or dept != cache.get("current")):
+                cache["groups"][dept] = sched.fetch_groups(c, dept)
+            sched.save_groups_cache(cache)
+        except Exception as e:
+            err = mo.describe_error(e)
+            dept = dept or cache.get("current") or ""
+        return {"ok": bool(cache.get("departments")), "error": err, "offline": bool(err),
+                "departments": cache.get("departments", []), "current": dept,
+                "groups": cache["groups"].get(dept, []), "selected": self.settings.get("schedule_group") or sched.DEFAULT_GROUP}
+
     # ── элективы ──
     def _el_creds(self, password=None):
         if password:
@@ -432,24 +558,44 @@ class App:
             return (sec["username"], sec["password"])
         return None
 
+    def _sso_cookies(self) -> list:
+        """Cookie единого входа СевГУ (auth.sevsu.ru и сайты вуза) — общие для элективов и личного расписания."""
+        sec = self.vault.load_secret()
+        seen, out = set(), []
+        for cs in [sec.get("sso_cookies") or []] + list((sec.get("portals") or {}).values()):
+            for c in cs or []:
+                k = (c.get("domain"), c.get("name"), c.get("path"))
+                if k not in seen:
+                    seen.add(k)
+                    out.append(c)
+        return out
+
+    def _save_sso(self, cookies):
+        if not cookies or not self.settings.get("remember"):
+            return
+        try:
+            sec = self.vault.load_secret()
+            merged = {(c.get("domain"), c.get("name"), c.get("path")): c for c in (sec.get("sso_cookies") or [])}
+            for c in cookies:
+                if not (c.get("domain") or "").lstrip(".").endswith(SSO_DOMAIN) or "do.sevsu.ru" in c.get("domain", ""):
+                    continue
+                merged[(c.get("domain"), c.get("name"), c.get("path"))] = c
+            sec["sso_cookies"] = list(merged.values())[-60:]
+            sec.pop("portals", None)
+            self.vault.save_secret(sec)
+        except Exception:
+            pass
+
     def _electives(self, password=None):
         url = self.settings.get("electives_url") or el.ELECTIVES_URL
         host = mo.urlparse(url).hostname
-        sec = self.vault.load_secret()
         return el.Electives(Path(self.settings.get("out_dir") or mo.DEFAULT_OUT), mo.DATA_DIR, self.rep, mo.Control(),
-                            url=url, creds=self._el_creds(password), cookies=(sec.get("portals") or {}).get(host),
+                            url=url, creds=self._el_creds(password), cookies=self._sso_cookies(),
                             use_system_proxy=bool(self.settings.get("use_system_proxy")),
                             page_delay=mo.parse_delay(self.settings.get("page_delay"), mo.PAGE_DELAY)), host
 
     def _keep_portal_cookies(self, e, host):
-        if self.settings.get("remember"):
-            try:
-                sec = self.vault.load_secret()
-                portals = sec.get("portals") or {}
-                portals[host] = e.portal.c.export_cookies()
-                self.vault.save_secret({**sec, "portals": portals})
-            except Exception:
-                pass
+        self._save_sso(e.cookies_out or e.portal.cookies())
 
     def electives_state(self):
         e, _ = self._electives()
@@ -491,6 +637,13 @@ class App:
         with self.lock:
             if self.job_state != "idle":
                 return {"ok": False, "error": "загрузка уже идёт"}
+            moodle_job = params.get("kind") not in ("schedule",)
+            if moodle_job and self.login_state == "offline" and not self.client:
+                if self.net["status"] == "down" or self.vault.load_secret():
+                    self.armed = params
+                    self.rep.log("Moodle недоступен — загрузка начнётся сама, как только сайт оживёт и я войду.")
+                    return {"ok": True, "armed": True}
+                return {"ok": False, "error": "войдите в Moodle, чтобы скачивать материалы", "need_login": True}
             if params.get("wait_for_server") and self.net["status"] == "down":
                 self.armed = params
                 self.rep.log("Сервер недоступен. Загрузка начнётся сама, как только Moodle оживёт.")
@@ -558,11 +711,15 @@ class App:
         st = self.settings
         try:
             job = sched.ScheduleJob(Path(st.get("out_dir") or mo.DEFAULT_OUT), st.get("schedule_group") or sched.DEFAULT_GROUP,
-                                    st.get("schedule_sources") or sched.SOURCE_ORDER, self.rep, self.control,
+                                    st.get("schedule_sources") or sched.DEFAULT_SOURCES, self.rep, self.control,
                                     urls=st.get("schedule_urls"), pdf=bool(st.get("schedule_pdf", True)),
                                     use_system_proxy=bool(st.get("use_system_proxy")),
-                                    page_delay=mo.parse_delay(st.get("page_delay"), mo.PAGE_DELAY))
-            res = job.run(params.get("range", "2weeks"), params.get("from"), params.get("to"))
+                                    page_delay=mo.parse_delay(st.get("page_delay"), mo.PAGE_DELAY),
+                                    creds=self._el_creds(), cookies=self._sso_cookies())
+            try:
+                res = job.run(params.get("range", "2weeks"), params.get("from"), params.get("to"))
+            finally:
+                self._save_sso(job.cookies_out)
             text = (f"Расписание сохранено за {mo.fmt_dur(time.monotonic() - t0)}: {res['total']} пар "
                     f"({res['range'][0]} — {res['range'][1]})")
             self.last_result = {"ok": True, "text": text, "aborted": None, "kind": "schedule"}
@@ -716,6 +873,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.course_list())
         if u.path == "/api/course":
             return self._send(200, APP.course_structure(int(q.get("id", 0) or 0), live=q.get("live") == "1"))
+        if u.path == "/api/schedule/groups":
+            return self._send(200, APP.schedule_groups(q.get("dept") or None, bool(q.get("refresh"))))
         if u.path == "/api/schedule":
             return self._send(200, APP.schedule_status())
         if u.path == "/api/electives":
@@ -748,6 +907,13 @@ class Handler(BaseHTTPRequestHandler):
                                              bool(b.get("remember")), b.get("cookie", "")))
         if p == "/api/logout":
             APP.logout()
+            return self._send(200, {"ok": True})
+        if p == "/api/offline":
+            APP.go_offline(b.get("reason") or "без входа")
+            return self._send(200, {"ok": True})
+        if p == "/api/relogin":
+            if APP.login_state == "offline":
+                APP.login_state, APP.client = "idle", None
             return self._send(200, {"ok": True})
         if p == "/api/refresh_courses":
             if APP.client and APP.job_state == "idle":
@@ -785,6 +951,8 @@ class Handler(BaseHTTPRequestHandler):
             for k in ("schedule_group", "schedule_sources", "schedule_urls", "schedule_pdf", "schedule_auto"):
                 if k in b:
                     APP.settings[k] = b[k]
+            if b.get("schedule_group"):   # можно писать по-русски, как на сайте, — храним код из адреса
+                APP.settings["schedule_group"] = sched.resolve_group(b["schedule_group"])
             APP.save_settings()
             if b.get("start"):
                 return self._send(200, APP.start_job({"kind": "schedule", "range": b.get("range", "2weeks"),
@@ -857,7 +1025,9 @@ class Handler(BaseHTTPRequestHandler):
             "version": mo.VERSION,
             "login": {"state": APP.login_state, "error": APP.login_error, "user": APP.user_name,
                       "base": APP.client.base if APP.client else st.get("base_url"), "username": st.get("username", ""),
-                      "remember": bool(st.get("remember", True)), "can_encrypt": APP.vault.can_encrypt},
+                      "remember": bool(st.get("remember", True)), "can_encrypt": APP.vault.can_encrypt,
+                      "offline": APP.offline if APP.login_state == "offline" else None,
+                      "has_cache": APP.OFFLINE_FILE.exists()},
             "net": APP.net, "geo": APP.geo,
             "job": {"state": APP.job_status(), "kind": APP.job_kind, "armed": bool(APP.armed),
                     "started": APP.job_started, "result": APP.last_result, **snap},

@@ -18,47 +18,314 @@ import hashlib
 import html as htmllib
 import json
 import os
+import random
 import re
 import subprocess
 import tempfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlencode, urljoin, urlparse, urlunparse
 
 from bs4 import BeautifulSoup
 
 import moodle_offline as mo
+import electives as el
 
 SCHEDULE_DIR = "Расписание"
 DEFAULT_GROUP = "ib-b-25-2-o"
 MSK = timezone(timedelta(hours=3))   # Севастополь/Москва: UTC+3 без перехода на летнее время
 
 SOURCES = {
-    "ysturasp": {
-        "title": "ysturasp.ru — зеркало расписания СевГУ (любые недели)",
-        "url": "https://ysturasp.ru/schedule/sevsu?group={group}&week={week}",
-        "current": "https://ysturasp.ru/schedule/sevsu?group={group}",
-        "site": "https://ysturasp.ru/schedule/sevsu?group={group}",
-    },
     "schedule": {
-        "title": "schedule.sevsu.ru — официальное расписание",
+        "title": "schedule.sevsu.ru — официальное расписание группы (все потоки и подгруппы)",
+        "short": "Группа (официальное)",
         "url": "https://schedule.sevsu.ru/groups/{group}",
         "site": "https://schedule.sevsu.ru/groups/{group}",
     },
     "timetable": {
-        "title": "timetable.sevsu.ru — официальное расписание (старый сайт)",
+        "title": "timetable.sevsu.ru — личное расписание студента (нужен вход СевГУ)",
+        "short": "Личное (после входа)",
         "url": "https://timetable.sevsu.ru/timetablestudent",
         "site": "https://timetable.sevsu.ru/timetablestudent",
+        "auth": True,
+    },
+    "ysturasp": {
+        "title": "ysturasp.ru — зеркало расписания СевГУ (запасной источник)",
+        "short": "Зеркало ysturasp",
+        "url": "https://ysturasp.ru/schedule/sevsu?group={group}&week={week}",
+        "current": "https://ysturasp.ru/schedule/sevsu?group={group}",
+        "site": "https://ysturasp.ru/schedule/sevsu?group={group}",
     },
 }
-SOURCE_ORDER = ["ysturasp", "schedule", "timetable"]
+SOURCE_ORDER = ["schedule", "timetable", "ysturasp"]      # порядок важен: при совпадении пар главнее первый
+DEFAULT_SOURCES = ["schedule", "timetable"]
+
+# Официальный сайт schedule.sevsu.ru сам берёт данные JSON-ом по неделям (/api/schedule) — читаем так же:
+# быстро, точно и любую неделю семестра. Значения — из кода сайта (типы занятий, звонки).
+SEVSU_BASE = "https://schedule.sevsu.ru"
+SEVSU_API_V = "6.2"
+SEVSU_TYPES = ["Лекция", "Лабораторная (ЛЗ)", "Практика (ПЗ)", "Зачёт", "Дифференцированный зачёт",
+               "Консультация перед экзаменом", "Экзамен", "ВУД"]
+BELLS = {1: ("08:30", "10:00"), 2: ("10:10", "11:40"), 3: ("11:50", "13:20"), 4: ("14:00", "15:30"),
+         5: ("15:40", "17:10"), 6: ("17:20", "18:50"), 7: ("19:00", "20:30"), 8: ("20:40", "22:10")}
+PDF_WEEKS_MAX = 6          # снимков «как на сайте» (PDF) — не больше стольких недель за раз: дальше хватает офлайн-страницы
+
+_TRANSLIT = dict(zip("абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+                     ["a", "b", "v", "g", "d", "e", "e", "zh", "z", "i", "j", "k", "l", "m", "n", "o", "p", "r", "s", "t",
+                      "u", "f", "h", "c", "ch", "sh", "shch", "", "y", "", "e", "yu", "ya"]))
+
+
+def group_slug(group: str) -> str:
+    """«ИБ/б-25-2-о» → «ib-b-25-2-o» (как в адресе сайта); код из адреса возвращается как есть."""
+    g = (group or "").strip().lower()
+    if re.fullmatch(r"[a-z0-9\-]+", g):
+        return g
+    return re.sub(r"-{2,}", "-", re.sub(r"[^a-z0-9]+", "-", "".join(_TRANSLIT.get(ch, ch) for ch in g))).strip("-")
+
+
+GROUPS_CACHE = mo.DATA_DIR / "sevsu_groups.json"   # список отделов и групп schedule.sevsu.ru (для выбора и офлайна)
+
+
+def load_groups_cache() -> dict:
+    try:
+        with mo.fopen(GROUPS_CACHE, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        d.setdefault("groups", {})
+        return d
+    except (OSError, ValueError):
+        return {"departments": [], "groups": {}, "current": ""}
+
+
+def save_groups_cache(d: dict):
+    try:
+        mo.fmkdir(GROUPS_CACHE.parent)
+        mo.write_text_atomic(GROUPS_CACHE, json.dumps(d, ensure_ascii=False))
+    except OSError:
+        pass
+
+
+def _norm_group(g: str) -> str:
+    return re.sub(r"[\s/_\-]+", "", (g or "").lower()).replace("ё", "е")
+
+
+def resolve_group(text: str) -> str:
+    """Группа как угодно: «ИБ/б-25-2-о», «иб/б-25-2о», «ib-b-25-2-o» → код из адреса сайта (по списку СевГУ, если он есть)."""
+    t = (text or "").strip()
+    n = _norm_group(t)
+    for gs in load_groups_cache().get("groups", {}).values():
+        for g in gs:
+            if n in (_norm_group(g.get("name")), _norm_group(g.get("slug"))):
+                return g.get("slug") or group_slug(t)
+    return group_slug(t)
+
+
+def group_name(slug: str) -> str:
+    for gs in load_groups_cache().get("groups", {}).values():
+        for g in gs:
+            if g.get("slug") == slug:
+                return g.get("name", "")
+    return ""
+
+
+def fetch_departments(c, slug=DEFAULT_GROUP) -> tuple[list, str]:
+    """Отделы (институты/факультеты) со страницы группы: они есть прямо в HTML сайта."""
+    r = c.request("GET", f"{SEVSU_BASE}/groups/{slug}", kind="page")
+    soup = BeautifulSoup(c._text(r), mo.PARSER)
+    deps = [{"id": o.get("value", ""), "name": mo.clean_text(o.get_text())}
+            for o in soup.select("#department-select option") if o.get("value")]
+    m = re.search(r"\bdepartment\s*:\s*['\"](\d+)['\"]", c._text(r))
+    return deps, (m.group(1) if m else "")
+
+
+def fetch_groups(c, dept: str, section=0) -> list:
+    r = c.request("GET", f"{SEVSU_BASE}/api/groups?" + urlencode({"v": SEVSU_API_V, "section": section, "department": dept}),
+                  kind="ajax")
+    d = json.loads(c._text(r))
+    return [{"name": g.get("group_name", ""), "slug": g.get("group_slug", ""), "weeks": g.get("weeks") or []}
+            for g in d.get("groups", [])] if d.get("ok") else []
+
+
+def academic_week1(today: date | None = None, start_year: int | None = None) -> date:
+    """Понедельник недели, в которую попало 1 сентября (так нумерует недели сайт СевГУ: «Неделя 1 (31.08-06.09)»)."""
+    t = today or date.today()
+    y = start_year or (t.year if t.month >= 8 else t.year - 1)
+    d = date(y, 9, 1)
+    return d - timedelta(days=d.weekday())
+
+
+def sevsu_lesson(x: dict) -> dict:
+    """Пара из ответа /api/schedule → формат программы."""
+    n = int(x.get("n") or 0)
+    st, en = BELLS.get(n, ("", ""))
+    sg = str(x.get("subgroup") if x.get("subgroup") is not None else "0").strip()
+    t = x.get("type")
+    typ = SEVSU_TYPES[t] if isinstance(t, int) and 0 <= t < len(SEVSU_TYPES) else str(t or "")
+    room = mo.clean_text(x.get("location") or "")
+    if room.lower() in ("д", "дист", "до", "дистант"):
+        room = "Дистанционно"
+    le = {"date": str(x.get("date", ""))[:10], "start": st, "end": en, "pair": n,
+          "subject": mo.clean_text(x.get("lesson") or ""), "type": typ, "teacher": mo.clean_text(x.get("teacher") or ""),
+          "room": room, "address": "", "subgroup": sg if sg.isdigit() and sg != "0" else "",
+          "stream": "" if sg.isdigit() else sg, "note": ""}
+    le["kind"] = kind_of(typ)
+    return le
+
+
+def _fmt_iso_msk(s: str) -> str:
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(MSK).strftime("%d.%m.%Y %H:%M")
+    except (ValueError, AttributeError):
+        return s or ""
+
+
+# ── личное расписание timetable.sevsu.ru: «2. Предмет. Лекц., Иванов И. И. (I-В-411) (группа / Уч.гр. поток)» ──
+_DAY_HDR = re.compile(r"^(?:(понедельник|вторник|среда|четверг|пятница|суббота|воскресенье|сегодня|завтра|вчера)"
+                      r"\s*[•·,\-–—|]?\s*)?(\d{1,2})\s+(январ|феврал|март|апрел|ма|июн|июл|август|сентябр|октябр|ноябр|декабр)"
+                      r"[а-яё]*\.?(?:\s+(\d{4}))?(?:\s*г\.?)?(?:\s*[•·,\-–—|]?\s*(понедельник|вторник|среда|четверг|пятница|суббота|воскресенье))?$", re.I)
+_PAIR_START = re.compile(r"^([1-8])\s*(?:[.)]|пара\b[.:,]?)\s*(.*)$", re.I)
+_SUBG_MARK = re.compile(r"(?:^|\s)(I{1,3}|[1-3])\s*(?:-?я\s*)?(?:подгрупп\w*|п/г)\s*:?", re.I)
+_TYPE_ABBR = re.compile(r"(?:^|[.,;]\s*)(лекц\w*\.?|лек\.|л\.|пз|пр\.?|практ\w*\.?|лз|лр|лаб\w*\.?|сем\w*\.?|"
+                        r"зач[её]т\w*|экз\w*\.?|конс\w*\.?)\s*(?=[,;(]|$)", re.I)
+_NO_LESSONS = re.compile(r"нет занятий|занятий нет|выходной", re.I)
+
+
+def _norm_type(t: str) -> str:
+    t = (t or "").lower().strip(" .")
+    if re.match(r"лаб|лз|лр", t):
+        return "Лабораторная (ЛЗ)"
+    if re.match(r"пр|пз|практ", t):
+        return "Практика (ПЗ)"
+    if re.match(r"лек|л$", t):
+        return "Лекция"
+    if t.startswith("сем"):
+        return "Семинар"
+    if t.startswith("зач"):
+        return "Зачёт"
+    if t.startswith("экз"):
+        return "Экзамен"
+    if t.startswith("конс"):
+        return "Консультация"
+    return t
+
+
+def _year_for(month: int, day: int, ref: date) -> date | None:
+    best = None
+    for y in (ref.year - 1, ref.year, ref.year + 1):
+        try:
+            d = date(y, month, day)
+        except ValueError:
+            continue
+        if best is None or abs((d - ref).days) < abs((best - ref).days):
+            best = d
+    return best
+
+
+def _pair_part(text: str, own_group: str = "") -> dict:
+    """«Физические основы защиты информации. ЛЗ, Серяк Е. С. (I-А-503) (ИБ/б-25-2-о / Уч.гр. ОТРИБ/б-25-1-о)»"""
+    groups = re.findall(r"\(([^()]*)\)", text)
+    main = mo.clean_text(re.sub(r"\([^()]*\)", " ", text))
+    room = next((g.strip() for g in groups if "/" not in g and re.search(r"\d|дист|онлайн|^\s*д\s*$|спорт|стадион|бассейн", g, re.I)), "")
+    if room.lower() in ("д", "дист"):
+        room = "Дистанционно"
+    stream = ""
+    for g in groups:
+        m = re.search(r"уч\.?\s*гр\.?\s*:?\s*([^/;,]+/[^/;,\s]+)", g, re.I)
+        if m:
+            stream = m.group(1).strip()
+        elif "/" in g and not stream:
+            cand = [c.strip() for c in g.split(" / ") if c.strip()]
+            other = [c for c in cand if c.lower() != own_group.lower() and group_slug(c) != group_slug(own_group)]
+            if other and len(cand) > 1:
+                stream = other[-1]
+    subject, typ, teacher = main, "", ""
+    m = _TYPE_ABBR.search(main)
+    if m:
+        subject, typ, teacher = main[:m.start()], _norm_type(m.group(1)), main[m.end():]
+    else:
+        mt = re.search(r",\s*([А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?\s+[А-ЯЁ]\.\s?[А-ЯЁ]\.?|"
+                       r"[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)\s*$", main)
+        if mt:
+            subject, teacher = main[:mt.start()], mt.group(1)
+    return {"subject": subject.strip(" .,;:"), "type": typ, "teacher": teacher.strip(" ,;:"), "room": room, "stream": stream}
+
+
+def parse_pairs(html_text: str, ref: date | None = None, own_group: str = "") -> tuple[list[dict], dict]:
+    """Личное расписание: дни-заголовки («Понедельник • 2 ноября») и пары «N. Предмет. Тип, Преподаватель (ауд.)»."""
+    ref = ref or date.today()
+    lines = _page_lines(html_text)
+    info = {"week": None}
+    m = re.search(r"(\d{1,2})\s*(?:-?я)?\s*недел|недел[яи]\s*№?\s*(\d{1,2})", " ".join(lines[:300]), re.I)
+    if m:
+        info["week"] = int(m.group(1) or m.group(2))
+    lessons, cur_date, buf = [], None, None
+
+    def flush():
+        nonlocal buf
+        if not buf or not cur_date:
+            buf = None
+            return
+        n, text = buf
+        tm = re.search(rf"{_TIME}\s*[-–—]\s*{_TIME}", text)
+        st, en = BELLS.get(n, ("", ""))
+        if tm:
+            st, en = f"{int(tm.group(1)):02d}:{tm.group(2)}", f"{int(tm.group(3)):02d}:{tm.group(4)}"
+            text = text[:tm.start()] + " " + text[tm.end():]
+        marks = list(_SUBG_MARK.finditer(text))
+        parts = []
+        if marks:
+            head = text[:marks[0].start()].strip(" .,;:")
+            if len(head) > 3:
+                parts.append(("", head))
+            for i, mk in enumerate(marks):
+                seg = text[mk.end(): marks[i + 1].start() if i + 1 < len(marks) else len(text)]
+                sg = mk.group(1).upper()
+                parts.append(({"I": "1", "II": "2", "III": "3"}.get(sg, sg), seg))
+        else:
+            parts.append(("", text))
+        for sg, seg in parts:
+            p = _pair_part(seg, own_group)
+            if not p["subject"] or len(p["subject"]) < 2:
+                continue
+            le = {"date": cur_date, "start": st, "end": en, "pair": n, "subject": p["subject"], "type": p["type"],
+                  "teacher": p["teacher"], "room": p["room"], "address": "", "subgroup": sg, "stream": p["stream"], "note": ""}
+            le["kind"] = kind_of(le["type"])
+            lessons.append(le)
+        buf = None
+
+    for ln in lines:
+        s = ln.strip()
+        low = s.lower()
+        hd = _DAY_HDR.match(low)
+        dm = _DATE_FULL.match(s)
+        if hd or dm:
+            flush()
+            if hd:
+                mon = next(v for k, v in MONTHS.items() if hd.group(3).lower().startswith(k))
+                d = date(int(hd.group(4)), mon, int(hd.group(2))) if hd.group(4) else _year_for(mon, int(hd.group(2)), ref)
+            else:
+                d = date(int(dm.group(3)), int(dm.group(2)), int(dm.group(1)))
+            cur_date = d.isoformat() if d else None
+            continue
+        if _NO_LESSONS.search(low) and len(s) < 60:
+            flush()
+            continue
+        pm = _PAIR_START.match(s)
+        if pm and cur_date and (re.search(r"[а-яё]{3}", pm.group(2), re.I) or not pm.group(2)):
+            flush()
+            buf = (int(pm.group(1)), pm.group(2))
+            continue
+        if buf is not None and not _NOISE.search(s):
+            buf = (buf[0], (buf[1] + " " + s).strip())
+    flush()
+    return lessons, info
+
 
 WEEKDAYS = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")
 WD_SHORT = {"пн": 0, "вт": 1, "ср": 2, "чт": 3, "пт": 4, "сб": 5, "вс": 6}
 MONTHS = {"январ": 1, "феврал": 2, "март": 3, "апрел": 4, "ма": 5, "июн": 6, "июл": 7, "август": 8,
           "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12}
 
-_DATE_FULL = re.compile(r"^(?:[а-яё]+[,\s]+)?(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s*г\.?)?(?:[,\s]+[а-яё]+)?$", re.I)
+_DATE_FULL = re.compile(r"^(?:[а-яё]+[,\s]+)?(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s*г\.?)?(?:[,\s]+[а-яё]+)?(?:\s*\((?:сегодня|завтра|вчера)\))?$", re.I)
 _DATE_SHORT = re.compile(r"^(?:(понедельник|вторник|среда|четверг|пятница|суббота|воскресенье|пн|вт|ср|чт|пт|сб|вс)[,\s]+)"
                          r"(\d{1,2})\.(\d{1,2})\.?$", re.I)
 _DATE_WORDS = re.compile(r"^(?:[а-яё]+[,\s]+)?(\d{1,2})\s+(январ|феврал|март|апрел|ма|июн|июл|август|сентябр|октябр|ноябр|декабр)"
@@ -210,7 +477,7 @@ def _mkdate(y, m, d):
 
 def lesson_key(le: dict) -> str:
     subj = re.sub(r"[^а-яёa-z0-9]", "", le.get("subject", "").lower())[:40]
-    return f"{le['date']}|{le['start']}|{subj}|{le.get('subgroup', '')}"
+    return f"{le['date']}|{le['start']}|{subj}|{le.get('subgroup', '') or le.get('stream', '')}"
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -312,9 +579,10 @@ def resolve_range(kind: str, start: str | None = None, end: str | None = None, t
 # ════════════════════════════════════════════════════════════════════════════
 class ScheduleJob:
     def __init__(self, out_dir: Path, group: str, sources: list[str], rep: mo.Reporter, control: mo.Control,
-                 urls: dict | None = None, pdf=True, use_system_proxy=False, page_delay=mo.PAGE_DELAY):
+                 urls: dict | None = None, pdf=True, use_system_proxy=False, page_delay=mo.PAGE_DELAY,
+                 creds=None, cookies=None):
         self.root = Path(out_dir) / SCHEDULE_DIR
-        self.group = (group or DEFAULT_GROUP).strip()
+        self.group = resolve_group((group or DEFAULT_GROUP).strip()) or DEFAULT_GROUP
         self.sources = [s for s in SOURCE_ORDER if s in sources]
         self.urls = {k: (urls or {}).get(k) or SOURCES[k]["url"] for k in SOURCES}
         self.rep, self.control = rep, control
@@ -325,6 +593,10 @@ class ScheduleJob:
         self.clients = {}
         self.stats = {"pages": 0, "lessons": 0, "snapshots": 0}
         self.browser_fail = 0
+        self.creds = creds                  # (логин, пароль) учётной записи СевГУ — для личного расписания
+        self.cookies = cookies or []        # сохранённые cookie единого входа (чтобы не вводить пароль каждый раз)
+        self.cookies_out = None             # свежие cookie после входа — программа сохранит их в зашифрованное хранилище
+        self.site_info = {}
 
     def _browser_result(self, ok):
         """Если фоновый браузер дважды подряд не справился — отключаем его до конца, чтобы не ждать зря."""
@@ -366,14 +638,14 @@ class ScheduleJob:
         self.stats["pages"] += 1
         return html_text, how
 
-    def snapshot(self, source, label, url, html_text):
+    def snapshot(self, source, label, url, html_text, pdf=True):
         d = self.root / "снимки" / source
         mo.fmkdir(d)
         name = mo.safe_filename(label)
         if html_text:
             mo.write_text_atomic(d / f"{name}.html", _with_base(html_text, url))
             self.stats["snapshots"] += 1
-        if self.pdf and self.browser:
+        if self.pdf and self.browser and pdf:
             self.control.checkpoint()
             ok = print_url_pdf(self.browser, url, d / f"{name}.pdf")
             self._browser_result(ok)
@@ -389,8 +661,17 @@ class ScheduleJob:
             self.control.checkpoint()
             self.rep.log(f"━━━ {SOURCES[src]['title']} ━━━")
             try:
-                lessons = self._run_weekly(src, a, b, kind) if "{week}" in self.urls[src] or "{date}" in self.urls[src] \
-                    or "{monday}" in self.urls[src] else self._run_single(src, a, b)
+                if src == "schedule" and self.urls[src] == SOURCES[src]["url"]:
+                    lessons = self._run_sevsu(a, b, kind)
+                elif src == "timetable":
+                    lessons = self._run_personal(a, b, kind)
+                    if lessons is None:
+                        results[src] = None
+                        continue
+                elif "{week}" in self.urls[src] or "{date}" in self.urls[src] or "{monday}" in self.urls[src]:
+                    lessons = self._run_weekly(src, a, b, kind)
+                else:
+                    lessons = self._run_single(src, a, b)
                 self._store(src, a, b, lessons)
                 results[src] = len(lessons)
                 self.rep.log(f"  ✓ пар найдено: {len(lessons)}")
@@ -406,7 +687,7 @@ class ScheduleJob:
 
     def _url(self, src, week=None, mon: date | None = None):
         u = self.urls[src]
-        return (u.replace("{group}", self.group).replace("{week}", str(week if week is not None else ""))
+        return (u.replace("{group}", group_slug(self.group)).replace("{week}", str(week if week is not None else ""))
                  .replace("{date}", (mon or date.today()).isoformat()).replace("{monday}", (mon or date.today()).isoformat()))
 
     def _run_single(self, src, a, b):
@@ -467,6 +748,241 @@ class ScheduleJob:
             m += timedelta(days=7)
         return out
 
+
+    # ── schedule.sevsu.ru: JSON по неделям, как берёт его сам сайт ──
+    def _run_sevsu(self, a, b, kind):
+        page_url = self._url("schedule")
+        self.rep.log(f"  {page_url}")
+        c = self.client(page_url)
+        r = c.request("GET", page_url, kind="page")
+        t = c._text(r) if r.status_code < 400 else ""
+        name = re.search(r"\bgroup\s*:\s*['\"]([^'\"]+)['\"]", t)
+        if not name:
+            self.rep.log("  страница группы без данных для запроса — читаю саму страницу (через браузер)", "warn")
+            return self._run_single("schedule", a, b)
+        name = name.group(1)
+        ym = re.search(r"PERIOD_START_YEAR\s*=\s*(\d{4})", t)
+        sm = re.search(r"SCHEDULE_SECTION\s*=\s*(\d+)", t)
+        section = int(sm.group(1)) if sm else 0
+        w1 = academic_week1(start_year=int(ym.group(1)) if ym else None)
+        self.site_info.update(group_name=name, week1=w1.isoformat())
+        weeks_on_site = None
+        dm = re.search(r"\bdepartment\s*:\s*['\"](\d+)['\"]", t)
+        if dm:   # какие недели уже есть на сайте — остальные не запрашиваем зря
+            try:
+                gs = fetch_groups(c, dm.group(1), section)
+                cache = load_groups_cache()
+                cache["groups"][dm.group(1)] = gs
+                cache["current"] = cache.get("current") or dm.group(1)
+                save_groups_cache(cache)
+                me = next((g for g in gs if g["slug"] == self.group or g["name"] == name), None)
+                if me and me.get("weeks"):
+                    weeks_on_site = set(me["weeks"])
+            except (mo.NetworkDown, mo.Stopped):
+                raise
+            except Exception:
+                pass
+        try:   # список потоков (учебных групп по выбору) — для фильтра «мои потоки» в офлайн-расписании
+            rs = c.request("GET", f"{SEVSU_BASE}/api/subgroups?" + urlencode({"v": SEVSU_API_V, "group": name}),
+                           kind="ajax", referer=page_url)
+            sub = json.loads(c._text(rs))
+            if sub.get("ok"):
+                streams = [{"code": g, "lesson": x.get("lesson", "")} for x in sub.get("subgroups", [])
+                           for g in x.get("subgroups", [])]
+                mo.write_text_atomic(self.root / "data" / "streams.json", json.dumps(streams, ensure_ascii=False, indent=1))
+        except (mo.NetworkDown, mo.Stopped):
+            raise
+        except Exception:
+            pass
+        out, empty_run, pdf_weeks = [], 0, []
+        m = monday(a)
+        while m <= b:
+            self.control.checkpoint()
+            week = (m - w1).days // 7 + 1
+            if not 1 <= week <= 52:
+                m += timedelta(days=7)
+                continue
+            if weeks_on_site is not None and week not in weeks_on_site:
+                if week > max(weeks_on_site or {0}):
+                    self.rep.log(f"  дальше {max(weeks_on_site)}-й недели расписание на сайте ещё не выложено")
+                    break
+                m += timedelta(days=7)
+                continue
+            url = f"{SEVSU_BASE}/api/schedule?" + urlencode({"v": SEVSU_API_V, "section": section, "group": name, "week": week})
+            r = c.request("GET", url, kind="ajax", referer=page_url)
+            self.stats["pages"] += 1
+            try:
+                d = json.loads(c._text(r))
+            except ValueError:
+                raise mo.MoodleError(f"сайт ответил не данными расписания (код {r.status_code})")
+            if not d.get("ok"):
+                self.rep.log(f"  неделя {week}: сайт сообщил «{d.get('error') or 'ошибка'}»", "warn")
+                d["schedule"] = []
+            if d.get("last_update"):
+                self.site_info["changed"] = _fmt_iso_msk(d["last_update"])
+            snap = self.root / "снимки" / "schedule"
+            mo.fmkdir(snap)
+            mo.write_text_atomic(snap / f"{m:%Y-%m-%d}_неделя_{week}.json", json.dumps(d, ensure_ascii=False, indent=1))
+            ls = [sevsu_lesson(x) for x in d.get("schedule", []) if x.get("date")]
+            wk = [le for le in ls if a.isoformat() <= le["date"] <= b.isoformat()]
+            self.rep.log(f"  неделя {week} ({m:%d.%m}–{m + timedelta(days=6):%d.%m}): пар {len(wk)}")
+            out += wk
+            if len(pdf_weeks) < PDF_WEEKS_MAX:
+                pdf_weeks.append((week, m))
+            empty_run = 0 if wk else empty_run + 1
+            if kind == "semester" and empty_run >= 3 and out:
+                self.rep.log("  три недели подряд без пар — похоже, семестр закончился")
+                break
+            m += timedelta(days=7)
+        if self.pdf and self.browser and pdf_weeks:
+            self._sevsu_pdfs(page_url, pdf_weeks)
+        return out
+
+    def _sevsu_pdfs(self, page_url, weeks):
+        """Снимки «как на сайте» (PDF) — сайт сам переключает недели в выпадающем списке."""
+        import cdp
+        d = self.root / "снимки" / "schedule"
+        try:
+            with cdp.Browser(self.browser, timeout=45, direct=not self.use_system_proxy) as br:
+                br.goto(page_url, settle=6)
+                for week, m in weeks:
+                    self.control.checkpoint()
+                    if br.try_eval(f"({cdp.JS_PICK})({int(week)})", ""):
+                        br.wait_loaded(15)
+                        br.settle(8)
+                    if br.pdf(d / f"{m:%Y-%m-%d}_неделя_{week}.pdf"):
+                        self.stats["snapshots"] += 1
+                    self.control.sleep(random.uniform(1.0, 2.0))
+            self._browser_result(True)
+        except (mo.Stopped, KeyboardInterrupt):
+            raise
+        except Exception as e:
+            self.rep.log(f"  снимки PDF не получились ({mo.describe_error(e)}) — данные расписания сохранены", "warn")
+            self._browser_result(False)
+
+    # ── timetable.sevsu.ru: личное расписание под учётной записью СевГУ ──
+    def _run_personal(self, a, b, kind):
+        url = self._url("timetable")
+        self.rep.log(f"  {url}")
+        if not self.creds and not self.cookies:
+            self.rep.log("  личному расписанию нужен вход в учётную запись СевГУ (логин и пароль как в Moodle). "
+                         "Войдите в программе с галочкой «Запомнить» — и источник заработает. Пока пропускаю.", "warn")
+            return None
+        portal = el.Portal(url, self.rep, self.control, creds=self.creds, cookies=self.cookies,
+                           use_system_proxy=self.use_system_proxy, page_delay=self.page_delay)
+        text, final = "", url
+        try:
+            r, text, soup = portal.get()
+            final = r.url
+            self.cookies_out = portal.cookies()
+        except el.PortalError as e:
+            if not self.browser or "вход не удался" in str(e):   # неверный пароль второй раз не вводим
+                raise mo.MoodleError(f"личное расписание: {e}")
+            self.rep.log(f"  обычный вход не прошёл ({e}) — пробую через фоновый браузер", "debug")
+        w1 = academic_week1()
+        out, need = [], []
+        m = monday(a)
+        while m <= b:
+            need.append(((m - w1).days // 7 + 1, m))
+            m += timedelta(days=7)
+        ls, info = parse_pairs(text, monday(date.today()), self.group)
+        got_weeks = set()
+        if ls:
+            self.snapshot("timetable", f"{date.today():%Y-%m-%d}_текущая", final, text, pdf=False)
+            got = monday(date.fromisoformat(min(le["date"] for le in ls)))
+            got_weeks.add(got)
+            out += [le for le in ls if a.isoformat() <= le["date"] <= b.isoformat()]
+            links = self._week_links(BeautifulSoup(text, mo.PARSER), final)
+            for week, m in need:
+                if m in got_weeks or week not in links:
+                    continue
+                self.control.checkpoint()
+                r2 = portal.c.request("GET", links[week], kind="page", referer=final)
+                t2 = portal.c._text(r2)
+                l2, _ = parse_pairs(t2, m, self.group)
+                self.snapshot("timetable", f"{m:%Y-%m-%d}_неделя_{week}", links[week], t2, pdf=False)
+                if l2:
+                    got_weeks.add(monday(date.fromisoformat(min(le["date"] for le in l2))))
+                    out += [le for le in l2 if a.isoformat() <= le["date"] <= b.isoformat()]
+                self.rep.log(f"  неделя {week} ({m:%d.%m}): пар {len(l2)}")
+        missing = [(w, m) for w, m in need if m not in got_weeks]
+        if missing and self.browser:
+            out += self._personal_browser(url, missing, a, b, portal, need_all=not ls)
+        elif not ls:
+            self.snapshot("timetable", f"{date.today():%Y-%m-%d}", final, text, pdf=False)
+            self.rep.log("  пары на странице не распознаны — сохранён снимок страницы (папка «снимки»). "
+                         "Пришлите его автору — допишу разбор.", "warn")
+        return out
+
+    def _week_links(self, soup, page_url) -> dict:
+        """Кнопки недель обычными ссылками: «7 8 9 … 21» с адресом вида ?week=N."""
+        res = {}
+        for a in soup.select("a[href]"):
+            t = mo.clean_text(a.get_text())
+            if re.fullmatch(r"\d{1,2}", t) and re.search(r"week|nedel|недел|\d", a["href"], re.I):
+                res.setdefault(int(t), urljoin(page_url, a["href"]))
+        return res
+
+    def _personal_browser(self, url, weeks, a, b, portal, need_all=False):
+        import cdp
+        out, diag = [], []
+        cookies = (portal.cookies() if portal else []) or self.cookies
+        try:
+            with cdp.open_authed(self.browser, url, self.creds, cookies, rep=self.rep, diag=diag,
+                                 direct=not self.use_system_proxy) as br:
+                self._browser_result(True)
+                self.cookies_out = br.cookies()
+                html0 = br.html()
+                ls0, _ = parse_pairs(html0, monday(date.today()), self.group)
+                cur = monday(date.fromisoformat(min(le["date"] for le in ls0))) if ls0 else None
+                if ls0:
+                    out += [le for le in ls0 if a.isoformat() <= le["date"] <= b.isoformat()]
+                    self.snapshot("timetable", f"{cur:%Y-%m-%d}_текущая", br.url(), html0, pdf=False)
+                    if self.pdf:
+                        br.pdf(self.root / "снимки" / "timetable" / f"{cur:%Y-%m-%d}_текущая.pdf")
+                shift = 0
+                for week, m in weeks:
+                    if m == cur:
+                        continue
+                    self.control.checkpoint()
+                    if not br.try_eval(f"({cdp.JS_PICK})({int(week + shift)})", ""):
+                        self.rep.log(f"  неделя {week}: на странице нет такой кнопки — пропускаю", "debug")
+                        continue
+                    br.wait_loaded(15)
+                    br.settle(8)
+                    h = br.html()
+                    ls, _ = parse_pairs(h, m, self.group)
+                    if ls:
+                        g = monday(date.fromisoformat(min(le["date"] for le in ls)))
+                        if g != m and shift == 0:
+                            shift = (m - g).days // 7
+                            self.rep.log(f"  нумерация недель на сайте сдвинута на {shift} — поправляю", "warn")
+                            if br.try_eval(f"({cdp.JS_PICK})({int(week + shift)})", ""):
+                                br.wait_loaded(15)
+                                br.settle(8)
+                                h = br.html()
+                                ls, _ = parse_pairs(h, m, self.group)
+                    label = f"{m:%Y-%m-%d}_неделя_{week + shift}"
+                    self.snapshot("timetable", label, br.url(), h, pdf=False)
+                    if self.pdf:
+                        br.pdf(self.root / "снимки" / "timetable" / f"{label}.pdf")
+                    wk = [le for le in ls if a.isoformat() <= le["date"] <= b.isoformat()]
+                    self.rep.log(f"  неделя {week + shift} ({m:%d.%m}): пар {len(wk)}")
+                    out += wk
+                    self.control.sleep(random.uniform(*self.page_delay))
+                if not out:
+                    mo.fmkdir(mo.DATA_DIR)
+                    mo.write_text_atomic(mo.DATA_DIR / "timetable_page.html", el._redact(html0))
+                    mo.write_text_atomic(mo.DATA_DIR / "timetable_debug.txt", "\n".join(portal.diag + diag) + "\n")
+                    self.rep.log("  пары не распознаны — сохранил страницу для разбора: "
+                                 f"{mo.DATA_DIR / 'timetable_page.html'} (без паролей)", "warn")
+        except cdp.CDPLoginError as e:
+            raise mo.MoodleError(f"личное расписание: {e}")
+        except cdp.CDPError as e:
+            self._browser_result(False)
+            self.rep.log(f"  фоновый браузер не справился: {e}", "warn")
+        return out
+
     # ── хранение: данные копятся, свежий период заменяет старый ──
     def _store(self, src, a, b, lessons):
         p = self.root / "data" / f"{src}.json"
@@ -483,9 +999,24 @@ class ScheduleJob:
 
     def write_outputs(self) -> list:
         merged = load_merged(self.root)
-        meta = {"group": self.group, "generated": datetime.now().strftime("%d.%m.%Y %H:%M"),
+        meta_p = self.root / "data" / "meta.json"
+        try:
+            with mo.fopen(meta_p, "r", encoding="utf-8") as f:
+                site = json.load(f)
+        except (OSError, ValueError):
+            site = {}
+        site.update(self.site_info)
+        mo.write_text_atomic(meta_p, json.dumps(site, ensure_ascii=False))
+        try:
+            with mo.fopen(self.root / "data" / "streams.json", "r", encoding="utf-8") as f:
+                streams = json.load(f)
+        except (OSError, ValueError):
+            streams = []
+        meta = {"group": site.get("group_name") or self.group, "generated": datetime.now().strftime("%d.%m.%Y %H:%M"),
+                "changed": site.get("changed", ""), "streams": streams,
                 "sources": {k: SOURCES[k]["title"] for k in SOURCE_ORDER},
-                "sites": {k: SOURCES[k]["site"].replace("{group}", self.group) for k in SOURCE_ORDER}}
+                "short": {k: SOURCES[k]["short"] for k in SOURCE_ORDER},
+                "sites": {k: SOURCES[k]["site"].replace("{group}", group_slug(self.group)) for k in SOURCE_ORDER}}
         mo.write_text_atomic(self.root / "index.html", render_viewer(merged, meta))
         mo.write_text_atomic(self.root / "raspisanie.ics", render_ics(merged, self.group))
         mo.write_text_atomic(self.root / "schedule.json", json.dumps({"meta": meta, "lessons": merged}, ensure_ascii=False))
@@ -504,7 +1035,7 @@ def load_merged(root: Path) -> list:
             k = lesson_key(le)
             if k in by_key:
                 ex = by_key[k]
-                for fld in ("end", "type", "room", "address", "teacher", "subgroup"):
+                for fld in ("end", "type", "room", "address", "teacher", "subgroup", "stream", "pair"):
                     if not ex.get(fld) and le.get(fld):
                         ex[fld] = le[fld]
                 ex["src"] = sorted(set(ex.get("src", [])) | set(le.get("src", [src])))
@@ -585,7 +1116,7 @@ VIEWER_HTML = r"""<!DOCTYPE html>
 --lecture:#2f6fde;--practice:#0f9d8a;--lab:#e8710a;--exam:#d93a3a;--other:#7c4dff;color-scheme:light}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#17191d;--card:#22252b;--line:rgba(255,255,255,.08);--text:#e9ebef;--muted:#a3abb8;--faint:#7d8594;color-scheme:dark}}
 :root[data-theme=dark]{--bg:#17191d;--card:#22252b;--line:rgba(255,255,255,.08);--text:#e9ebef;--muted:#a3abb8;--faint:#7d8594;color-scheme:dark}
-*{box-sizing:border-box}body{margin:0;font:14px/1.45 "Segoe UI Variable Text","Segoe UI",system-ui,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+*{box-sizing:border-box}html,body{max-width:100%;overflow-x:hidden}body{margin:0;font:14px/1.45 "Segoe UI Variable Text","Segoe UI",system-ui,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
 header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 h1{font-size:18px;margin:0 8px 0 0}.muted{color:var(--muted);font-size:12.5px}
 button,input,select{font:inherit;color:inherit}
@@ -594,7 +1125,7 @@ button,input,select{font:inherit;color:inherit}
 .seg button.on{background:var(--accent);color:#fff}
 .btn{height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--card);cursor:pointer}
 .btn:hover{border-color:var(--accent)}
-input[type=search]{height:34px;border-radius:9px;border:1px solid var(--line);background:var(--card);padding:0 10px;min-width:180px}
+input[type=search]{height:34px;border-radius:9px;border:1px solid var(--line);background:var(--card);padding:0 10px;min-width:0;width:min(260px,100%)}
 .chips{display:flex;gap:6px;flex-wrap:wrap}.chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 10px;cursor:pointer;font-size:12.5px;display:flex;align-items:center;gap:6px}
 .chip i{width:9px;height:9px;border-radius:50%;display:inline-block}.chip.off{opacity:.45}
 main{padding:14px 16px 40px;max-width:1200px;margin:auto}
@@ -610,8 +1141,14 @@ main{padding:14px 16px 40px;max-width:1200px;margin:auto}
 .tag{display:inline-block;font-size:11px;font-weight:700;color:#fff;border-radius:6px;padding:1px 7px;margin-right:6px;vertical-align:1px}
 .k-lecture{background:var(--lecture)}.k-practice{background:var(--practice)}.k-lab{background:var(--lab)}.k-exam{background:var(--exam)}.k-other{background:var(--other)}
 .sg{font-size:11px;border:1px solid var(--line);border-radius:6px;padding:0 6px;margin-left:6px;color:var(--muted)}
-.month{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.month .wd{font-size:12px;color:var(--muted);text-align:center}
-.cell{min-height:96px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;cursor:pointer;font-size:11.5px}
+.st{font-size:11px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);border-radius:6px;padding:0 6px;margin-right:6px;font-weight:600}
+.les.mine{background:color-mix(in srgb,var(--accent) 8%,transparent);box-shadow:inset 3px 0 0 var(--accent)}
+.les.dim{opacity:.4}
+details.streams{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:4px 10px;font-size:12.5px}
+details.streams summary{cursor:pointer;color:var(--muted)}details.streams .box{padding:8px 0;display:grid;gap:6px;max-width:520px}
+details.streams label{display:flex;gap:6px;align-items:flex-start}details.streams label small{color:var(--muted)}
+.month{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}.month .wd{font-size:12px;color:var(--muted);text-align:center}
+.cell{min-width:0;overflow:hidden;min-height:96px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;cursor:pointer;font-size:11.5px}
 .cell.other{opacity:.4}.cell.today{outline:2px solid var(--accent)}.cell b{font-size:12px}
 .cell .it{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid var(--line);padding-left:4px;margin-top:3px}
 .empty-all{padding:60px 20px;text-align:center;color:var(--muted)}
@@ -621,7 +1158,11 @@ footer{color:var(--faint);font-size:12px;text-align:center;padding:20px}
 <header>
   <h1>Расписание __GROUP__</h1><span class="muted" id="gen"></span>
   <div class="seg" id="view"><button data-v="week" class="on">Неделя</button><button data-v="month">Месяц</button><button data-v="list">Список</button></div>
+  <div class="seg hidden-x" id="who"><button data-w="me" class="on">Моё</button><button data-w="group">Вся группа</button></div>
   <div class="seg" id="sub"><button data-s="" class="on">Все подгруппы</button><button data-s="1">1</button><button data-s="2">2</button></div>
+  <details class="streams" id="streams"><summary>Потоки (по выбору)</summary><div class="box">
+    <div class="seg" id="smode"><button data-m="off">Все</button><button data-m="mark">Выделять мои</button><button data-m="hide">Только мои</button></div>
+    <div id="slist"></div><small class="muted">Отметьте потоки, в которые вы записаны (как «Фильтр учебных групп» на сайте).</small></div></details>
   <input type="search" id="q" placeholder="Поиск: предмет, преподаватель, аудитория">
   <div class="chips" id="kinds"></div>
   <button class="btn" onclick="print()">Печать / PDF</button>
@@ -631,6 +1172,8 @@ footer{color:var(--faint);font-size:12px;text-align:center;padding:20px}
 <script id="data" type="application/json">__DATA__</script>
 <script>
 "use strict";
+const LS = {get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+            set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }};
 const D = JSON.parse(document.getElementById("data").textContent), L = D.lessons, M = D.meta;
 const h = new URLSearchParams(location.hash.slice(1));
 if (h.get("theme")) document.documentElement.dataset.theme = h.get("theme");
@@ -645,29 +1188,46 @@ const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-$
 const parse = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
 const mondayOf = d => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); x.setHours(0,0,0,0); return x; };
 const add = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-let view = localStorage.getItem("rs_view") || "week", sub = localStorage.getItem("rs_sub") || "", q = "";
-let kinds = new Set(JSON.parse(localStorage.getItem("rs_kinds") || "[]"));
+let view = h.get("view") || LS.get("rs_view", "week"), sub = LS.get("rs_sub", ""), q = "";
+let kinds = new Set(JSON.parse(LS.get("rs_kinds", "[]")));
+const hasMe = L.some(l => (l.src || []).includes("timetable")), hasGroup = L.some(l => (l.src || []).some(s => s !== "timetable"));
+let who = hasMe ? LS.get("rs_who", "me") : "group";
+const streamList = [...new Map([...(M.streams || []).map(x => [x.code, x.lesson]), ...L.filter(l => l.stream).map(l => [l.stream, l.subject])]).entries()]
+  .filter(([c]) => c).sort((a, b) => a[0].localeCompare(b[0]));
+let mine = new Set(JSON.parse(LS.get("rs_streams", "[]"))), smode = LS.get("rs_smode", "off");
+if (hasMe && !LS.get("rs_streams", "")) L.filter(l => l.stream && (l.src || []).includes("timetable")).forEach(l => mine.add(l.stream));
 const today = new Date(); today.setHours(0,0,0,0);
 let cursor = mondayOf(today);
 if (L.length && !L.some(l => parse(l.date) >= cursor && parse(l.date) <= add(cursor, 6))) {
   const fut = L.find(l => parse(l.date) >= cursor); cursor = mondayOf(parse((fut || L[0]).date)); }
-document.getElementById("gen").textContent = "сохранено " + (M.generated || "") + " · пар: " + L.length;
-document.getElementById("foot").innerHTML = "Источники: " + Object.entries(M.sites || {}).map(([k, u]) => `<a href="${esc(u)}">${esc((M.sources||{})[k] || k)}</a>`).join(" · ");
+document.getElementById("gen").textContent = "сохранено " + (M.generated || "") + (M.changed ? " · на сайте изменено " + M.changed : "") + " · пар: " + L.length;
+if (!(hasMe && hasGroup)) document.getElementById("who").style.display = "none";
+if (!streamList.length) document.getElementById("streams").style.display = "none";
+document.getElementById("slist").innerHTML = streamList.map(([c, t]) => `<label><input type="checkbox" data-c="${esc(c)}" ${mine.has(c) ? "checked" : ""}><span><b>${esc(c)}</b> <small>${esc(t)}</small></span></label>`).join("");
+document.getElementById("slist").onchange = e => { const c = e.target.dataset.c; if (!c) return; e.target.checked ? mine.add(c) : mine.delete(c);
+  LS.set("rs_streams", JSON.stringify([...mine])); render(); };
+document.getElementById("foot").innerHTML = "Сохранено для офлайна — открывается и без интернета. Источники: " + Object.entries(M.sites || {}).map(([k, u]) => `<a href="${esc(u)}">${esc((M.sources||{})[k] || k)}</a>`).join(" · ");
 const kc = document.getElementById("kinds");
 kc.innerHTML = Object.entries(KIND).map(([k, t]) => `<span class="chip ${kinds.has(k) ? "off" : ""}" data-k="${k}"><i class="k-${k}"></i>${t}</span>`).join("");
 kc.onclick = e => { const c = e.target.closest(".chip"); if (!c) return; const k = c.dataset.k; kinds.has(k) ? kinds.delete(k) : kinds.add(k);
-  c.classList.toggle("off"); localStorage.setItem("rs_kinds", JSON.stringify([...kinds])); render(); };
+  c.classList.toggle("off"); LS.set("rs_kinds", JSON.stringify([...kinds])); render(); };
 const segs = (id, attr, val, cb) => { const el = document.getElementById(id); el.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset[attr] === val));
   el.onclick = e => { const b = e.target.closest("button"); if (!b) return; el.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); cb(b.dataset[attr]); }; };
-segs("view", "v", view, v => { view = v; localStorage.setItem("rs_view", v); render(); });
-segs("sub", "s", sub, s => { sub = s; localStorage.setItem("rs_sub", s); render(); });
+segs("view", "v", view, v => { view = v; LS.set("rs_view", v); render(); });
+segs("sub", "s", sub, s => { sub = s; LS.set("rs_sub", s); render(); });
+segs("who", "w", who, w => { who = w; LS.set("rs_who", w); render(); });
+segs("smode", "m", smode, m => { smode = m; LS.set("rs_smode", m); render(); });
 document.getElementById("q").oninput = e => { q = e.target.value.trim().toLowerCase(); render(); };
-const ok = l => (!sub || !l.subgroup || l.subgroup === sub) && !kinds.has(l.kind || "other") &&
-  (!q || [l.subject, l.teacher, l.room, l.type, l.address].join(" ").toLowerCase().includes(q));
+const srcOk = l => { const s = l.src || []; if (!hasMe || !hasGroup) return true;
+  return who === "me" ? s.includes("timetable") : s.some(x => x !== "timetable"); };
+const streamOk = l => !l.stream || smode !== "hide" || mine.has(l.stream) || (who === "me" && hasMe);
+const ok = l => srcOk(l) && streamOk(l) && (!sub || !l.subgroup || l.subgroup === sub) && !kinds.has(l.kind || "other") &&
+  (!q || [l.subject, l.teacher, l.room, l.type, l.address, l.stream].join(" ").toLowerCase().includes(q));
 function lessonHTML(l){
   const end = l.end ? `<small>${esc(l.end)}</small>` : "", past = parse(l.date) < today ? " past" : "";
-  return `<div class="les${past}"><div class="t">${esc(l.start)}${end}</div><div>
-    <div class="s"><span class="tag k-${l.kind || "other"}">${esc(l.type || KIND[l.kind] || "")}</span>${esc(l.subject)}${l.subgroup ? `<span class="sg">подгр. ${esc(l.subgroup)}</span>` : ""}</div>
+  const mark = l.stream && smode === "mark" ? (mine.has(l.stream) ? " mine" : " dim") : "";
+  return `<div class="les${past}${mark}"><div class="t">${esc(l.start)}${end}</div><div>
+    <div class="s">${l.stream ? `<span class="st">${esc(l.stream)}</span>` : ""}<span class="tag k-${l.kind || "other"}">${esc(l.type || KIND[l.kind] || "")}</span>${esc(l.subject)}${l.subgroup ? `<span class="sg">подгр. ${esc(l.subgroup)}</span>` : ""}</div>
     <div class="m">${[l.room, l.address].filter(Boolean).map(esc).join(" · ")}${l.teacher ? " · " + esc(l.teacher) : ""}${l.note ? " · " + esc(l.note) : ""}</div></div></div>`;
 }
 function nowBanner(){
@@ -691,11 +1251,11 @@ function renderWeek(){
 function renderMonth(){
   const first = new Date(cursor.getFullYear(), cursor.getMonth() + (cursor.getDate() > 22 ? 1 : 0), 1), start = mondayOf(first);
   let html = `<div class="weeknav"><button class="btn" id="mprev">← Месяц</button><b>${MN1[first.getMonth()]} ${first.getFullYear()}</b><button class="btn" id="mnext">Месяц →</button><button class="btn" id="tw">Сегодня</button></div>
-    <div class="month">` + WD.map(w => `<div class="wd">${w.slice(0,2)}</div>`).join("");
+    <div class="month">` + ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].map(w => `<div class="wd">${w}</div>`).join("");
   for (let i = 0; i < 42; i++) {
     const d = add(start, i), ls = L.filter(l => l.date === iso(d) && ok(l));
     html += `<div class="cell ${d.getMonth() !== first.getMonth() ? "other" : ""} ${iso(d) === iso(today) ? "today" : ""}" data-d="${iso(d)}"><b>${d.getDate()}</b>` +
-      ls.slice(0, 4).map(l => `<div class="it" style="border-color:var(--${l.kind || "other"})">${esc(l.start)} ${esc(l.subject)}</div>`).join("") + (ls.length > 4 ? `<div class="muted">+${ls.length - 4}</div>` : "") + "</div>";
+      ls.slice(0, 4).map(l => `<div class="it" title="${esc(l.start + " " + l.subject + (l.room ? ", " + l.room : ""))}" style="border-color:var(--${l.kind || "other"})">${esc(l.start)} ${esc(l.subject)}</div>`).join("") + (ls.length > 4 ? `<div class="muted">+${ls.length - 4}</div>` : "") + "</div>";
   }
   return html + "</div>";
 }
@@ -726,11 +1286,11 @@ render();
 
 
 def run_cli(out_dir, group, sources, kind, start=None, end=None, pdf=True, rep=None, control=None, use_proxy=False,
-            urls=None, page_delay=mo.PAGE_DELAY):
+            urls=None, page_delay=mo.PAGE_DELAY, creds=None, cookies=None):
     rep = rep or mo.ConsoleReporter()
     control = control or mo.Control()
     job = ScheduleJob(out_dir, group, sources, rep, control, urls=urls, pdf=pdf, use_system_proxy=use_proxy,
-                      page_delay=page_delay)
+                      page_delay=page_delay, creds=creds, cookies=cookies)
     res = job.run(kind, start, end)
     rep.log(f"Расписание сохранено: {res['total']} пар → {Path(out_dir) / SCHEDULE_DIR / 'index.html'}")
     return res
