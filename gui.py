@@ -26,6 +26,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+import android
 import dl_rules
 import moodle_offline as mo
 import datadir
@@ -41,6 +42,7 @@ TASK_NAME = "MoodleOffline - ночная синхронизация"
 SSO_DOMAIN = "sevsu.ru"      # единый вход вуза: auth.sevsu.ru, iot.sevsu.ru, timetable.sevsu.ru
 HEARTBEAT_IDLE = 30
 HEARTBEAT_BUSY = 60
+ANDROID = android.is_android()      # на телефоне окно — это браузер, а программа живёт в Termux
 CAL_WATCH_EVERY = 300         # как часто (сек) проверять «горящие» сроки, пока открыто окно
 
 
@@ -183,6 +185,7 @@ class App:
         self.wlock = watch.Lock(mo.DATA_DIR, "окно")    # кто ведёт автообновление: окно или консольное слежение
         self.wlock_at = -99.0
         self.auto_why = ""                      # почему автообновление пока не запущено (для подписи в окне)
+        self.keep_running = ANDROID             # не выходить, когда страницу закрыли (на телефоне браузер часто в фоне)
         self.probe_kick = False                 # настройки таймера сменили — проверить сайт сразу, не ждать старого интервала
         self._news = None             # (путь, NewsLog)
         self._cal = None              # (путь, deadlines.Store)
@@ -266,7 +269,7 @@ class App:
                 if self.job_state != "idle":
                     interval = max(interval, HEARTBEAT_BUSY)
                 next_probe = time.monotonic() + interval
-            if time.monotonic() - self.last_poll > 25 and self.job_state == "idle" and not self.armed:
+            if not self.keep_running and time.monotonic() - self.last_poll > 25 and self.job_state == "idle" and not self.armed:
                 self.shutdown.set()
                 break
             if (self.login_state == "offline" and self.net["status"] in ("ok", "slow") and self.vault.load_secret()
@@ -395,12 +398,36 @@ class App:
         return {"ok": True, "scope": len(ids), "files": a["files"], "missing": a["missing_files"], "empty": a["empty"],
                 "has_state": a["has_state"], "courses": rows, "dir": str(out)}
 
+    def android_info(self) -> dict:
+        """Для окна на телефоне: где лежат материалы и видны ли они приложению «Файлы»."""
+        out, home = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT), Path.home()
+        sh = android.shared_storage(home)
+        return {"out": str(out), "shared": bool(sh), "private_out": android.in_private_storage(out, home),
+                "suggest": str(android.default_materials(home, datadir.LEGACY_OUT)) if sh else ""}
+
     # ── слежение в фоне без окна (автозапуск Windows) ──
     def autostart_info(self) -> dict:
+        if ANDROID:               # Termux:Boot запускает скрипты из ~/.termux/boot при включении телефона
+            home = Path.home()
+            p = android.boot_path(home)
+            return {"supported": True, "kind": "termux-boot", "on": p.exists(), "path": str(p),
+                    "app_ready": android.boot_dir(home).is_dir()}
         p = watch.startup_path(os.environ)
-        return {"supported": os.name == "nt", "on": bool(p and p.exists()), "path": str(p or "")}
+        return {"supported": os.name == "nt", "kind": "windows", "on": bool(p and p.exists()), "path": str(p or "")}
 
     def autostart_set(self, enabled: bool) -> dict:
+        if ANDROID:
+            p = android.boot_path(Path.home())
+            try:
+                if enabled:
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_text(android.boot_script([sys.executable, str(mo.APP_DIR / "moodle_offline.py"), "--watch", "-y"]), encoding="utf-8")
+                    p.chmod(0o755)
+                elif p.exists():
+                    p.unlink()
+            except OSError as e:
+                return {"ok": False, "error": mo.describe_error(e)}
+            return {"ok": True, **self.autostart_info()}
         if os.name != "nt":
             return {"ok": False, "error": "автозапуск из окна есть только в Windows; в Linux и Android используйте systemd/cron/Termux:Boot (см. README)"}
         p = watch.startup_path(os.environ)
@@ -1302,6 +1329,10 @@ class App:
 # ════════════════════════════════════════════════════════════════════════════
 def open_path(p: Path, reveal=False):
     p = Path(p)
+    if ANDROID:
+        if not android.open_file(p):
+            raise OSError("не удалось открыть файл приложением телефона (нужен пакет termux-tools); откройте его в приложении «Файлы»")
+        return
     if os.name == "nt":
         if reveal and p.exists() and p.is_file():
             subprocess.Popen(["explorer", "/select,", str(p)])
@@ -1471,7 +1502,7 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/settings":
             allowed = {"mode", "out_dir", "pdf", "zip", "course_ids", "quiet_hours", "quiet_hours_on",
                        "page_delay", "file_delay", "wait_minutes", "use_system_proxy", "original_names",
-                       "index_in_mode2", "wait_for_server", "no_geo_check", "base_url"}
+                       "index_in_mode2", "wait_for_server", "no_geo_check", "base_url", "android_wakelock"}
             with APP.lock:
                 for k, v in b.items():
                     if k in allowed:
@@ -1484,6 +1515,8 @@ class Handler(BaseHTTPRequestHandler):
                     except ValueError as e:
                         return self._send(200, {"ok": False, "error": str(e)})
                 APP.save_settings()
+            if ANDROID and "android_wakelock" in b:
+                threading.Thread(target=android.wake_lock, args=(bool(b["android_wakelock"]),), daemon=True).start()
             return self._send(200, {"ok": True})
         if p == "/api/rules/save":
             return self._send(200, APP.rules_save(b))
@@ -1541,7 +1574,10 @@ class Handler(BaseHTTPRequestHandler):
             url = b.get("url", "")
             if not url.startswith(("http://", "https://")):
                 return self._send(200, {"ok": False, "error": "неверный адрес"})
-            webbrowser.open(url)
+            if ANDROID:
+                android.open_url(url)
+            else:
+                webbrowser.open(url)
             return self._send(200, {"ok": True})
         if p == "/api/disarm":
             APP.armed = None
@@ -1618,8 +1654,8 @@ class Handler(BaseHTTPRequestHandler):
                     "started": APP.job_started, "result": APP.last_result, **snap},
             "settings": {k: st.get(k) for k in ("mode", "out_dir", "pdf", "zip", "course_ids", "quiet_hours",
                                                 "quiet_hours_on", "schedule_on", "schedule_time", "wait_for_server",
-                                                "use_system_proxy", "original_names", "index_in_mode2", "no_geo_check")},
-            "platform": os.name, "browser_pdf": bool(mo.find_browser()),
+                                                "use_system_proxy", "original_names", "index_in_mode2", "no_geo_check", "android_wakelock")},
+            "platform": os.name, "android": ANDROID, "android_info": APP.android_info() if ANDROID else None, "browser_pdf": bool(mo.find_browser()),
             "news_unread": APP.news_unread(),
             "cal_badge": APP.cal_badge(),
             "search": APP.search_progress(),
@@ -1636,6 +1672,10 @@ def find_app_browser():
 
 
 def open_window(url: str):
+    if ANDROID:
+        if not android.open_url(url):
+            print("Откройте адрес в браузере телефона (нажмите и подержите — «Копировать»).")
+        return
     b = find_app_browser()
     if b:
         prof = mo.DATA_DIR / "window-profile"
@@ -1663,7 +1703,7 @@ def existing_instance():
     return None
 
 
-def gui_main(no_window=False, port=0):
+def gui_main(no_window=False, port=0, keep_running=False):
     global APP
     mo.ensure_console_utf8()
     mo.load_env()
@@ -1688,9 +1728,19 @@ def gui_main(no_window=False, port=0):
         threading.Thread(target=APP.check_geo, daemon=True).start()
     threading.Thread(target=APP.try_saved_login, daemon=True).start()
     threading.Thread(target=APP.repair_schedule, daemon=True).start()
-    print(f"{mo.APP_NAME} {mo.VERSION}: интерфейс открыт в отдельном окне.")
-    print(f"Если окно не появилось, откройте в браузере: {url}")
-    print("Это окно консоли можно свернуть. Закроете окно программы — консоль закроется сама (после загрузки).")
+    if keep_running:
+        APP.keep_running = True
+    if ANDROID:
+        print(f"{mo.APP_NAME} {mo.VERSION}: программа запущена в Termux.")
+        print(f"Откройте в браузере телефона: {url}")
+        print("Закрыть вкладку можно — программа продолжит работать. Остановить: Ctrl+C здесь или кнопка «Остановить программу» в окне.")
+        if APP.settings.get("android_wakelock"):
+            android.wake_lock(True)
+    else:
+        print(f"{mo.APP_NAME} {mo.VERSION}: интерфейс открыт в отдельном окне.")
+        print(f"Если окно не появилось, откройте в браузере: {url}")
+        print("Это окно консоли можно свернуть. Закроете окно программы — консоль закроется сама (после загрузки)." if not APP.keep_running
+              else "Закрыть вкладку можно — программа продолжит работать. Остановить: Ctrl+C.")
     if not no_window:
         open_window(url)
     try:
@@ -1703,6 +1753,8 @@ def gui_main(no_window=False, port=0):
     if APP.job_thread and APP.job_thread.is_alive():
         APP.job_thread.join(timeout=30)
     srv.shutdown()
+    if ANDROID and APP.settings.get("android_wakelock"):
+        android.wake_lock(False)
     try:
         (mo.DATA_DIR / "gui.json").unlink()
     except OSError:
@@ -1712,9 +1764,9 @@ def gui_main(no_window=False, port=0):
 
 if __name__ == "__main__":
     argv = sys.argv[1:]
-    if argv and argv[0] not in ("--no-window", "--port"):
+    if argv and argv[0] not in ("--no-window", "--port", "--keep-running"):
         # любые параметры консольной версии: python gui.py --sync  (так же работает собранный .exe)
         sys.exit(mo.cli_main(argv))
     nw = "--no-window" in argv
     prt = int(argv[argv.index("--port") + 1]) if "--port" in argv else 0
-    sys.exit(gui_main(no_window=nw, port=prt))
+    sys.exit(gui_main(no_window=nw, port=prt, keep_running="--keep-running" in argv))
