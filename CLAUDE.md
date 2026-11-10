@@ -11,6 +11,7 @@
 - `electives.py` — элективы: страница iot.sevsu.ru — это SPA, работает через браузер.
 - `news.py` — «Что нового»: сравнение курса с прошлым разом, лента `.moodle_news.json`, текст и отправка уведомлений (Windows, Telegram, webhook); без Moodle-кода, страницы ему отдаёт `moodle_offline.py` (`Processor.news_pass`).
 - `search.py` — «Поиск по материалам»: офлайн-индекс (SQLite FTS5) в `.moodle_search.sqlite` в папке с материалами, чтение PDF/Office/ODF/HTML/текста, разбор запроса; без Moodle-кода, сторонняя библиотека одна — `pypdfium2` (только PDF); индексацию запускают `moodle_offline.py` (`search_pass`) и `gui.py`.
+- `deadlines.py` — «Календарь и дедлайны»: сроки из календаря Moodle (`core_calendar_*` через `MoodleClient.ajax`), хранилище `.moodle_deadlines.json`, напоминания (виды новостей `deadline_*`), повестка вместе с парами, `Календарь/moodle_calendar.ics` и офлайн-страница; без Moodle-кода и без сторонних библиотек, запросы делает `moodle_offline.py` (`calendar_sync`, `calendar_watch`).
 - `dl_rules.py` — правила скачивания (что брать, что пропускать) и шаблоны имён папок/файлов (режим 3); без сторонних библиотек.
 - `cdp.py` — свой минимальный клиент DevTools Protocol для фонового Edge/Chrome (без сторонних библиотек).
 - `*.bat`, `run.sh` — запуск и сборка. `.github/workflows/build-exe.yaml` — сборка exe в GitHub Actions: вручную (артефакт) или по тегу `v*` (ещё и выкладывает exe в Releases).

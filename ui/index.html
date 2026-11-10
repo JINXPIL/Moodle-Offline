@@ -290,6 +290,19 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
 .sr .na{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .sr .na .btn{height:30px;font-size:12px;padding:0 10px}
 mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1px}
+.cchips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.cchip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 12px;font-size:13px;color:var(--muted)}
+.cchip b{font-size:15px;color:var(--text);margin-right:3px}.cchip.late b{color:#d93025}.cchip.soon b{color:#e8710a}
+.ch2{font:600 13px var(--font-display);margin:18px 0 8px;color:var(--muted)}.ch2.late{color:#d93025}
+.ch2 .cb{font-weight:400;font-size:11px;border:1px solid var(--line);border-radius:6px;padding:0 6px;margin-left:6px}
+.crow{display:flex;gap:12px;align-items:flex-start;padding:9px 12px;border:1px solid var(--line);border-left-width:4px;border-radius:var(--r);background:var(--surface);margin-bottom:6px}
+.crow.late{border-left-color:#d93025}.crow.soon{border-left-color:#e8710a}.crow.ok{border-left-color:#0f9d8a}.crow.lesson{border-left-color:var(--accent)}
+.crow.past{opacity:.55}.crow.done .ct{text-decoration:line-through;color:var(--muted)}.crow.gone{opacity:.6}
+.crow input[type=checkbox]{margin-top:4px;flex:none;width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.crow .ctm{flex:none;min-width:84px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;padding-top:1px}
+.crow .ct{font-weight:600;line-height:1.35;overflow-wrap:anywhere}.crow .ct a{color:inherit;text-decoration:none;cursor:pointer}.crow .ct a:hover{text-decoration:underline}
+.crow .cs{font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.crow .cl{font-weight:400;font-size:12.5px;margin-left:8px;white-space:nowrap}.crow.late .cl{color:#d93025}.crow.soon .cl{color:#e8710a}.crow.ok .cl{color:#0f9d8a}
 .sqs{font-size:13px;line-height:1.5}
 .sqw{font-size:12.5px;margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(232,113,10,.12)}
 .sqp{font-size:12px;line-height:1.4;padding:5px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}
@@ -308,7 +321,7 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
 <div id="app">
   <header class="top">
     <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>Moodle Offline</div>
-    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on">Курсы</button><button data-view="search">Поиск</button><button data-view="schedule">Расписание</button><button data-view="electives">Элективы</button><button data-view="news">Что нового<span class="nbadge hidden" id="newsBadge"></span></button></div>
+    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on">Курсы</button><button data-view="search">Поиск</button><button data-view="calendar">Календарь<span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule">Расписание</button><button data-view="electives">Элективы</button><button data-view="news">Что нового<span class="nbadge hidden" id="newsBadge"></span></button></div>
     <div class="pill" id="net" title="Проверка доступности Moodle раз в 30 секунд"><span class="dot"></span><span class="txt">Проверяю сервер…</span></div>
     <div class="pill hidden" id="ip"></div>
     <div class="spacer"></div>
@@ -518,6 +531,29 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
         </aside>
       </div>
     </section>
+    <section class="view hidden" id="calView">
+      <div class="layout">
+        <div class="content">
+          <div class="cchips" id="calChips"></div>
+          <div class="sqf"><select class="txt" id="calShow" style="width:auto"><option value="all">Сроки и пары</option><option value="deadlines">Только сроки</option><option value="lessons">Только пары</option></select>
+            <select class="txt" id="calCourse" style="width:auto;max-width:260px"></select>
+            <select class="txt" id="calDays" style="width:auto"><option value="7">7 дней</option><option value="14" selected>14 дней</option><option value="30">30 дней</option><option value="60">60 дней</option></select>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><span class="sw-t"><input type="checkbox" id="calDone"><span></span></span>сделанное</label></div>
+          <div class="hint" id="calSync" style="margin:0 0 10px"></div>
+          <div id="calList"></div>
+        </div>
+        <aside class="side">
+          <div class="panel">
+            <h3>Календарь</h3>
+            <button class="btn primary big" id="calUpdate">Обновить сроки</button>
+            <button class="btn big" id="calIcs" style="margin-top:8px">Скачать для телефона (.ics)</button>
+            <button class="btn big" id="calPage" style="margin-top:8px">Страница для офлайна</button>
+            <button class="btn big" id="calSettings" style="margin-top:8px">Настройки календаря</button>
+            <p class="hint">Сроки сдачи берутся из календаря Moodle. Сданную работу Moodle сам убирает из списка; остальное отмечайте галочкой. В файл .ics попадают сроки и пары расписания — с напоминаниями. Список работает и без интернета: показывает то, что сохранено при последнем обновлении.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
   </main>
   <section class="dock collapsed" id="dock">
     <div class="dock-head">
@@ -614,6 +650,24 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
     <div class="rsec"><h4>Что не прочиталось</h4><div id="ssProblems"></div></div>
   </div>
   <div class="rules-foot"><span class="hint" id="ssMsg"></span><button class="btn" id="ssCancel">Отмена</button><button class="btn primary" id="ssSave">Сохранить</button></div>
+</div></div>
+<div class="modal hidden" id="calModal"><div class="modal-box rules-box">
+  <header><b>Календарь — настройки</b><button class="btn" id="csClose">Закрыть</button></header>
+  <div class="rules-body">
+    <div class="rsec"><label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Обновлять сроки после каждой загрузки<small>это 3–10 лёгких запросов к Moodle в конце загрузки</small></span><span class="sw-t"><input type="checkbox" id="csAuto"><span></span></span></label></div>
+    <div class="rsec"><h4>Что брать из календаря Moodle</h4><div class="modgrid" id="csKinds"></div></div>
+    <div class="rsec"><h4>Напоминать заранее</h4><div class="modgrid" id="csRemind"></div>
+      <p class="hint">Не больше четырёх. Эти напоминания попадают в файл .ics (телефон покажет их сам) и в уведомления программы «Срок горит».</p>
+      <div class="path" style="margin-top:8px"><select class="txt" id="csLessonRemind" style="width:auto;flex:none"></select><span class="hint" style="margin:auto 0">напоминание о паре расписания (в .ics)</span></div></div>
+    <div class="rsec"><h4>Период</h4>
+      <div class="path"><input class="txt" id="csAhead" type="number" min="7" max="365" style="width:90px;flex:none"><span class="hint" style="margin:auto 0">дней вперёд спрашивать у Moodle</span></div>
+      <div class="path" style="margin-top:8px"><input class="txt" id="csBack" type="number" min="0" max="90" style="width:90px;flex:none"><span class="hint" style="margin:auto 0">дней показывать просроченное</span></div></div>
+    <div class="rsec"><label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Пары расписания в календаре<small>в общий .ics и в повестку (расписание нужно сохранить во вкладке «Расписание»)</small></span><span class="sw-t"><input type="checkbox" id="csLessons"><span></span></span></label></div>
+    <div class="rsec"><label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Сообщать в «Что нового» о сроках<small>новый срок, перенос и «срок горит»; каналы (окно Windows, Telegram, webhook) — в настройках «Что нового»</small></span><span class="sw-t"><input type="checkbox" id="csNotify"><span></span></span></label></div>
+    <div class="rsec"><label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Скрывать то, что отмечено «сделано»<small>в списке и в файле .ics (напоминаний о сделанном не будет)</small></span><span class="sw-t"><input type="checkbox" id="csHide"><span></span></span></label></div>
+    <div class="rsec"><h4>Не брать сроки этих курсов</h4><div class="modgrid" id="csCourses"></div></div>
+  </div>
+  <div class="rules-foot"><span class="hint" id="csMsg"></span><button class="btn" id="csCancel">Отмена</button><button class="btn primary" id="csSave">Сохранить</button></div>
 </div></div>
 <div class="toasts" id="toasts"></div>
 
@@ -1006,7 +1060,8 @@ function showView(v){
   view = v; $$("#mainTabs button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
   $("#coursesView").classList.toggle("hidden", v !== "courses"); $("#scheduleView").classList.toggle("hidden", v !== "schedule");
   $("#electivesView").classList.toggle("hidden", v !== "electives"); $("#newsView").classList.toggle("hidden", v !== "news");
-  $("#searchView").classList.toggle("hidden", v !== "search");
+  $("#searchView").classList.toggle("hidden", v !== "search"); $("#calView").classList.toggle("hidden", v !== "calendar");
+  if (v === "calendar") openCalTab();
   if (v === "schedule") loadSchedule(); if (v === "electives") loadElectives(); if (v === "news") loadNews(); if (v === "search") openSearchTab();
 }
 $$("#mainTabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
@@ -1015,7 +1070,8 @@ const openUrl = url => api("/api/open_url", {url});
 
 /* ── что нового ── */
 const NW_KIND = {item_new:["Новый материал","#2f6fde"], file_new:["Новый файл","#0f9d8a"], announcement:["Объявление","#7c4dff"],
-                 grade:["Оценка","#e8710a"], item_gone:["Убрано с сайта","#8a93a3"], item_renamed:["Переименовано","#8a93a3"]};
+                 grade:["Оценка","#e8710a"], item_gone:["Убрано с сайта","#8a93a3"], item_renamed:["Переименовано","#8a93a3"],
+                 deadline_new:["Новый срок","#d93025"], deadline_moved:["Срок перенесён","#e8710a"], deadline_soon:["Срок горит","#d93025"]};
 let NW = null, nwUnreadOnly = false, lastNews = null;
 function renderNewsBadge(n){
   const b = $("#newsBadge"); b.textContent = n > 99 ? "99+" : n; b.classList.toggle("hidden", !n);
@@ -1259,6 +1315,102 @@ $("#ssSave").onclick = async () => {
   else loadSearchInfo();
 };
 
+/* ── календарь и дедлайны ── */
+let CAL = null, CS = null, calFirst = true, calGone = false, calJobWas = "idle";
+const CAL_PRESETS = [15, 30, 60, 180, 360, 1440, 2880, 4320, 10080];
+function calSpan(m){ return m % 1440 === 0 ? (m / 1440) + " дн." : m % 60 === 0 ? (m / 60) + " ч" : m + " мин"; }
+function renderCalBadge(n){ const b = $("#calBadge"); b.textContent = n > 99 ? "99+" : n; b.classList.toggle("hidden", !n); }
+let calSig = null;
+function calJobWatch(j){   // закончилось обновление сроков или загрузка (даже мгновенная) — перерисовать повестку
+  const sig = (j.result && j.result.text) || "";
+  if (view === "calendar" && ((calJobWas !== "idle" && j.state === "idle") || (calSig !== null && sig !== calSig))) loadCal();
+  calJobWas = j.state; calSig = sig;
+}
+async function openCalTab(){ await loadCal(); }
+async function loadCal(){
+  const q = new URLSearchParams({show: $("#calShow").value, course: $("#calCourse").value || 0, days: $("#calDays").value});
+  if (!calFirst) q.set("done", $("#calDone").checked ? 1 : 0);
+  if (calGone) q.set("gone", 1);
+  let v; try { v = await api("/api/calendar?" + q); } catch (e) { return; }
+  CAL = v;
+  if (calFirst) { $("#calDone").checked = !v.cfg.hide_done; calFirst = false; }
+  const cur = $("#calCourse").value;
+  $("#calCourse").innerHTML = '<option value="0">Все курсы</option>' + v.courses.map(c => `<option value="${c.id}">${esc(c.name.slice(0, 60))} (${c.count})</option>`).join("");
+  $("#calCourse").value = [...$("#calCourse").options].some(o => o.value === cur) ? cur : "0";
+  renderCal();
+}
+function calRow(i){
+  if (i.type === "lesson") {
+    const sub = [i.room, i.address, i.teacher].filter(Boolean).join(" · ");
+    return `<div class="crow lesson${i.past ? " past" : ""}"><span style="width:16px;flex:none"></span><div class="ctm">${esc(i.time)}–${esc(i.end)}</div><div><div class="ct">${esc(i.title)}</div>${sub ? `<div class="cs">${esc(sub)}</div>` : ""}</div></div>`;
+  }
+  const t = i.url ? `<a data-u="${esc(i.url)}" title="Открыть в Moodle">${esc(i.title)}</a>` : esc(i.title);
+  const sub = [i.cshort || i.course, i.label, i.action].filter(Boolean).map(esc).join(" · ") + (i.gone ? ' · <span title="Moodle убрал срок из календаря — обычно это значит, что работа сдана">убрано с сайта</span>' : "");
+  return `<div class="crow ${i.state}${i.done ? " done" : ""}${i.gone ? " gone" : ""}" data-id="${esc(i.id)}"><input type="checkbox" ${i.done ? "checked" : ""} title="Сделано"><div class="ctm">${esc(i.time || "")}</div>`
+    + `<div><div class="ct">${t}<span class="cl">${esc(i.left)}</span></div><div class="cs">${sub}</div></div></div>`;
+}
+function renderCal(){
+  const v = CAL, c = v.counts;
+  $("#calChips").innerHTML = [["late", c.overdue, "просрочено"], ["soon", c.today, "сегодня"], ["", c.tomorrow, "завтра"], ["", c.week, "за 7 дней"], ["", c.total, "всего впереди"]]
+    .map(([k, n, t]) => `<span class="cchip ${k && n ? k : ""}"><b>${n}</b>${t}</span>`).join("");
+  const s = v.sync || {};
+  const when = s.last ? new Date(s.last * 1000).toLocaleString("ru-RU", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) : "";
+  let info = s.last ? `Сроки обновлены ${when}` + (s.ok === false ? " · последняя попытка не удалась" : "") : "Сроки ещё не загружались — нажмите «Обновить сроки» (нужен вход в Moodle).";
+  if (v.offline && s.last) info += " · показываю сохранённое (без интернета)";
+  if (s.note) info += " · " + s.note;
+  if (v.gone) info += ` · <a id="calGoneT" style="cursor:pointer;color:var(--accent)">${calGone ? "скрыть" : "показать"} убранные с сайта (${v.gone}, вероятно, сданы)</a>`;
+  $("#calSync").innerHTML = info;
+  let h = "";
+  if (v.overdue.length) h += `<div class="ch2 late">Просрочено</div>` + v.overdue.map(calRow).join("");
+  for (const d of v.days) h += `<div class="ch2">${esc(d.label)}</div>` + d.items.map(calRow).join("");
+  if (v.empty) h = `<div class="hint" style="padding:30px 0;text-align:center">Ближайших сроков и пар нет — либо календарь ещё не загружен, либо всё сдано.</div>`;
+  $("#calList").innerHTML = h;
+  $("#calIcs").disabled = !v.ics && !s.last;
+}
+["calShow", "calCourse", "calDays", "calDone"].forEach(id => $("#" + id).onchange = loadCal);
+$("#calSync").onclick = e => { if (e.target.id === "calGoneT") { calGone = !calGone; loadCal(); } };
+$("#calList").onclick = async e => {
+  const a = e.target.closest("a[data-u]"); if (a) return openUrl(a.dataset.u);
+  const cb = e.target.closest(".crow input[type=checkbox]"); if (!cb) return;
+  const r = await api("/api/calendar/done", {id: cb.closest(".crow").dataset.id, done: cb.checked});
+  if (!r.ok) toast("Не получилось отметить", "bad");
+  loadCal();
+};
+$("#calUpdate").onclick = async () => {
+  const r = await api("/api/calendar/sync", {});
+  if (r.geo) return toast("Похоже, включён VPN — запустите загрузку на главной вкладке и подтвердите предупреждение", "bad");
+  if (!r.ok) return toast(r.error || "Не получилось начать", "bad");
+  toast(r.armed ? "Moodle недоступен — обновлю сроки, как только сайт оживёт" : "Обновляю сроки…", "ok");
+};
+$("#calIcs").onclick = () => { const a = document.createElement("a"); a.href = "/api/calendar/ics?t=" + encodeURIComponent(T); a.download = "moodle_calendar.ics"; document.body.appendChild(a); a.click(); a.remove(); };
+$("#calPage").onclick = () => api("/api/open", {path: "Календарь/index.html"}).then(x => x.ok || toast("Страница ещё не создана — обновите сроки", "bad"));
+setInterval(() => { if (view === "calendar" && !document.hidden) loadCal(); }, 60000);   // «через 5 ч» живёт, пока вкладка открыта
+
+async function openCalSettings(){
+  CS = await api("/api/calendar/settings"); const c = CS.cfg;
+  $("#csAuto").checked = c.auto; $("#csLessons").checked = c.lessons; $("#csNotify").checked = c.notify; $("#csHide").checked = c.hide_done;
+  $("#csKinds").innerHTML = CS.groups.map(g => `<label><span class="sw-t"><input type="checkbox" data-k="${g.key}" ${c.kinds.includes(g.key) ? "checked" : ""}><span></span></span><span>${esc(g.title)} <small class="hint" style="margin:0">${esc(g.hint)}</small></span></label>`).join("");
+  const rem = [...new Set([...CAL_PRESETS, ...c.remind])].sort((a, b) => a - b);
+  $("#csRemind").innerHTML = rem.map(m => `<label><span class="sw-t"><input type="checkbox" data-r="${m}" ${c.remind.includes(m) ? "checked" : ""}><span></span></span><span>за ${calSpan(m)}</span></label>`).join("");
+  const lr = [...new Set([0, 5, 10, 15, 30, 60, c.lesson_remind])].sort((a, b) => a - b);
+  $("#csLessonRemind").innerHTML = lr.map(m => `<option value="${m}" ${m === c.lesson_remind ? "selected" : ""}>${m ? "за " + m + " мин" : "без напоминания"}</option>`).join("");
+  $("#csAhead").value = c.days_ahead; $("#csBack").value = c.days_back;
+  $("#csCourses").innerHTML = CS.courses.length ? CS.courses.map(x => `<label><span class="sw-t"><input type="checkbox" data-ex="${x.id}" ${c.exclude_courses.includes(x.id) ? "checked" : ""}><span></span></span><span>${esc(x.name)}</span></label>`).join("") : '<span class="hint">Список курсов появится после первого обновления сроков.</span>';
+  $("#csMsg").textContent = ""; $("#calModal").classList.remove("hidden");
+}
+$("#calSettings").onclick = openCalSettings;
+$("#csClose").onclick = $("#csCancel").onclick = () => $("#calModal").classList.add("hidden");
+$("#csRemind").onchange = e => { const on = $$("[data-r]").filter(i => i.checked); if (on.length > 4) { e.target.checked = false; $("#csMsg").textContent = "Не больше четырёх напоминаний"; } else $("#csMsg").textContent = ""; };
+$("#csSave").onclick = async () => {
+  const cfg = {auto: $("#csAuto").checked, lessons: $("#csLessons").checked, notify: $("#csNotify").checked, hide_done: $("#csHide").checked,
+               kinds: $$("[data-k]").filter(i => i.checked).map(i => i.dataset.k), remind: $$("[data-r]").filter(i => i.checked).map(i => +i.dataset.r),
+               lesson_remind: +$("#csLessonRemind").value, days_ahead: +$("#csAhead").value || 120, days_back: +$("#csBack").value,
+               exclude_courses: $$("#csCourses [data-ex]").filter(i => i.checked).map(i => +i.dataset.ex)};
+  const r = await api("/api/calendar/settings", {cfg});
+  if (!r.ok) { $("#csMsg").textContent = r.error || "Не сохранилось"; return; }
+  $("#calModal").classList.add("hidden"); toast("Настройки календаря сохранены", "ok"); calFirst = true; loadCal();
+};
+
 /* ── курс «как на сайте» ── */
 const ICON = {resource:["#d93a3a","M7 3h7l5 5v13H7z M14 3v5h5"], folder:["#e8a10a","M3 7h6l2 2h10v10H3z"], url:["#2f6fde","M10 14l4-4 M8 16l-2 2a3 3 0 0 1-4-4l3-3 M16 8l2-2a3 3 0 0 1 4 4l-3 3"],
   page:["#5f6b7a","M6 3h12v18H6z M9 8h6 M9 12h6 M9 16h4"], assign:["#0f9d8a","M9 4h6v3H9z M6 6h12v15H6z M9 13l2 2 4-4"], quiz:["#d63384","M5 12l4 4 10-10"],
@@ -1430,7 +1582,7 @@ async function poll(){
     $("#uname").textContent = (L.user || L.username || "Гость") + (L.state === "offline" ? " · офлайн" : ""); $("#avatar").textContent = (L.user || L.username || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
     $("#rememberHint").textContent = L.can_encrypt ? "«Запомнить меня»: логин и пароль шифруются средствами Windows (DPAPI) и доступны только вашей учётной записи на этом ПК."
                                                    : "«Запомнить меня»: сохраню только cookie сессии; когда она истечёт, пароль спросят снова.";
-    loadSettings(st); renderNet(st); renderJob(st.job); renderNewsBadge(st.news_unread || 0); renderSearchRun(st.search || {});
+    loadSettings(st); renderNet(st); renderJob(st.job); renderNewsBadge(st.news_unread || 0); renderSearchRun(st.search || {}); renderCalBadge(st.cal_badge || 0); calJobWatch(st.job);
     delay = st.job.state !== "idle" ? 600 : 1200;
   } catch (e) {
     $("#net .dot").className = "dot down"; $("#net .txt").textContent = "Программа закрыта — перезапустите её";

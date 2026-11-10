@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import dl_rules
 import moodle_offline as mo
+import deadlines
 import news
 import search
 import electives as el
@@ -38,6 +39,7 @@ TASK_NAME = "MoodleOffline - ночная синхронизация"
 SSO_DOMAIN = "sevsu.ru"      # единый вход вуза: auth.sevsu.ru, iot.sevsu.ru, timetable.sevsu.ru
 HEARTBEAT_IDLE = 30
 HEARTBEAT_BUSY = 60
+CAL_WATCH_EVERY = 300         # как часто (сек) проверять «горящие» сроки, пока открыто окно
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -176,6 +178,9 @@ class App:
         self.offline = {"reason": "", "since": "", "cached": ""}   # офлайн-режим: работаем с сохранённым
         self.relogin_tried = 0.0
         self._news = None             # (путь, NewsLog)
+        self._cal = None              # (путь, deadlines.Store)
+        self.cal_checked = 0.0        # когда в последний раз проверяли «горящие» сроки (monotonic)
+        self._cal_badge, self._cal_badge_at = 0, -99.0     # значок на вкладке «Календарь» (кэш на 20 секунд)
         self._search = None           # (путь, search.Index)
         self.search_ev = threading.Event()      # остановка индексации
         self.search_thread = None
@@ -228,6 +233,9 @@ class App:
                     and not self.offline.get("need_login")
                     and time.monotonic() - self.relogin_tried > 120):
                 threading.Thread(target=self._recover_from_offline, daemon=True).start()
+            if time.monotonic() - self.cal_checked > CAL_WATCH_EVERY:     # напоминания о сроках: без сети, из сохранённого
+                self.cal_checked = time.monotonic()
+                threading.Thread(target=self.cal_watch_tick, daemon=True).start()
             hours = int(self.settings.get("electives_watch_hours", 6) or 6)
             if (self.settings.get("electives_watch") and self.job_state == "idle" and self._el_creds()
                     and time.monotonic() - self.electives_checked > hours * 3600):
@@ -672,6 +680,8 @@ class App:
     def _job(self, params):
         if params.get("kind") == "schedule":
             return self._schedule_job(params)
+        if params.get("kind") == "calendar":
+            return self._calendar_job(params)
         t0 = time.monotonic()
         res = None
         try:
@@ -692,7 +702,8 @@ class App:
                                  sync=bool(params.get("sync")), pdf=bool(st.get("pdf")), zip=bool(st.get("zip")),
                                  original_names=bool(st.get("original_names")), index_in_mode2=bool(st.get("index_in_mode2")),
                                  rules=st.get("rules"), dir_template=st.get("layout_dir") or "",
-                                 file_template=st.get("layout_file") or "", news=st.get("news"))
+                                 file_template=st.get("layout_file") or "", news=st.get("news"),
+                                 calendar=st.get("calendar"), calendar_on=deadlines.normalize(st.get("calendar"))["auto"])
             self.rep.log(f"{'Быстрая синхронизация' if opts.sync else 'Загрузка'}: курсов {len(selected)}, "
                          f"режим {opts.mode}, папка {opts.out_dir}")
             res = mo.run_job(client, selected, opts, self.rep, self.control)
@@ -718,6 +729,7 @@ class App:
             self.rep.log(f"Ошибка: {msg}", "error")
             mo.notify(mo.APP_NAME, f"Ошибка: {msg}", ok=False)
         finally:
+            self._cal_badge_at = -99.0     # сроки могли измениться — значок пересчитать сразу
             if self.client:
                 self.client.control = self.idle_control
             with self.lock:
@@ -808,6 +820,133 @@ class App:
             self.settings["search"] = cfg
             self.save_settings()
         return {"ok": True, "cfg": cfg}
+
+    # ── календарь и дедлайны ──
+    def cal_out(self) -> Path:
+        return Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
+
+    def cal_store(self) -> deadlines.Store:
+        path = self.cal_out() / deadlines.DEADLINES_FILE
+        with self.lock:
+            if not self._cal or self._cal[0] != path:
+                self._cal = (path, deadlines.Store(path))
+            return self._cal[1]
+
+    def cal_cfg(self) -> dict:
+        return deadlines.normalize(self.settings.get("calendar"))
+
+    def cal_view(self, q) -> dict:
+        cfg = self.cal_cfg()
+        out = self.cal_out()
+        try:
+            days = min(120, max(1, int(q.get("days") or 14)))
+            course = int(q.get("course") or 0)
+        except ValueError:
+            days, course = 14, 0
+        lessons = deadlines.load_lessons(out) if cfg["lessons"] else []
+        v = deadlines.view(self.cal_store(), lessons, cfg, time.time(), days=days, show=q.get("show") or "all", course=course,
+                           with_done=(q.get("done") == "1") if "done" in q else None, with_gone=q.get("gone") == "1")
+        ics = out / deadlines.CALENDAR_DIR / deadlines.ICS_FILE
+        v.update({"cfg": cfg, "ics": ics.exists(), "has_lessons": bool(lessons),
+                  "offline": self.login_state == "offline" or not self.client})
+        return v
+
+    def cal_write(self):
+        """Пересобирает .ics и страницу (после «сделано» или смены настроек). Ошибки записи — не помеха."""
+        try:
+            return deadlines.write_outputs(self.cal_out(), self.cal_store(), self.cal_cfg())
+        except OSError as e:
+            self.rep.log(f"Календарь: файлы не записаны ({e})", "warn")
+            return {}
+
+    def cal_done(self, b):
+        ok = self.cal_store().set_done(str(b.get("id") or ""), bool(b.get("done")))
+        if ok:
+            self.cal_write()
+            self._cal_badge_at = -99
+        return {"ok": ok}
+
+    def cal_settings_info(self):
+        known = {c.id: c.fullname for c in self.courses}
+        for e in self.cal_store().events.values():
+            if e.get("course_id") and e.get("course"):
+                known.setdefault(e["course_id"], e["course"])
+        known.pop(1, None)
+        return {"cfg": self.cal_cfg(), "groups": deadlines.groups_meta(),
+                "courses": sorted(({"id": k, "name": v} for k, v in known.items()), key=lambda c: c["name"].lower())}
+
+    def cal_settings_save(self, b):
+        cfg = deadlines.normalize(b.get("cfg"))
+        with self.lock:
+            self.settings["calendar"] = cfg
+            self.save_settings()
+        self._cal_badge_at = -99
+        return {"ok": True, "cfg": cfg, "files": self.cal_write()}
+
+    def cal_ics(self):
+        """Тело .ics для скачивания (всегда свежее из сохранённых данных)."""
+        w = self.cal_write()
+        p = Path(w["ics"]) if w else self.cal_out() / deadlines.CALENDAR_DIR / deadlines.ICS_FILE
+        return p.read_bytes() if p.exists() else b""
+
+    def cal_badge(self) -> int:
+        """Сколько неотмеченных сроков уже просрочено или истекает сегодня — для значка на вкладке (кэш на 20 секунд)."""
+        now = time.monotonic()
+        if now - self._cal_badge_at < 20:
+            return self._cal_badge
+        try:
+            v = deadlines.view(self.cal_store(), [], self.cal_cfg(), time.time(), days=1, with_done=False)
+            self._cal_badge = v["counts"]["overdue"] + v["counts"]["today"]
+        except Exception:
+            self._cal_badge = 0
+        self._cal_badge_at = now
+        return self._cal_badge
+
+    def cal_watch_tick(self):
+        """Раз в несколько минут, пока открыто окно: не пора ли напомнить о сроке (без сети, по сохранённому)."""
+        try:
+            n = mo.calendar_watch(self.cal_out(), self.settings, self.vault, self.rep)
+            if n:
+                self.rep.log(f"Календарь: напоминаний о сроках — {n}")
+        except Exception as e:
+            self.rep.log(f"Календарь: проверка сроков не удалась ({mo.describe_error(e)})", "warn")
+
+    def _calendar_job(self, params):
+        """Только обновить сроки из календаря Moodle (без скачивания материалов)."""
+        t0 = time.monotonic()
+        try:
+            if not self.client:
+                self.try_saved_login()
+            if not self.client:
+                raise mo.LoginError("нужно войти в Moodle")
+            client = self.client
+            client.control = self.control
+            client.rep = self.rep
+            r = mo.calendar_sync(client, self.cal_out(), self.settings, self.rep)
+            ncfg = news.normalize(self.settings.get("news"))
+            evs = [e for e in r["events"] if ncfg["enabled"] and ncfg["track"].get(e["kind"])]
+            if evs:
+                try:
+                    news.NewsLog(self.cal_out() / mo.NEWS_FILE).add(evs)
+                    mo.deliver_news(evs, self.settings, self.vault, self.rep)
+                except Exception as e:   # уведомления не должны ломать обновление сроков
+                    self.rep.log(f"Уведомления о сроках не отправлены: {mo.describe_error(e)}", "warn")
+            self.last_result = {"ok": r["ok"], "kind": "calendar", "aborted": None if r["ok"] else "error",
+                                "text": f"{r['text']} ({mo.fmt_dur(time.monotonic() - t0)})"}
+        except (mo.Stopped, KeyboardInterrupt):
+            self.last_result = {"ok": False, "text": "Обновление сроков остановлено", "aborted": "stopped", "kind": "calendar"}
+        except mo.SessionExpired:
+            self.last_result = {"ok": False, "text": "Сессия Moodle истекла — войдите заново", "aborted": "session", "kind": "calendar"}
+        except Exception as e:
+            self.last_result = {"ok": False, "text": f"Календарь: {mo.describe_error(e)}", "aborted": "error", "kind": "calendar"}
+            self.rep.log(self.last_result["text"], "error")
+        finally:
+            self._cal_badge_at = -99.0
+            if self.client:
+                self.client.control = self.idle_control
+            with self.lock:
+                self.job_state = "idle"
+                self.control = None
 
     # ── правила скачивания ──
     # ── «Что нового» ──
@@ -1073,6 +1212,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.news_list(q))
         if u.path == "/api/news/settings":
             return self._send(200, APP.news_settings_info())
+        if u.path == "/api/calendar":
+            return self._send(200, APP.cal_view(q))
+        if u.path == "/api/calendar/settings":
+            return self._send(200, APP.cal_settings_info())
+        if u.path == "/api/calendar/ics":
+            data = APP.cal_ics()
+            if not data:
+                return self._send(404, {"error": "календарь ещё не создан — обновите сроки"})
+            return self._send(200, data, "text/calendar; charset=utf-8",
+                              {"Content-Disposition": 'attachment; filename="moodle_calendar.ics"'})
         if u.path == "/api/search":
             return self._send(200, APP.search_query(q))
         if u.path == "/api/search/status":
@@ -1145,6 +1294,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.news_settings_save(b))
         if p == "/api/news/test":
             return self._send(200, APP.news_test(b))
+        if p == "/api/calendar/done":
+            return self._send(200, APP.cal_done(b))
+        if p == "/api/calendar/settings":
+            return self._send(200, APP.cal_settings_save(b))
+        if p == "/api/calendar/sync":
+            if APP.geo.get("warning") and not b.get("ignore_geo") and not APP.settings.get("no_geo_check"):
+                return self._send(200, {"ok": False, "geo": APP.geo["warning"]})
+            return self._send(200, APP.start_job({"kind": "calendar"}))
         if p == "/api/search/index":
             return self._send(200, APP.search_start(bool(b.get("full"))))
         if p == "/api/search/stop":
@@ -1249,6 +1406,7 @@ class Handler(BaseHTTPRequestHandler):
                                                 "use_system_proxy", "original_names", "index_in_mode2", "no_geo_check")},
             "platform": os.name, "browser_pdf": bool(mo.find_browser()),
             "news_unread": APP.news_unread(),
+            "cal_badge": APP.cal_badge(),
             "search": APP.search_progress(),
         }
 

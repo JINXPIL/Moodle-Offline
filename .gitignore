@@ -8,6 +8,7 @@
 _бэкапы/
 .moodle_state.json
 .moodle_news.json
+.moodle_deadlines.json
 .moodle_search.sqlite*
 _журнал.log
 _не_скачано.txt
