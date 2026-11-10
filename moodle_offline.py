@@ -39,6 +39,7 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qs, parse_qsl, quote, unquote, urlencode, urljoin, urlparse, urlunparse
 
 import dl_rules   # правила скачивания (что брать, что пропускать, шаблоны имён)
+import news       # что нового: события, лента, уведомления
 
 # В собранном .exe без консоли stdout/stderr отсутствуют — подменяем, чтобы print() не падал.
 if sys.stdout is None:
@@ -80,7 +81,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -93,6 +94,8 @@ LOG_FILE = "_журнал.log"
 FAILED_FILE = "_не_скачано.txt"
 NEW_FILE = "_новое.txt"
 RULES_FILE = "_пропущено_правилами.txt"
+NEWS_FILE = news.NEWS_FILE           # лента «Что нового» (в папке с материалами)
+ANNOUNCE_DIR = "Объявления"          # сюда сохраняются тексты объявлений преподавателей
 BACKUP_DIR = "_бэкапы"
 
 # Паузы «как у человека» (секунды, случайно в диапазоне): страницы и файлы отдельно.
@@ -599,6 +602,7 @@ class JobOptions:
     rules: dict | None = None      # правила скачивания (см. dl_rules)
     dir_template: str = ""         # режим 3: шаблон папок, например {section_no}. {section}/{kind}
     file_template: str = ""        # режим 3: шаблон имени файла, например {section_no}_{item}
+    news: dict | None = None       # настройки «Что нового» (см. news.DEFAULTS)
 
 
 @dataclass
@@ -608,6 +612,7 @@ class JobResult:
     failures: list = field(default_factory=list)
     new_files: list = field(default_factory=list)
     stats: dict = field(default_factory=dict)
+    events: list = field(default_factory=list)    # события «Что нового», найденные за запуск
     message: str = ""
 
 
@@ -862,9 +867,10 @@ class Vault:
     def save_settings(self, d: dict):
         write_text_atomic(self.settings_path, json.dumps(d, ensure_ascii=False, indent=2))
 
-    def load_secret(self) -> dict:
+    @staticmethod
+    def _read_secret(path: Path) -> dict:
         try:
-            with fopen(self.secret_path, "rb") as f:
+            with fopen(path, "rb") as f:
                 raw = f.read()
         except OSError:
             return {}
@@ -877,22 +883,36 @@ class Vault:
             pass
         return {}
 
-    def save_secret(self, d: dict):
+    def _write_secret(self, path: Path, d: dict, plain_drop=()):
         fmkdir(self.dir)
         d = dict(d)
         if _dpapi:
             raw = b"DPAPI1" + _dpapi(json.dumps(d, ensure_ascii=False).encode("utf-8"), protect=True)
         else:
-            d.pop("password", None)  # без DPAPI пароль на диск не пишем
+            for k in plain_drop:   # без DPAPI пароль на диск не пишем
+                d.pop(k, None)
             raw = b"PLAIN1" + json.dumps(d, ensure_ascii=False).encode("utf-8")
-        tmp = self.secret_path.with_name("session.tmp")
+        tmp = path.with_name(path.stem + ".tmp")
         with fopen(tmp, "wb") as f:
             f.write(raw)
         try:
             os.chmod(fsp(tmp), 0o600)
         except OSError:
             pass
-        freplace(tmp, self.secret_path)
+        freplace(tmp, path)
+
+    def load_secret(self) -> dict:
+        return self._read_secret(self.secret_path)
+
+    def save_secret(self, d: dict):
+        self._write_secret(self.secret_path, d, plain_drop=("password",))
+
+    # Токен Telegram-бота и адрес webhook — в отдельном файле: «Выйти и забыть вход» их не стирает.
+    def load_notify(self) -> dict:
+        return self._read_secret(self.dir / "notify.bin")
+
+    def save_notify(self, d: dict):
+        self._write_secret(self.dir / "notify.bin", d)
 
     def forget(self):
         funlink(self.secret_path)
@@ -2177,7 +2197,7 @@ class State:
     def __init__(self, path: Path):
         self.path = path
         self.lock = threading.RLock()
-        self.data = {"version": 1, "files": {}, "items": {}, "courses": {}}
+        self.data = {"version": 1, "files": {}, "items": {}, "courses": {}, "news": {}}
         if fexists(path):
             try:
                 with fopen(path, "r", encoding="utf-8") as f:
@@ -2189,7 +2209,7 @@ class State:
                     freplace(path, path.with_name(path.name + ".bad"))
                 except OSError:
                     pass
-        for k in ("files", "items", "courses"):
+        for k in ("files", "items", "courses", "news"):
             self.data.setdefault(k, {})
         self._owner = {}
         for k, e in self.data["files"].items():
@@ -2240,6 +2260,15 @@ class State:
         with self.lock:
             self.data["courses"][str(cid)] = v
             self.save(force=True)
+
+    def get_news(self, cid):
+        """Что программа запомнила о курсе для «Что нового»; None — курс ещё не запоминался."""
+        return self.data["news"].get(str(cid))
+
+    def set_news(self, cid, v):
+        with self.lock:
+            self.data["news"][str(cid)] = v
+            self.save()
 
     def save(self, force=False):
         with self.lock:
@@ -2302,6 +2331,7 @@ class Processor:
         self.stats = {"new": 0, "skipped": 0, "copied": 0, "failed": 0, "bytes": 0, "cached_items": 0, "items": 0,
                       "rule_skipped": 0}
         self.rule_skips = []
+        self.events = []        # события «Что нового» за запуск
         self.cr = dl_rules.CourseRules()
         self.sig = ""
         self.pdf_on = bool(opts.pdf)
@@ -2405,6 +2435,145 @@ class Processor:
             self.state.set_item(self._ikey(it), {
                 "name": it.name, "files": it.files, "external": it.external, "online_only": it.online_only,
                 "complete": it.error is None, "dirs": layout.item_dirs(it), "rules": self.sig, "ts": int(time.time())})
+
+    # ── «Что нового» ────────────────────────────────────────────────────────
+    def news_pass(self, course: Course, layout: Layout, cfg: dict) -> list:
+        """Сравнивает курс с тем, что запомнили в прошлый раз, и возвращает события.
+        Первый раз для курса (и для каждого вида данных отдельно) — только запоминает, без событий.
+        Запомненное обновляем всегда, даже если вид события выключен: включите позже — лавины «нового» не будет."""
+        self._cur = None
+        rec = dict(self.state.get_news(course.id) or {})
+        track = cfg["track"]
+        events = []
+        now = []
+        for s in course.sections:
+            for it in s.items:
+                now.append({"key": it.key, "name": it.name, "modtype": it.modtype, "url": it.url,
+                            "section": short(s.name, 60), "note": ("не скачано: " + it.rule_skip) if it.rule_skip else "",
+                            "files": [{"title": f.get("title", ""), "path": (layout.course_rel / f["path"]).as_posix()}
+                                      for f in it.files if f.get("path")]})
+        if now:   # пустой разбор страницы курса — это сбой, а не «преподаватель всё удалил»
+            ev, seen, suspicious = news.diff_items(course.id, course.fullname, rec.get("seen"), now,
+                                                   item_new_tracked=bool(track.get("item_new")))
+            if suspicious:
+                self.rep.log("  Что нового: с курса «исчезла» почти половина элементов — похоже на сбой разбора страницы, "
+                             "сообщения об удалённом пропускаю.", "warn")
+            events += ev
+            rec["seen"] = seen
+        if track.get("announcement"):
+            try:
+                events += self._news_announcements(course, layout, cfg, rec)
+            except (NetworkDown, Stopped, SessionExpired, KeyboardInterrupt):
+                raise
+            except Exception as e:
+                self.rep.log(f"  Объявления не проверены: {describe_error(e)}", "warn")
+        if track.get("grade"):
+            try:
+                url = f"{self.client.base}/grade/report/user/index.php?id={course.id}"
+                soup, r = self.client.page(url, referer=course.url)
+                snap = news.parse_grades(soup)
+                if snap is None:
+                    self.rep.log("  Оценки: таблица не найдена (журнал закрыт или другая тема сайта) — пропускаю.", "debug")
+                else:
+                    events += news.diff_grades(course.id, course.fullname, rec.get("grades"), snap, r.url)
+                    rec["grades"] = snap
+            except (NetworkDown, Stopped, SessionExpired, KeyboardInterrupt):
+                raise
+            except Exception as e:
+                self.rep.log(f"  Оценки не проверены: {describe_error(e)}", "debug")
+        rec["ts"] = int(time.time())
+        self.state.set_news(course.id, rec)
+        events = [e for e in events if track.get(e["kind"])]
+        if events:
+            self.rep.log(f"  Что нового: {len(events)} " + news.plural(len(events), "событие", "события", "событий"))
+        return events
+
+    def _news_announcements(self, course: Course, layout: Layout, cfg: dict, rec: dict) -> list:
+        forums = [it for s in course.sections for it in s.items
+                  if it.modtype == "forum" and it.url and news.is_news_forum(it.name, cfg["forum_words"])]
+        if not forums:
+            return []
+        disc = rec.setdefault("disc", {})
+        events = []
+        for f in forums:
+            self.control.checkpoint()
+            soup, r = self.client.page(f.url, referer=course.url)
+            found = news.parse_discussions(soup, r.url)
+            if not found:
+                continue
+            known = disc.get(f.key)
+            if known is None:   # первый раз: запоминаем все, а несколько последних сохраняем молча — чтобы были под рукой офлайн
+                todo, silent = found[: cfg["backfill"]], True
+            else:
+                todo, silent = [d for d in found if d["id"] not in set(known)], False
+            for n, d in enumerate(todo):
+                post, rel = None, ""
+                if n < 10:   # не больше десяти страниц за раз; остальные — просто строкой в «Что нового»
+                    try:
+                        soup2, r2 = self.client.page(d["url"], referer=r.url)
+                        post = news.parse_post(soup2)
+                        rel = self._write_announcement(course, layout, d, post, r2.url)
+                        self.rep.log(f"  ✓ объявление: {short(d['title'], 70)}")
+                    except (NetworkDown, Stopped, SessionExpired, KeyboardInterrupt):
+                        raise
+                    except Exception as e:
+                        self.rep.log(f"  объявление «{short(d['title'], 50)}» не сохранено: {describe_error(e)}", "warn")
+                if not silent:
+                    events.append(news.make_event("announcement", course.id, course.fullname,
+                                                  (post or {}).get("title") or d["title"] or f"Объявление {d['id']}",
+                                                  detail=short((post or {}).get("text", ""), 220), url=d["url"], path=rel,
+                                                  section=f.name, key=f"{f.key}|{d['id']}"))
+            disc[f.key] = sorted({*(known or []), *(d["id"] for d in found)})[-300:]
+        return events
+
+    def _write_announcement(self, course: Course, layout: Layout, d: dict, post: dict, page_url: str) -> str:
+        """Сохраняет текст объявления в «Курс/Объявления/ГГГГ-ММ-ДД Тема.html». Вложения и картинки с сайта Moodle
+        скачиваются рядом (по тем же правилам скачивания), остальные ссылки остаются ссылками."""
+        frag = copy.copy(post["html"])
+        for el in frag.select(SEL["strip_from_pages"]):
+            el.decompose()
+        for form in frag.find_all("form"):
+            form.unwrap()
+        title = post.get("title") or d.get("title") or f"Объявление {d['id']}"
+        when = post.get("when") or ""
+        stamp = when[:10] if re.match(r"\d{4}-\d\d-\d\d", when) else datetime.now().strftime("%Y-%m-%d")
+        base = layout.course_dir / ANNOUNCE_DIR
+        name = safe_name(f"{stamp} {title}", 100)
+        if fexists(base / (name + ".html")):   # одинаковые темы в один день не затирают друг друга
+            name = safe_name(f"{stamp} {title}", 90) + f" ({d['id']})"
+        rel_html = PurePosixPath(ANNOUNCE_DIR) / (name + ".html")
+        pseudo = Item(key=f"ann-{d['id']}", modtype="forum", name=title, url=d.get("url"))
+        for tag, attr in (("img", "src"), ("a", "href")):
+            for el in frag.find_all(tag):
+                v = el.get(attr)
+                if not v or v.startswith(("#", "javascript:", "mailto:", "data:")):
+                    continue
+                u = urljoin(page_url, v)
+                pu = urlparse(u)
+                if pu.netloc.lower() == self.client.host and "pluginfile.php" in pu.path:
+                    fname = name_from_url(u)
+                    is_img = tag == "img" or split_ext(fname)[1].lower() in IMG_EXT
+                    rel = PurePosixPath(ANNOUNCE_DIR) / f"{name}_files" / safe_filename(fname)
+                    try:
+                        rec = self.fetch(u, rel, pseudo, fname, listed=False, quiet=is_img, referer=page_url,
+                                         apply_rules=not is_img)
+                    except (NetworkDown, Stopped, SessionExpired, KeyboardInterrupt):
+                        raise
+                    except Exception as e:
+                        self.rep.log(f"  вложение объявления «{short(fname, 50)}» не скачано: {describe_error(e)}", "warn")
+                        rec = None
+                    if rec:
+                        el[attr] = quote(posixpath.relpath(rec["path"], ANNOUNCE_DIR))
+                        continue
+                el[attr] = strip_sesskey(u)
+        html_text = render(PAGE_TEMPLATE, title=htmllib.escape(title), css=PAGE_CSS, course=htmllib.escape(course.fullname),
+                           section=ANNOUNCE_DIR, date=datetime.now().strftime("%d.%m.%Y %H:%M"),
+                           src=htmllib.escape(page_url), body=str(frag))
+        path = layout.course_dir / Path(*rel_html.parts)
+        write_text_atomic(path, html_text)
+        rel_out = (layout.course_rel / rel_html).as_posix()
+        self.rep.saved(rel_out, title, fsize(path), "page")
+        return rel_out
 
     def handle(self, s, it):
         if it.online_only:
@@ -2935,6 +3104,53 @@ def notify(title: str, message: str, ok: bool = True):
         pass
 
 
+def send_news(events: list, cfg: dict, vault: "Vault", rep: Reporter, *, toast=True, channels=None,
+              use_proxy=False) -> dict:
+    """Отправляет события по каналам. channels — явный список («toast», «telegram», «webhook»), иначе — включённые в настройках.
+    Значения оценок во внешние каналы уходят только если включено «показывать оценки» (share_grades)."""
+    sec = vault.load_notify()
+    token = sec.get("telegram_token") or os.environ.get("MOODLE_TELEGRAM_TOKEN", "")
+    chat = cfg["telegram_chat"] or os.environ.get("MOODLE_TELEGRAM_CHAT", "")
+    hook = sec.get("webhook_url") or os.environ.get("MOODLE_WEBHOOK_URL", "")
+    want = set(channels) if channels is not None else {c for c in ("toast", "telegram", "webhook") if cfg.get(c)}
+    hide = not cfg["share_grades"]
+    out = {"toast": None, "telegram": None, "webhook": None}
+    title, text = news.build_digest(events, hide_secrets=hide, max_lines=cfg["max_lines"], app=APP_NAME)
+    if "toast" in want and toast:
+        notify(APP_NAME, "Что нового: " + news.toast_text(events))
+        out["toast"] = {"ok": True, "msg": "показано"}
+    if "telegram" in want:
+        ok, msg = news.send_telegram(token, chat, f"{title}\n\n{text}", use_system_proxy=use_proxy)
+        out["telegram"] = {"ok": ok, "msg": msg}
+        if not ok:
+            rep.log(f"Telegram: не отправлено — {msg}", "warn")
+    if "webhook" in want:
+        ok, msg = news.send_webhook(hook, cfg["webhook_format"], title, text, events, hide_secrets=hide,
+                                    use_system_proxy=use_proxy)
+        out["webhook"] = {"ok": ok, "msg": msg}
+        if not ok:
+            rep.log(f"Webhook: не отправлено — {msg}", "warn")
+    return out
+
+
+def deliver_news(events: list, settings: dict, vault: "Vault", rep: Reporter, *, toast_on=True) -> dict:
+    """После запуска: выбирает события, о которых надо уведомить (вид события включён, курс не отключён), и рассылает.
+    → {"count": сколько событий в уведомлении, "toast": bool, ...}."""
+    cfg = news.normalize(settings.get("news"))
+    res = {"count": 0, "toast": False, "telegram": None, "webhook": None}
+    if not cfg["enabled"] or not events:
+        return res
+    push = [e for e in events if cfg["push"].get(e["kind"]) and e.get("course_id") not in cfg["mute"]]
+    res["count"] = len(push)
+    if not push:
+        return res
+    title, text = news.build_digest(push, hide_secrets=True, max_lines=cfg["max_lines"], app=APP_NAME)
+    rep.log(f"{title}\n{text}")   # в журнал — без значений оценок; полный список — во вкладке «Что нового»
+    r = send_news(push, cfg, vault, rep, toast=toast_on, use_proxy=bool(settings.get("use_system_proxy")))
+    res.update({"toast": bool(r["toast"]), "telegram": r["telegram"], "webhook": r["webhook"]})
+    return res
+
+
 # ════════════════════════════════════════════════════════════════════════════
 #  ОГЛАВЛЕНИЯ И ОТЧЁТЫ
 # ════════════════════════════════════════════════════════════════════════════
@@ -3146,6 +3362,8 @@ def run_job(client: MoodleClient, courses: list[Course], opts: JobOptions, rep: 
     res = JobResult()
     proc = None
     state = None
+    ncfg = news.normalize(opts.news)
+    watch_news = ncfg["enabled"] and any(ncfg["track"].values())
     if not opts.dry_run:
         fmkdir(out)
         rep.open_log(out / LOG_FILE)
@@ -3185,6 +3403,13 @@ def run_job(client: MoodleClient, courses: list[Course], opts: JobOptions, rep: 
             n_files = sum(len(it.files) for s in c.sections for it in s.items)
             state.set_course(c.id, {"name": c.fullname, "dir": layout.course_rel.as_posix(), "files": n_files,
                                     "updated": datetime.now().strftime("%d.%m.%Y %H:%M"), "mode": opts.mode})
+            if watch_news:
+                try:
+                    proc.events += proc.news_pass(c, layout, ncfg)
+                except (NetworkDown, Stopped, SessionExpired, KeyboardInterrupt):
+                    raise
+                except Exception as e:
+                    rep.log(f"Что нового: курс не проверен ({describe_error(e)}). Скачанное в порядке.", "warn")
             if proc.cr.zip if proc.cr.zip is not None else opts.zip:
                 try:
                     zip_course(out, layout, rep)
@@ -3204,6 +3429,11 @@ def run_job(client: MoodleClient, courses: list[Course], opts: JobOptions, rep: 
     finally:
         if state:
             state.save(force=True)
+        if proc and proc.events:
+            try:
+                news.NewsLog(out / NEWS_FILE).add(proc.events)
+            except OSError as e:
+                rep.log(f"Не удалось записать ленту «Что нового»: {e}", "error")
         if proc:
             try:
                 write_reports(out, proc, res)
@@ -3212,7 +3442,7 @@ def run_job(client: MoodleClient, courses: list[Course], opts: JobOptions, rep: 
             except OSError as e:
                 rep.log(f"Не удалось записать отчёты: {e}", "error")
     if proc:
-        res.failures, res.new_files, res.stats = proc.failures, proc.new_files, proc.stats
+        res.failures, res.new_files, res.stats, res.events = proc.failures, proc.new_files, proc.stats, proc.events
     return res
 
 
@@ -3224,6 +3454,8 @@ def summary_text(res: JobResult, opts: JobOptions) -> str:
         parts.append(f"пропущено правилами: {st['rule_skipped']} (список в {RULES_FILE})")
     if res.failures:
         parts.append(f"не скачано: {len(res.failures)} (список в {FAILED_FILE})")
+    if res.events:
+        parts.append(f"что нового: {len(res.events)}")
     return ", ".join(parts)
 
 
@@ -3403,6 +3635,10 @@ def cli_main(argv=None) -> int:
     p.add_argument("--no-geo-check", action="store_true", help="не проверять страну IP-адреса")
     p.add_argument("--ignore-geo", action="store_true", help="продолжать даже при зарубежном IP")
     p.add_argument("--no-notify", action="store_true", help="без звука и всплывающих уведомлений")
+    p.add_argument("--no-news", action="store_true", help="не искать «что нового» в этом запуске (ленту и уведомления не трогать)")
+    p.add_argument("--news-list", action="store_true", help="показать непрочитанное из «Что нового» и выйти")
+    p.add_argument("--news-read", action="store_true", help="пометить всё в «Что нового» прочитанным (можно вместе с --news-list)")
+    p.add_argument("--notify-test", action="store_true", help="отправить тестовое уведомление по включённым каналам и выйти")
     p.add_argument("--save-html", action="store_true", help="сохранять исходный HTML страниц в _debug (для настройки селекторов)")
     p.add_argument("--forget", action="store_true", help="забыть сохранённый вход")
     p.add_argument("--schedule", nargs="?", const="2weeks", choices=("week", "next", "2weeks", "month", "semester", "custom"),
@@ -3441,6 +3677,35 @@ def cli_main(argv=None) -> int:
         except (NetworkDown, Stopped, KeyboardInterrupt) as e:
             rep.log(f"Остановлено: {e}", "error")
             return 3
+        return 0
+    if args.news_list or args.news_read or args.notify_test:   # лента и уведомления — вход в Moodle не нужен
+        out = Path(args.out or settings.get("out_dir") or DEFAULT_OUT)
+        ncfg = news.normalize(settings.get("news"))
+        if args.notify_test:
+            ev = news.make_event("announcement", 0, "Проверка связи", "Тестовое уведомление",
+                                 detail="Если вы это видите — уведомления настроены верно.", key=str(time.time()))
+            r = send_news([ev], ncfg, vault, rep, toast=not args.no_notify, use_proxy=bool(settings.get("use_system_proxy")))
+            sent = {k: v for k, v in r.items() if v}
+            if not sent:
+                print("Ни один канал не включён: включите Windows-окно, Telegram или webhook во вкладке «Что нового» → «Уведомления».")
+                return 1
+            for k, v in sent.items():
+                print(f"{k}: {'✓' if v['ok'] else '✗'} {v['msg']}")
+            return 0 if all(v["ok"] for v in sent.values()) else 1
+        log = news.NewsLog(out / NEWS_FILE)
+        if args.news_list:
+            lst = log.listing(unread_only=True, limit=500)
+            if not lst["events"]:
+                print("Непрочитанного нет.")
+            by = {}
+            for e in lst["events"]:
+                by.setdefault(e["course"], []).append(e)
+            for c, evs in by.items():
+                print(f"\n{c}")
+                for e in evs:
+                    print("  • " + news.event_line(e) + (f"\n      {e['url']}" if e.get("url") else ""))
+        if args.news_read:
+            print(f"\nОтмечено прочитанным: {log.mark_read()}")
         return 0
     window = parse_hours(args.hours or settings.get("quiet_hours") or os.environ.get("MOODLE_HOURS"))
     control = Control(window)
@@ -3598,7 +3863,8 @@ def cli_main(argv=None) -> int:
     opts = JobOptions(out_dir=out, mode=mode, sync=(action == "sync"), dry_run=(action == "dry"), pdf=bool(pdf),
                       zip=bool(zp), original_names=args.original_names, index_in_mode2=args.index,
                       rules=settings.get("rules"), dir_template=settings.get("layout_dir") or "",
-                      file_template=settings.get("layout_file") or "")
+                      file_template=settings.get("layout_file") or "",
+                      news={**news.normalize(settings.get("news")), "enabled": False} if args.no_news else settings.get("news"))
     rep.log(f"\nКурсов: {len(selected)} · режим {mode} · папка: {out}"
             + (f" · тихие часы {fmt_window(window)}" if window else ""))
     t0 = time.monotonic()
@@ -3612,12 +3878,13 @@ def cli_main(argv=None) -> int:
         return 0
     if action == "sync" and res.aborted is None:
         extra_sync(settings, vault, client, out, rep, control, notify_on=not args.no_notify)
+    delivered = deliver_news(res.events, settings, vault, rep, toast_on=not args.no_notify) if res.events else {}
     took = fmt_dur(time.monotonic() - t0)
     head = {"network": "Прервано: нет связи", "session": "Прервано: сессия истекла",
             "stopped": "Остановлено"}.get(res.aborted, "Готово")
     text = f"{head} за {took}. {summary_text(res, opts)}"
     rep.log("\n" + "═" * 56 + f"\n{text}\nПапка: {out}\n" + "═" * 56)
-    if not args.no_notify:
+    if not args.no_notify and not (delivered.get("toast") and res.aborted is None):   # окно «Что нового» уже показано
         notify(APP_NAME, text, ok=res.aborted is None)
     return 0 if res.aborted is None else 3
 
