@@ -416,6 +416,8 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
               <div class="row"><div class="lbl">Оглавление и в режиме папок</div><label class="sw-t"><input type="checkbox" data-s="index_in_mode2"><span></span></label></div>
               <div class="row"><div class="lbl">Через системный прокси<small>обычно не нужно — Moodle лучше напрямую</small></div><label class="sw-t"><input type="checkbox" data-s="use_system_proxy"><span></span></label></div>
               <div class="row"><div class="lbl">Не проверять страну IP</div><label class="sw-t"><input type="checkbox" data-s="no_geo_check"><span></span></label></div>
+            <div class="row" style="flex-wrap:wrap"><div class="lbl">Данные программы<small id="dataInfo">вход, настройки и кэш лежат в папке пользователя</small></div>
+                <button class="btn" id="dataImport" title="Если при смене версии программа не нашла старые данные сама — укажите папку со старой версией">Перенести из старой версии…</button></div>
             </details>
           </div>
           <div class="panel">
@@ -777,6 +779,25 @@ function updateSelInfo(){
   $("#selInfo").textContent = n ? "Можно закрыть окно во время загрузки — она завершится в фоне, придёт уведомление." : "Отметьте курсы галочкой в углу карточки. Нажатие на саму карточку открывает курс.";
 }
 async function loadCourses(){ courses = await api("/api/courses"); renderGrid(); }
+/* ── данные программы: где лежат и перенос с прошлой версии ── */
+let dataNoticeShown = false;
+function renderData(d){
+  if (!d) return;
+  const modes = {user: "папка пользователя", portable: "рядом с программой (portable)", dev: "рядом с программой", custom: "своя папка"};
+  $("#dataInfo").textContent = (modes[d.mode] || d.mode) + ": " + d.dir;
+  if (d.notice && !dataNoticeShown) {
+    dataNoticeShown = true;
+    toast("Данные прошлой версии перенесены (вход, настройки, офлайн). Старая папка осталась как была: " + d.notice.from);
+    api("/api/data/seen", {});
+  }
+}
+$("#dataImport").onclick = async () => {
+  const r = await api("/api/data/import", {});
+  if (r.cancelled) return;
+  if (!r.ok) { toast(r.error || "Не получилось перенести", "bad"); return; }
+  toast(`Перенесено файлов: ${r.files}. Вход и настройки подхвачены`);
+  loadCourses();
+};
 
 /* ── настройки ── */
 function loadSettings(st){
@@ -1582,7 +1603,7 @@ async function poll(){
     $("#uname").textContent = (L.user || L.username || "Гость") + (L.state === "offline" ? " · офлайн" : ""); $("#avatar").textContent = (L.user || L.username || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
     $("#rememberHint").textContent = L.can_encrypt ? "«Запомнить меня»: логин и пароль шифруются средствами Windows (DPAPI) и доступны только вашей учётной записи на этом ПК."
                                                    : "«Запомнить меня»: сохраню только cookie сессии; когда она истечёт, пароль спросят снова.";
-    loadSettings(st); renderNet(st); renderJob(st.job); renderNewsBadge(st.news_unread || 0); renderSearchRun(st.search || {}); renderCalBadge(st.cal_badge || 0); calJobWatch(st.job);
+    loadSettings(st); renderData(st.data); renderNet(st); renderJob(st.job); renderNewsBadge(st.news_unread || 0); renderSearchRun(st.search || {}); renderCalBadge(st.cal_badge || 0); calJobWatch(st.job);
     delay = st.job.state !== "idle" ? 600 : 1200;
   } catch (e) {
     $("#net .dot").className = "dot down"; $("#net .txt").textContent = "Программа закрыта — перезапустите её";

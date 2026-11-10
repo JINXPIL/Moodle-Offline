@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import dl_rules
 import moodle_offline as mo
+import datadir
 import deadlines
 import news
 import search
@@ -188,6 +189,27 @@ class App:
         self.search_last = None       # итог последней индексации: {"ok", "text", ...}
 
     # ── настройки ──
+    # ── где хранятся данные и перенос с прошлой версии ──
+    def data_info(self) -> dict:
+        mode = mo.PLAN.mode if mo.DATA_DIR == mo.PLAN.data_dir else "custom"
+        return {"dir": str(mo.DATA_DIR), "mode": mode, "out": str(self.settings.get("out_dir") or mo.DEFAULT_OUT),
+                "notice": datadir.pending_notice(mo.DATA_DIR)}
+
+    def data_import(self, path: str) -> dict:
+        """Копирует данные прошлой версии из указанной папки и сразу подхватывает их (вход, настройки, курсы)."""
+        try:
+            info = datadir.import_from(Path(path), datadir.Plan(mo.PLAN.mode, mo.APP_DIR, mo.DATA_DIR, mo.DEFAULT_OUT), overwrite=True)
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        except OSError as e:
+            return {"ok": False, "error": mo.describe_error(e)}
+        with self.lock:
+            self.settings = self.vault.load_settings()
+        self.rep.log(f"Данные перенесены из {info['from']} (файлов: {info['files']}).")
+        if self.login_state != "ok" and self.vault.load_secret():
+            threading.Thread(target=self.try_saved_login, daemon=True).start()
+        return {"ok": True, **info}
+
     def save_settings(self):
         with self.lock:
             self.vault.save_settings(self.settings)
@@ -1096,8 +1118,19 @@ class App:
             return {"ok": False, "error": (r.stderr or r.stdout or "schtasks вернул ошибку").strip()}
         self.settings["schedule_on"] = True
         self.settings["schedule_time"] = hhmm
+        self.settings["schedule_exe"] = sys.executable if mo.FROZEN else ""
         self.save_settings()
         return {"ok": True}
+
+    def repair_schedule(self):
+        """Ночная синхронизация в планировщике Windows хранит путь к .exe. Положили новую версию в другое место —
+        старая задача указывает в пустоту. Если путь сменился, пересоздаём задачу с тем же временем."""
+        st = self.settings
+        if os.name != "nt" or not mo.FROZEN or not st.get("schedule_on") or st.get("schedule_exe") == sys.executable:
+            return
+        r = self.schedule(True, st.get("schedule_time") or "03:10")
+        self.rep.log("Ночная синхронизация: путь к программе изменился, задачу в планировщике обновил." if r.get("ok")
+                     else f"Ночная синхронизация: не удалось обновить задачу в планировщике ({r.get('error')}).", "info" if r.get("ok") else "warn")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1372,6 +1405,14 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(200, {"ok": False, "error": str(e)})
             return self._send(200, {"ok": True})
+        if p == "/api/data/seen":
+            datadir.mark_seen(mo.DATA_DIR)
+            return self._send(200, {"ok": True})
+        if p == "/api/data/import":
+            path = (b.get("path") or "").strip() or pick_folder(str(mo.APP_DIR.parent))
+            if not path:
+                return self._send(200, {"ok": False, "cancelled": True})
+            return self._send(200, APP.data_import(path))
         if p == "/api/pick_folder":
             path = pick_folder(APP.settings.get("out_dir", ""))
             if path:
@@ -1408,6 +1449,7 @@ class Handler(BaseHTTPRequestHandler):
             "news_unread": APP.news_unread(),
             "cal_badge": APP.cal_badge(),
             "search": APP.search_progress(),
+            "data": APP.data_info(),
         }
 
 
@@ -1451,12 +1493,15 @@ def gui_main(no_window=False, port=0):
     global APP
     mo.ensure_console_utf8()
     mo.load_env()
+    migrated = mo.prepare_data_dir()
     url = existing_instance()
     if url and not no_window:
         print("Программа уже запущена — открываю окно.")
         open_window(url)
         return 0
     APP = App()
+    if migrated:
+        APP.rep.log(f"Данные прошлой версии перенесены из {migrated['from']} (файлов: {migrated['files']}). Старая папка осталась как была.")
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     srv.daemon_threads = True
     port = srv.server_address[1]
@@ -1468,6 +1513,7 @@ def gui_main(no_window=False, port=0):
     if not APP.settings.get("no_geo_check"):
         threading.Thread(target=APP.check_geo, daemon=True).start()
     threading.Thread(target=APP.try_saved_login, daemon=True).start()
+    threading.Thread(target=APP.repair_schedule, daemon=True).start()
     print(f"{mo.APP_NAME} {mo.VERSION}: интерфейс открыт в отдельном окне.")
     print(f"Если окно не появилось, откройте в браузере: {url}")
     print("Это окно консоли можно свернуть. Закроете окно программы — консоль закроется сама (после загрузки).")
