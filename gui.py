@@ -32,6 +32,7 @@ import datadir
 import deadlines
 import news
 import search
+import watch
 import electives as el
 import schedule as sched
 
@@ -178,6 +179,11 @@ class App:
         self.electives_checked = 0.0
         self.offline = {"reason": "", "since": "", "cached": ""}   # офлайн-режим: работаем с сохранённым
         self.relogin_tried = 0.0
+        self.tracker = watch.Tracker()          # упал / ожил: по ряду проверок
+        self.wlock = watch.Lock(mo.DATA_DIR, "окно")    # кто ведёт автообновление: окно или консольное слежение
+        self.wlock_at = -99.0
+        self.auto_why = ""                      # почему автообновление пока не запущено (для подписи в окне)
+        self.probe_kick = False                 # настройки таймера сменили — проверить сайт сразу, не ждать старого интервала
         self._news = None             # (путь, NewsLog)
         self._cal = None              # (путь, deadlines.Store)
         self.cal_checked = 0.0        # когда в последний раз проверяли «горящие» сроки (monotonic)
@@ -188,7 +194,6 @@ class App:
         self.search_prog = {"running": False, "phase": "", "done": 0, "total": 0, "current": ""}
         self.search_last = None       # итог последней индексации: {"ok", "text", ...}
 
-    # ── настройки ──
     # ── где хранятся данные и перенос с прошлой версии ──
     def data_info(self) -> dict:
         mode = mo.PLAN.mode if mo.DATA_DIR == mo.PLAN.data_dir else "custom"
@@ -229,25 +234,38 @@ class App:
         with self.lock:
             prev = self.net["status"]
             self.net = {"status": status, "detail": detail, "latency": latency,
-                        "checked": datetime.now().strftime("%H:%M:%S")}
+                        "checked": datetime.now().strftime("%H:%M:%S"), "paused": ""}
         if prev == "down" and status in ("ok", "slow"):
             self.on_server_up()
 
     def heartbeat_loop(self):
-        """Светофор: лёгкий запрос к сайту раз в 30 с (во время загрузки — раз в 60 с).
-        Заодно раз в 5 с проверяем, открыто ли окно: если закрыли и ничего не качается — выходим."""
+        """Светофор: лёгкий запрос к сайту по таймеру из настроек (по умолчанию раз в 30 с, во время загрузки — не чаще раза в минуту).
+        Заодно раз в 5 с проверяем, открыто ли окно (если закрыли и ничего не качается — выходим) и не пора ли автообновление."""
         next_probe = 0.0
         while not self.shutdown.is_set():
             now = time.monotonic()
-            if now >= next_probe:
-                try:
-                    prober = self.client or self.new_client()
-                    st, dt = prober.probe()
-                    self.set_net(st, "" if dt is None else f"{dt:.1f} с", dt)
-                except Exception:
-                    pass
-                busy = self.job_state != "idle"
-                next_probe = time.monotonic() + (HEARTBEAT_BUSY if busy else HEARTBEAT_IDLE)
+            if now >= next_probe or self.probe_kick:
+                self.probe_kick = False
+                chk = watch.normalize(self.settings.get("watch"))["check"]
+                waiting = bool(self.armed) or self.login_state == "offline"     # ждём Moodle, чтобы войти или начать загрузку
+                active = chk["enabled"] and watch.in_window(chk["window"], datetime.now())
+                if active or waiting:
+                    try:
+                        prober = self.client or self.new_client()
+                        st, dt = prober.probe()
+                        self.set_net(st, "" if dt is None else f"{dt:.1f} с", dt)
+                        self.watch_feed(st)
+                    except Exception:
+                        pass
+                else:
+                    with self.lock:
+                        self.net["paused"] = "проверка выключена" if not chk["enabled"] else "вне заданного времени"
+                interval = chk["interval"] if chk["enabled"] else 60
+                if waiting:
+                    interval = min(interval, 300)
+                if self.job_state != "idle":
+                    interval = max(interval, HEARTBEAT_BUSY)
+                next_probe = time.monotonic() + interval
             if time.monotonic() - self.last_poll > 25 and self.job_state == "idle" and not self.armed:
                 self.shutdown.set()
                 break
@@ -255,6 +273,10 @@ class App:
                     and not self.offline.get("need_login")
                     and time.monotonic() - self.relogin_tried > 120):
                 threading.Thread(target=self._recover_from_offline, daemon=True).start()
+            try:
+                self.auto_tick()
+            except Exception as e:      # таймер не должен ронять светофор
+                self.rep.log(f"Автообновление: сбой таймера ({mo.describe_error(e)})", "warn")
             if time.monotonic() - self.cal_checked > CAL_WATCH_EVERY:     # напоминания о сроках: без сети, из сохранённого
                 self.cal_checked = time.monotonic()
                 threading.Thread(target=self.cal_watch_tick, daemon=True).start()
@@ -264,6 +286,141 @@ class App:
                 self.electives_checked = time.monotonic()
                 threading.Thread(target=self.electives_refresh, daemon=True).start()
             self.shutdown.wait(5)
+
+    # ── таймер: упал / ожил и автообновление ──
+    def watch_other(self) -> str:
+        """Кто ещё (не это окно) ведёт таймер, например консольное слежение; пусто — никто."""
+        h = watch.Lock(mo.DATA_DIR).holder()
+        if h and h.get("token") != self.wlock.token and time.time() - float(h.get("ts") or 0) < watch.LOCK_STALE:
+            return h.get("who") or "другая программа"
+        return ""
+
+    def watch_feed(self, status):
+        """Результат очередной проверки → события «Moodle недоступен» / «снова работает» (если включены)."""
+        cfg = watch.normalize(self.settings.get("watch"))["check"]
+        self.tracker.down_after = cfg["down_after"]
+        watch.record_check(mo.DATA_DIR, status, time.time())
+        if self.watch_other():                 # таймер ведёт консоль — она сама сообщит, чтобы не было двух одинаковых уведомлений
+            return
+        evs = self.tracker.feed(status, time.time())
+        for e in evs:
+            self.rep.log("Moodle не отвечает." if e["type"] == "down"
+                         else f"Moodle снова работает (не работал {watch.fmt_outage(e['outage'])}).")
+        if evs:
+            threading.Thread(target=self._watch_notify, args=(evs,), daemon=True).start()
+
+    def _watch_notify(self, evs):
+        try:
+            mo.watch_notify(evs, self.settings, self.vault, self.rep, Path(self.settings.get("out_dir") or mo.DEFAULT_OUT))
+        except Exception as e:
+            self.rep.log(f"Уведомление о состоянии Moodle не отправлено: {mo.describe_error(e)}", "warn")
+
+    def auto_ids(self, acfg) -> list:
+        out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
+        state_courses = {}
+        if acfg["scope"] == "existing" and mo.fexists(out / mo.STATE_FILE):
+            state_courses = mo.State(out / mo.STATE_FILE).data["courses"]
+        return mo.pick_course_ids(acfg, self.courses, state_courses)
+
+    def auto_tick(self):
+        """Раз в 5 с: не пора ли запустить автообновление. Запускает только тот, кто держит замок (не консольное слежение)."""
+        acfg = watch.normalize(self.settings.get("watch"))["auto"]
+        if not acfg["enabled"]:
+            if self.wlock_at > 0:
+                self.wlock.release()
+                self.wlock_at = -99.0
+            self.auto_why = "выключено"
+            return
+        if time.monotonic() - self.wlock_at > 30:        # замок обновляем раз в полминуты
+            if not self.wlock.acquire():
+                self.wlock_at = -99.0
+                self.auto_why = "слежение ведёт консольная программа"
+                return
+            self.wlock_at = time.monotonic()
+        elif self.wlock_at < 0:
+            return
+        st = watch.load_state(mo.DATA_DIR)
+        ns = self.net["status"]
+        due, why = watch.auto_due(acfg, st["auto"], datetime.now(), moodle_ok=None if ns == "unknown" else ns != "down",
+                                  busy=self.job_state != "idle" or bool(self.armed),
+                                  can_login=self.login_state == "ok" or bool(self.vault.load_secret()))
+        self.auto_why = why
+        if due:
+            self.rep.log(f"Автообновление: запускаю ({why}).")
+            self.auto_run()
+
+    def auto_run(self) -> dict:
+        """Сверить диск и докачать недостающее/новое по выбранным курсам. Тот же путь, что у кнопки «Быстрая синхронизация»."""
+        acfg = watch.normalize(self.settings.get("watch"))["auto"]
+        ids = self.auto_ids(acfg)
+        now = time.time()
+        watch.record_attempt(mo.DATA_DIR, now)
+        if not ids:
+            text = "Автообновление: нет курсов для обновления — выберите курсы в настройках автообновления."
+            self.rep.log(text, "warn")
+            watch.record_result(mo.DATA_DIR, False, text, now)
+            return {"ok": False, "error": text}
+        r = self.start_job({"kind": "auto", "sync": True, "auto": True, "course_ids": ids})
+        if not r.get("ok"):
+            watch.record_result(mo.DATA_DIR, False, r.get("error", "не удалось начать"), now)
+        return r
+
+    def watch_info(self) -> dict:
+        cfg = watch.normalize(self.settings.get("watch"))
+        st = watch.load_state(mo.DATA_DIR)
+        s = watch.summary(cfg, st, datetime.now(), self.net["status"])
+        return {"cfg": cfg, "summary": s, "why": self.auto_why, "net": dict(self.net), "other": self.watch_other(),
+                "scopes": watch.SCOPES, "intervals": list(watch.INTERVALS), "every": list(watch.EVERY), "days": list(watch.DAYS),
+                "autostart": self.autostart_info()}
+
+    def watch_save(self, cfg) -> dict:
+        with self.lock:
+            self.settings["watch"] = watch.normalize(cfg)
+        self.save_settings()
+        self.auto_why = ""
+        self.probe_kick = True
+        if self.settings["watch"]["auto"]["enabled"]:
+            self.wlock_at = -99.0         # включили рубильник — сразу проверим замок и срок
+        return {"ok": True, **self.watch_info()}
+
+    def watch_audit(self) -> dict:
+        """Ничего не качает: считает, сколько файлов из выбранных курсов уже на диске и скольких не хватает."""
+        acfg = watch.normalize(self.settings.get("watch"))["auto"]
+        ids = self.auto_ids(acfg)
+        out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
+        a = mo.audit_downloads(out, ids, int(self.settings.get("mode", 1)))
+        names = {c.id: c.fullname for c in self.courses}
+        rows = [{"id": int(k), "name": names.get(int(k)) or v["name"] or k, "files": v["files"], "missing": v["missing_files"]}
+                for k, v in a["courses"].items()]
+        return {"ok": True, "scope": len(ids), "files": a["files"], "missing": a["missing_files"], "empty": a["empty"],
+                "has_state": a["has_state"], "courses": rows, "dir": str(out)}
+
+    # ── слежение в фоне без окна (автозапуск Windows) ──
+    def autostart_info(self) -> dict:
+        p = watch.startup_path(os.environ)
+        return {"supported": os.name == "nt", "on": bool(p and p.exists()), "path": str(p or "")}
+
+    def autostart_set(self, enabled: bool) -> dict:
+        if os.name != "nt":
+            return {"ok": False, "error": "автозапуск из окна есть только в Windows; в Linux и Android используйте systemd/cron/Termux:Boot (см. README)"}
+        p = watch.startup_path(os.environ)
+        if p is None:
+            return {"ok": False, "error": "не нашёл папку автозагрузки Windows"}
+        try:
+            if enabled:
+                if mo.FROZEN:
+                    cmd = [sys.executable, "--watch", "-y"]
+                else:
+                    exe = Path(sys.executable)
+                    quiet = exe.with_name("pythonw.exe")
+                    cmd = [str(quiet if quiet.exists() else exe), str(mo.APP_DIR / "moodle_offline.py"), "--watch", "-y"]
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(watch.startup_script(cmd), encoding="utf-16")    # WSH читает Юникод только с BOM (иначе кириллица в пути ломается)
+            elif p.exists():
+                p.unlink()
+        except OSError as e:
+            return {"ok": False, "error": mo.describe_error(e)}
+        return {"ok": True, **self.autostart_info()}
 
     def on_server_up(self):
         if self.login_state == "offline" and self.vault.load_secret() and not self.offline.get("need_login"):
@@ -726,13 +883,18 @@ class App:
                                  rules=st.get("rules"), dir_template=st.get("layout_dir") or "",
                                  file_template=st.get("layout_file") or "", news=st.get("news"),
                                  calendar=st.get("calendar"), calendar_on=deadlines.normalize(st.get("calendar"))["auto"])
-            self.rep.log(f"{'Быстрая синхронизация' if opts.sync else 'Загрузка'}: курсов {len(selected)}, "
+            auto = bool(params.get("auto"))
+            self.rep.log(f"{'Автообновление' if auto else 'Быстрая синхронизация' if opts.sync else 'Загрузка'}: курсов {len(selected)}, "
                          f"режим {opts.mode}, папка {opts.out_dir}")
+            if auto:     # сначала сверяем диск: недостающее помечается к докачке, готовое пропускается
+                mo.prepare_auto_update(opts.out_dir, [c.id for c in selected], opts.mode, self.rep)
             res = mo.run_job(client, selected, opts, self.rep, self.control)
             took = mo.fmt_dur(time.monotonic() - t0)
             head = {"network": "Прервано: нет связи", "session": "Прервано: сессия истекла",
                     "stopped": "Остановлено"}.get(res.aborted, "Готово")
-            text = f"{head} за {took}. {mo.summary_text(res, opts)}"
+            text = f"{'Автообновление. ' if auto else ''}{head} за {took}. {mo.summary_text(res, opts)}"
+            if auto:
+                watch.record_result(mo.DATA_DIR, res.aborted is None, text, time.time())
             self.last_result = {"ok": res.aborted is None, "text": text, "aborted": res.aborted,
                                 "failures": len(res.failures), "new": len(res.new_files), "news": len(res.events)}
             self.rep.log(text)
@@ -750,6 +912,8 @@ class App:
             self.last_result = {"ok": False, "text": f"Ошибка: {msg}", "aborted": "error"}
             self.rep.log(f"Ошибка: {msg}", "error")
             mo.notify(mo.APP_NAME, f"Ошибка: {msg}", ok=False)
+            if params.get("auto"):
+                watch.record_result(mo.DATA_DIR, False, f"Автообновление не вышло: {msg}", time.time())
         finally:
             self._cal_badge_at = -99.0     # сроки могли измениться — значок пересчитать сразу
             if self.client:
@@ -1247,6 +1411,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.news_settings_info())
         if u.path == "/api/calendar":
             return self._send(200, APP.cal_view(q))
+        if u.path == "/api/watch":
+            return self._send(200, APP.watch_info())
         if u.path == "/api/calendar/settings":
             return self._send(200, APP.cal_settings_info())
         if u.path == "/api/calendar/ics":
@@ -1405,6 +1571,14 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(200, {"ok": False, "error": str(e)})
             return self._send(200, {"ok": True})
+        if p == "/api/watch/settings":
+            return self._send(200, APP.watch_save(b.get("cfg") or {}))
+        if p == "/api/watch/audit":
+            return self._send(200, APP.watch_audit())
+        if p == "/api/watch/run":
+            return self._send(200, APP.auto_run())
+        if p == "/api/watch/autostart":
+            return self._send(200, APP.autostart_set(bool(b.get("enabled"))))
         if p == "/api/data/seen":
             datadir.mark_seen(mo.DATA_DIR)
             return self._send(200, {"ok": True})

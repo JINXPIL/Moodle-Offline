@@ -43,6 +43,7 @@ import deadlines  # календарь и дедлайны: сроки из Mood
 import dl_rules   # правила скачивания (что брать, что пропускать, шаблоны имён)
 import news       # что нового: события, лента, уведомления
 import search     # поиск по скачанным материалам (офлайн-индекс)
+import watch      # таймер проверки «жив ли Moodle» и автообновление по таймеру
 
 # В собранном .exe без консоли stdout/stderr отсутствуют — подменяем, чтобы print() не падал.
 if sys.stdout is None:
@@ -84,7 +85,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.6.0"
+VERSION = "1.7.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -3376,6 +3377,275 @@ def cli_calendar_sync(client: "MoodleClient", vault: "Vault", settings: dict, ar
     return 0 if r["ok"] else 2
 
 
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ТАЙМЕР: ПРОВЕРКА «ЖИВ ЛИ MOODLE» И АВТООБНОВЛЕНИЕ
+# ════════════════════════════════════════════════════════════════════════════
+WATCH_BEAT = None                  # пока идёт слежение: обновить замок (зовётся во время долгой паузы)
+
+
+def _watch_nap(sec):
+    """Пауза между проверками кусками по 30 с: замок живёт 3 минуты, а пауза может быть до часа — без этого окно сочло бы его брошенным."""
+    end = time.monotonic() + sec
+    while True:
+        left = end - time.monotonic()
+        if left <= 0:
+            return
+        time.sleep(min(left, 30))
+        if WATCH_BEAT:
+            WATCH_BEAT()
+
+
+WATCH_SLEEP = _watch_nap           # тесты подменяют, чтобы не ждать
+
+
+def audit_downloads(out: Path, course_ids=None, mode: int | None = None) -> dict:
+    """Сверяет память программы (.moodle_state.json) с тем, что реально лежит на диске.
+    → {"has_state", "items", "files", "missing_files", "missing_items": [ключи], "courses": {id: {...}}, "empty"}.
+    empty — на диске нет ни одного скачанного файла (по выбранным курсам)."""
+    out = Path(out)
+    res = {"has_state": fexists(out / STATE_FILE), "items": 0, "files": 0, "missing_files": 0, "missing_items": [],
+           "courses": {}, "empty": True}
+    if not res["has_state"]:
+        return res
+    state = State(out / STATE_FILE)
+    ids = None if course_ids is None else {str(i) for i in course_ids}
+    names = {k: v.get("name", "") for k, v in state.data["courses"].items()}
+    dirs = {k: v.get("dir") for k, v in state.data["courses"].items()}     # пути файлов в элементах — внутри папки курса
+    for key, rec in state.data["items"].items():
+        parts = key.split(":", 2)
+        if len(parts) < 3 or (mode is not None and parts[0] != str(mode)):
+            continue
+        cid = parts[1]
+        if (ids is not None and cid not in ids) or not dirs.get(cid):     # курс не дошёл до конца — проверить нечем
+            continue
+        c = res["courses"].setdefault(cid, {"name": names.get(cid, ""), "items": 0, "files": 0, "missing_files": 0, "missing_items": 0})
+        c["items"] += 1
+        res["items"] += 1
+        miss = 0
+        for f in rec.get("files") or []:
+            path = f.get("path")
+            if not path:
+                continue
+            c["files"] += 1
+            res["files"] += 1
+            try:
+                ok = fexists(out / Path(*PurePosixPath(dirs[cid]).parts) / Path(*PurePosixPath(path).parts))
+            except OSError:
+                ok = False
+            if not ok:
+                miss += 1
+        if miss:
+            c["missing_files"] += miss
+            c["missing_items"] += 1
+            res["missing_files"] += miss
+            res["missing_items"].append(key)
+    res["empty"] = res["files"] == 0
+    return res
+
+
+def invalidate_missing(out: Path, audit: dict) -> int:
+    """Элементы, у которых на диске не хватает файлов, помечаются «не завершены» — тогда быстрая синхронизация
+    обработает их заново и докачает недостающее. Остальные по-прежнему пропускаются. → сколько элементов помечено."""
+    keys = audit.get("missing_items") or []
+    if not keys:
+        return 0
+    state = State(Path(out) / STATE_FILE)
+    n = 0
+    for k in keys:
+        rec = state.data["items"].get(k)
+        if rec and rec.get("complete"):
+            rec["complete"] = False
+            n += 1
+    state.save(force=True)
+    return n
+
+
+def pick_course_ids(acfg: dict, courses: list, state_courses: dict) -> list[int]:
+    """Какие курсы обновлять автоматически: все (кроме прошлых и скрытых), выбранные или уже скачанные."""
+    if acfg["scope"] == "selected":
+        return list(acfg["courses"])
+    if acfg["scope"] == "existing":
+        return [int(k) for k in state_courses if str(k).isdigit()]
+    return [c.id for c in courses if not c.hidden and (acfg["include_past"] or not c.past)]
+
+
+def prepare_auto_update(out: Path, ids: list[int], mode: int, rep: Reporter) -> dict:
+    """Перед автообновлением: что есть на диске? Недостающее помечаем к докачке, готовое пропускаем,
+    а если скачанного нет вообще — качаем всё выбранное. → итоги проверки."""
+    a = audit_downloads(out, ids, mode)
+    n = invalidate_missing(out, a)
+    if a["empty"]:
+        rep.log(f"Проверка файлов: на диске пока нет скачанного — скачаю всё выбранное (курсов: {len(ids)}).")
+    elif a["missing_files"]:
+        rep.log(f"Проверка файлов: на диске не хватает {a['missing_files']} файл(ов) в {len(a['courses']) and sum(1 for c in a['courses'].values() if c['missing_files'])} курсе(ах) — "
+                f"докачаю их ({n} элемент(ов)), остальное пропущу.")
+    else:
+        rep.log(f"Проверка файлов: всё скачанное на месте ({a['files']} файл(ов)) — загляну только за новым.")
+    return a
+
+
+def auto_job_options(settings: dict, out: Path) -> "JobOptions":
+    """Параметры автообновления: как у быстрой синхронизации, с сохранёнными настройками."""
+    return JobOptions(out_dir=out, mode=int(settings.get("mode", 1)), sync=True, pdf=bool(settings.get("pdf")),
+                      zip=bool(settings.get("zip")), original_names=bool(settings.get("original_names")),
+                      index_in_mode2=bool(settings.get("index_in_mode2")), rules=settings.get("rules"),
+                      dir_template=settings.get("layout_dir") or "", file_template=settings.get("layout_file") or "",
+                      news=settings.get("news"), calendar=settings.get("calendar"),
+                      calendar_on=deadlines.normalize(settings.get("calendar"))["auto"])
+
+
+def auto_update(client: "MoodleClient", vault: "Vault", settings: dict, rep: Reporter, control: Control, *,
+                toast_on=True) -> dict:
+    """Автообновление без окна (консоль, --watch): сверить диск, докачать недостающее и новое, разослать уведомления.
+    Вход уже выполнен. → {"ok", "text", "aborted", ...}."""
+    acfg = watch.normalize(settings.get("watch"))["auto"]
+    out = Path(settings.get("out_dir") or DEFAULT_OUT)
+    courses = client.get_courses()
+    state_courses = State(out / STATE_FILE).data["courses"] if fexists(out / STATE_FILE) else {}
+    ids = pick_course_ids(acfg, courses, state_courses)
+    known = {c.id: c for c in courses}
+    selected = [known.get(i) or Course(id=i, fullname=str((state_courses.get(str(i)) or {}).get("name", ""))) for i in ids]
+    if not selected:
+        text = "Автообновление: нет курсов для обновления (проверьте, какие курсы выбраны)."
+        rep.log(text, "warn")
+        return {"ok": False, "text": text, "aborted": "empty"}
+    opts = auto_job_options(settings, out)
+    fmkdir(out)
+    rep.log(f"Автообновление: курсов {len(selected)}, режим {opts.mode}, папка {out}")
+    prepare_auto_update(out, [c.id for c in selected], opts.mode, rep)
+    t0 = time.monotonic()
+    res = run_job(client, selected, opts, rep, control)
+    if res.aborted is None:
+        extra_sync(settings, vault, client, out, rep, control, notify_on=toast_on)
+    delivered = deliver_news(res.events, settings, vault, rep, toast_on=toast_on) if res.events else {}
+    if res.aborted != "stopped" and search.normalize(settings.get("search"))["auto"]:
+        try:
+            search_pass(out, settings, rep)
+        except KeyboardInterrupt:
+            rep.log("Индексация для поиска прервана — доделается в следующий раз.", "warn")
+    head = {"network": "Прервано: нет связи", "session": "Прервано: сессия истекла", "stopped": "Остановлено"}.get(res.aborted, "Готово")
+    text = f"Автообновление. {head} за {fmt_dur(time.monotonic() - t0)}. {summary_text(res, opts)}"
+    rep.log(text)
+    if toast_on and res.aborted != "stopped" and not (delivered.get("toast") and res.aborted is None):
+        notify(APP_NAME, text, ok=res.aborted is None)
+    return {"ok": res.aborted is None, "text": text, "aborted": res.aborted, "new": len(res.new_files),
+            "failures": len(res.failures)}
+
+
+def watch_notify(evs: list, settings: dict, vault: "Vault", rep: Reporter, out: Path, *, toast_on=True):
+    """События таймера («Moodle недоступен» / «снова работает») → лента «Что нового» и уведомления."""
+    cfg = watch.normalize(settings.get("watch"))["check"]
+    ncfg = news.normalize(settings.get("news"))
+    host = urlparse(normalize_base(settings.get("base_url") or DEFAULT_URL)).netloc
+    events = watch.make_events(evs, host, cfg["notify_down"], cfg["notify_up"], time.time())
+    events = [e for e in events if ncfg["enabled"] and ncfg["track"].get(e["kind"])]
+    if not events:
+        return
+    try:
+        news.NewsLog(Path(out) / NEWS_FILE).add(events)
+    except OSError as e:
+        rep.log(f"Не удалось записать ленту «Что нового»: {e}", "error")
+    deliver_news(events, settings, vault, rep, toast_on=toast_on)
+
+
+def cli_watch(args, settings: dict, vault: "Vault", rep: Reporter) -> int:
+    """--watch: слежение без окна. По настройкам раз в N секунд проверяет Moodle (упал / ожил → уведомление),
+    а рубильником «автообновление» по таймеру докачивает недостающее. Остановка — Ctrl+C."""
+    lock = watch.Lock(DATA_DIR, "консоль")
+    if not lock.acquire():
+        h = lock.holder() or {}
+        print(f"Слежение уже ведёт другая программа ({h.get('who') or 'окно или другая консоль'}). Закройте её или подождите 3 минуты.")
+        return 3
+    base = normalize_base(args.url or settings.get("base_url") or DEFAULT_URL)
+    settings["base_url"] = base
+    control = Control()
+    control.reporter = rep
+    client = MoodleClient(base, page_delay=parse_delay(args.page_delay or settings.get("page_delay"), PAGE_DELAY),
+                          file_delay=parse_delay(args.file_delay or settings.get("file_delay"), FILE_DELAY),
+                          wait_minutes=int(settings.get("wait_minutes", WAIT_SERVER_MINUTES)),
+                          use_system_proxy=bool(settings.get("use_system_proxy") or args.use_proxy),
+                          control=control, reporter=rep)
+    client.no_wait = True
+    tracker = watch.Tracker()
+    ticks = 0
+    global WATCH_BEAT
+    WATCH_BEAT = lock.acquire
+    rep.log(f"Слежение за {urlparse(base).netloc} запущено (Ctrl+C — остановить).")
+    try:
+        while True:
+            settings = {**vault.load_settings(), "base_url": base}           # настройки из окна подхватываются на лету
+            cfg = watch.normalize(settings.get("watch"))
+            now = datetime.now()
+            tracker.down_after = cfg["check"]["down_after"]
+            out = Path(args.out or settings.get("out_dir") or DEFAULT_OUT)
+            if not lock.acquire():
+                rep.log("Слежение перехватила другая программа — выхожу.", "warn")
+                return 3
+            probed = None
+            if cfg["check"]["enabled"] and watch.in_window(cfg["check"]["window"], now):
+                st, dt = client.probe()
+                probed = st
+                watch.record_check(DATA_DIR, st, time.time())
+                evs = tracker.feed(st, time.time())
+                rep.log(f"Moodle: {st}" + (f" ({dt:.1f} с)" if dt else ""), "debug")
+                if evs:
+                    for e in evs:
+                        rep.log("Moodle не отвечает." if e["type"] == "down" else f"Moodle снова работает (не работал {watch.fmt_outage(e['outage'])}).")
+                    watch_notify(evs, settings, vault, rep, out, toast_on=not args.no_notify)
+            acfg = cfg["auto"]
+            wstate = watch.load_state(DATA_DIR)
+            ok_now = None if probed is None else probed != "down"
+            if ok_now is None and acfg["enabled"] and tracker.status != "unknown":
+                ok_now = tracker.status != "down"
+            can_login = bool(vault.load_secret().get("cookies") or vault.load_secret().get("password")
+                             or os.environ.get("MOODLE_PASSWORD") or os.environ.get("MOODLE_COOKIE") or args.cookie)
+            due, why = watch.auto_due(acfg, wstate["auto"], now, moodle_ok=ok_now, busy=False, can_login=can_login)
+            if due:
+                rep.log(f"Автообновление: запускаю ({why}).")
+                watch.record_attempt(DATA_DIR, time.time())
+                try:
+                    if not (args.no_geo_check or settings.get("no_geo_check") or args.ignore_geo):
+                        ip, cc, _svc = check_ip_country(bool(settings.get("use_system_proxy") or args.use_proxy))
+                        if cc and cc != "RU":
+                            raise MoodleError(f"IP {ip} ({cc}) — похоже, включён VPN; Moodle может не открыться. Отложу до следующего раза")
+                    client.s.cookies.clear()
+                    cli_login(client, vault, settings, args, False, rep)
+                    client.no_wait = False
+                    r = auto_update(client, vault, settings, rep, control, toast_on=not args.no_notify)
+                    watch.record_result(DATA_DIR, r["ok"], r["text"], time.time())
+                except (LoginError, MoodleError, RetriesExhausted, NetworkDown) as e:
+                    msg = f"Автообновление не вышло: {describe_error(e)}"
+                    rep.log(msg, "error")
+                    watch.record_result(DATA_DIR, False, msg, time.time())
+                finally:
+                    client.no_wait = True
+            ticks += 1
+            if args.watch_max and ticks >= args.watch_max:
+                return 0
+            interval = cfg["check"]["interval"] if cfg["check"]["enabled"] else 60
+            WATCH_SLEEP(min(interval, 3600))
+    except KeyboardInterrupt:
+        print("\nСлежение остановлено.")
+        return 130
+    finally:
+        WATCH_BEAT = None
+        lock.release()
+
+
+def cli_watch_status(settings: dict) -> int:
+    cfg = watch.normalize(settings.get("watch"))
+    st = watch.load_state(DATA_DIR)
+    s = watch.summary(cfg, st, datetime.now())
+    print(f"Проверка Moodle: {s['check']}\nАвтообновление: {s['auto']}")
+    if s["last_text"]:
+        print(f"Последний запуск ({s['last_end']}): {s['last_text']}")
+    h = watch.Lock(DATA_DIR).holder()
+    if h and time.time() - float(h.get("ts") or 0) < watch.LOCK_STALE:
+        print(f"Сейчас слежение ведёт: {h.get('who') or '?'}")
+    return 0
+
+
 # ════════════════════════════════════════════════════════════════════════════
 #  ОГЛАВЛЕНИЯ И ОТЧЁТЫ
 # ════════════════════════════════════════════════════════════════════════════
@@ -3926,6 +4196,12 @@ def cli_main(argv=None) -> int:
     p.add_argument("--search-index", action="store_true", help="обновить поисковый индекс материалов и выйти")
     p.add_argument("--search-reindex", action="store_true", help="построить поисковый индекс заново и выйти")
     p.add_argument("--no-search-index", action="store_true", help="не обновлять поисковый индекс после загрузки")
+    p.add_argument("--watch", action="store_true",
+                   help="слежение без окна: проверять Moodle по таймеру из настроек и (если включено) докачивать недостающее; Ctrl+C — стоп")
+    p.add_argument("--watch-status", action="store_true", help="показать настройки таймера и итог последнего автообновления и выйти")
+    p.add_argument("--auto-update", action="store_true",
+                   help="один раз: сверить файлы с диском, докачать недостающее и новое по правилам «Автообновления» (курсы из настроек)")
+    p.add_argument("--watch-max", type=int, default=0, help=argparse.SUPPRESS)
     p.add_argument("--save-html", action="store_true", help="сохранять исходный HTML страниц в _debug (для настройки селекторов)")
     p.add_argument("--forget", action="store_true", help="забыть сохранённый вход")
     p.add_argument("--import-data", metavar="ПАПКА",
@@ -3956,6 +4232,8 @@ def cli_main(argv=None) -> int:
     prepare_data_dir(ConsoleReporter(verbose=args.verbose, notify_on_recover=False))
     vault = Vault()
     settings = vault.load_settings()
+    if args.watch_status:
+        return cli_watch_status(settings)
     if args.forget:
         vault.forget()
         settings.pop("remember", None)
@@ -4015,12 +4293,14 @@ def cli_main(argv=None) -> int:
         return cli_deadlines(args, settings, rep)
     if args.search or args.search_index or args.search_reindex:   # поиск работает без интернета и без входа
         return cli_search(args, settings, rep)
+    if args.watch:                    # слежение без окна: свой цикл, вход только когда нужно обновить
+        return cli_watch(args, settings, vault, rep)
     window = parse_hours(args.hours or settings.get("quiet_hours") or os.environ.get("MOODLE_HOURS"))
     control = Control(window)
     control.reporter = rep
 
     action = "sync" if args.sync else "dry" if args.dry_run else "list" if args.list else None
-    if action is None and interactive and not (args.courses or args.all):
+    if action is None and interactive and not (args.courses or args.all or args.auto_update):
         print("═" * 56)
         print(f"  {APP_NAME} {VERSION} — выгрузка материалов Moodle")
         print("═" * 56)
@@ -4084,6 +4364,10 @@ def cli_main(argv=None) -> int:
         cli_login(client, vault, settings, args, interactive, rep)
         if args.calendar_sync:
             return cli_calendar_sync(client, vault, settings, args, rep)
+        if args.auto_update:
+            r = auto_update(client, vault, settings, rep, control, toast_on=not args.no_notify)
+            watch.record_result(DATA_DIR, r["ok"], r["text"], time.time())
+            return 0 if r["ok"] else 3
         rep.log("Получаю список курсов…")
         courses = client.get_courses()
     except (LoginError, MoodleError, RetriesExhausted, NetworkDown) as e:

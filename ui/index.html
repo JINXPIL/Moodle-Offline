@@ -322,7 +322,7 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
   <header class="top">
     <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>Moodle Offline</div>
     <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on">Курсы</button><button data-view="search">Поиск</button><button data-view="calendar">Календарь<span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule">Расписание</button><button data-view="electives">Элективы</button><button data-view="news">Что нового<span class="nbadge hidden" id="newsBadge"></span></button></div>
-    <div class="pill" id="net" title="Проверка доступности Moodle раз в 30 секунд"><span class="dot"></span><span class="txt">Проверяю сервер…</span></div>
+    <div class="pill" id="net" title="Проверка доступности Moodle (частоту можно изменить: «Таймер и автообновление»)"><span class="dot"></span><span class="txt">Проверяю сервер…</span></div>
     <div class="pill hidden" id="ip"></div>
     <div class="spacer"></div>
     <div class="user hidden" id="user"><div class="avatar" id="avatar"></div><span id="uname"></span>
@@ -411,6 +411,8 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
               <div class="times" style="width:100%"><span class="hint" style="margin:0">с</span><input type="time" id="qhFrom" value="01:00"><span class="hint" style="margin:0">до</span><input type="time" id="qhTo" value="07:00"></div></div>
             <div class="row" style="flex-wrap:wrap" id="schedRow"><div class="lbl">Ночная синхронизация<small>планировщик Windows, каждый день</small></div><label class="sw-t"><input type="checkbox" id="schedOn"><span></span></label>
               <div class="times" style="width:100%"><span class="hint" style="margin:0">в</span><input type="time" id="schedTime" value="03:10"></div></div>
+            <div class="row" style="flex-wrap:wrap"><div class="lbl">Таймер и автообновление<small id="watchInfo">как часто проверять Moodle и докачивать недостающее само</small></div>
+              <button class="btn" id="watchOpen">Настроить…</button></div>
             <details class="adv"><summary>Дополнительно</summary>
               <div class="row"><div class="lbl">Имена файлов как на сервере<small>а не как называется элемент курса</small></div><label class="sw-t"><input type="checkbox" data-s="original_names"><span></span></label></div>
               <div class="row"><div class="lbl">Оглавление и в режиме папок</div><label class="sw-t"><input type="checkbox" data-s="index_in_mode2"><span></span></label></div>
@@ -670,6 +672,37 @@ mark{background:rgba(255,200,40,.45);color:inherit;border-radius:3px;padding:0 1
     <div class="rsec"><h4>Не брать сроки этих курсов</h4><div class="modgrid" id="csCourses"></div></div>
   </div>
   <div class="rules-foot"><span class="hint" id="csMsg"></span><button class="btn" id="csCancel">Отмена</button><button class="btn primary" id="csSave">Сохранить</button></div>
+</div></div>
+<div class="modal hidden" id="watchModal"><div class="modal-box rules-box">
+  <header><b>Таймер и автообновление</b><button class="btn" id="wtClose">Закрыть</button></header>
+  <div class="rules-body">
+    <div class="rsec" id="wtCheckSec"><h4>Проверка «жив ли Moodle»</h4>
+      <label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Проверять доступность сайта<small>лёгкий запрос к странице входа; от этого зависит «светофор» вверху и ожидание сервера</small></span><span class="sw-t"><input type="checkbox" id="wtCOn"><span></span></span></label>
+      <div class="path" style="margin-top:10px"><select class="txt" id="wtCInt" style="width:auto;flex:none"></select><span class="hint" style="margin:auto 0">как часто (чаще раза в 30 секунд нельзя — это лишняя нагрузка на сервер университета)</span></div>
+      <div id="wtCWin"></div>
+      <div class="path" style="margin-top:10px"><select class="txt" id="wtCAfter" style="width:auto;flex:none"></select><span class="hint" style="margin:auto 0">сколько неудач подряд считать «Moodle лежит» (одна случайная ошибка не в счёт)</span></div>
+      <div class="modgrid" style="margin-top:10px">
+        <label><span class="sw-t"><input type="checkbox" id="wtCDown"><span></span></span><span>Сообщить, что Moodle не отвечает</span></label>
+        <label><span class="sw-t"><input type="checkbox" id="wtCUp"><span></span></span><span>Сообщить, что Moodle снова работает</span></label></div>
+      <p class="hint">Сообщения приходят туда же, куда и «Что нового» (окно Windows, Telegram, webhook — каналы настраиваются в «Что нового»).</p></div>
+    <div class="rsec" id="wtAutoSec"><h4>Автообновление файлов</h4>
+      <label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Рубильник: докачивать само по таймеру<small>программа сверит файлы на диске: что есть — не трогает, чего не хватает — докачает; если ничего не скачано — скачает всё выбранное</small></span><span class="sw-t"><input type="checkbox" id="wtAOn"><span></span></span></label>
+      <div id="wtABody">
+      <div class="path" style="margin-top:10px"><select class="txt" id="wtAEvery" style="width:auto;flex:none"></select><span class="hint" style="margin:auto 0">как часто обновлять</span></div>
+      <div class="path" style="margin-top:8px"><select class="txt" id="wtARetry" style="width:auto;flex:none"></select><span class="hint" style="margin:auto 0">через сколько повторить, если не получилось (Moodle лежал, вход слетел)</span></div>
+      <h4 style="margin-top:14px">Что обновлять</h4>
+      <div class="modgrid" id="wtAScope"></div>
+      <div id="wtACourses" class="modgrid" style="margin-top:8px"></div>
+      <label class="row" id="wtAPastRow" style="border:0;padding:0;margin-top:8px;cursor:pointer"><span class="lbl">Брать и прошедшие курсы<small>без этого «все курсы» — только текущие и не скрытые</small></span><span class="sw-t"><input type="checkbox" id="wtAPast"><span></span></span></label>
+      <h4 style="margin-top:14px">Когда можно обновлять</h4>
+      <div id="wtAWin"></div>
+      <p class="hint">Загрузка идёт тем же бережным способом, что и обычная: по одному файлу, с паузами. Первое обновление начнётся сразу после сохранения (если сейчас разрешённое время), дальше — по таймеру. Чтобы оно шло и при закрытом окне, см. «Работать без окна» ниже.</p></div></div>
+    <div class="rsec"><h4>Проверить, чего не хватает</h4>
+      <div class="path"><button class="btn" id="wtAudit">Проверить диск (ничего не качает)</button><button class="btn" id="wtRun">Обновить сейчас</button></div>
+      <div id="wtAuditOut" class="hint" style="margin-top:8px"></div></div>
+    <div class="rsec" id="wtBgSec"><h4>Работать без окна</h4><div id="wtBg"></div></div>
+  </div>
+  <div class="rules-foot"><span class="hint" id="wtMsg"></span><button class="btn" id="wtCancel">Отмена</button><button class="btn primary" id="wtSave">Сохранить</button></div>
 </div></div>
 <div class="toasts" id="toasts"></div>
 
@@ -1056,8 +1089,10 @@ function renderJob(j){
 function renderNet(st){
   const n = st.net, dot = $("#net .dot");
   dot.className = "dot " + ({ok:"ok", slow:"slow", down:"down"}[n.status] || "");
-  $("#net .txt").textContent = {ok:"Moodle доступен", slow:"Moodle отвечает медленно", down:"Moodle недоступен", unknown:"Проверяю сервер…"}[n.status] + (n.detail ? " · " + n.detail : "");
-  $("#net").title = n.checked ? "Последняя проверка: " + n.checked + " (раз в 30 с)" : "";
+  const every = WCHK.interval < 60 ? WCHK.interval + " с" : WCHK.interval < 3600 ? Math.round(WCHK.interval / 60) + " мин" : +(WCHK.interval / 3600).toFixed(1) + " ч";
+  if (n.paused) { dot.className = "dot"; $("#net .txt").textContent = "Проверка Moodle на паузе — " + n.paused; }
+  else $("#net .txt").textContent = {ok:"Moodle доступен", slow:"Moodle отвечает медленно", down:"Moodle недоступен", unknown:"Проверяю сервер…"}[n.status] + (n.detail ? " · " + n.detail : "");
+  $("#net").title = (n.checked ? "Последняя проверка: " + n.checked + (n.paused ? "" : " (раз в " + every + ")") : "") + " · настройки: «Таймер и автообновление»";
   const g = st.geo, ip = $("#ip");
   if (g.skipped || !g.cc) ip.classList.add("hidden");
   if (g.checked && g.cc) { ip.classList.remove("hidden"); ip.innerHTML = g.warning ? `<span class="dot down"></span>IP ${esc(g.cc)} — выключите VPN` : `<span class="dot ok"></span>IP ${esc(g.ip || "")} · ${esc(g.cc)}`; }
@@ -1092,7 +1127,8 @@ const openUrl = url => api("/api/open_url", {url});
 /* ── что нового ── */
 const NW_KIND = {item_new:["Новый материал","#2f6fde"], file_new:["Новый файл","#0f9d8a"], announcement:["Объявление","#7c4dff"],
                  grade:["Оценка","#e8710a"], item_gone:["Убрано с сайта","#8a93a3"], item_renamed:["Переименовано","#8a93a3"],
-                 deadline_new:["Новый срок","#d93025"], deadline_moved:["Срок перенесён","#e8710a"], deadline_soon:["Срок горит","#d93025"]};
+                 deadline_new:["Новый срок","#d93025"], deadline_moved:["Срок перенесён","#e8710a"], deadline_soon:["Срок горит","#d93025"],
+                 moodle_down:["Moodle не отвечает","#d93025"], moodle_up:["Moodle снова работает","#1a9e5c"]};
 let NW = null, nwUnreadOnly = false, lastNews = null;
 function renderNewsBadge(n){
   const b = $("#newsBadge"); b.textContent = n > 99 ? "99+" : n; b.classList.toggle("hidden", !n);
@@ -1431,6 +1467,108 @@ $("#csSave").onclick = async () => {
   if (!r.ok) { $("#csMsg").textContent = r.error || "Не сохранилось"; return; }
   $("#calModal").classList.add("hidden"); toast("Настройки календаря сохранены", "ok"); calFirst = true; loadCal();
 };
+
+
+/* ── таймер: проверка «жив ли Moodle» и автообновление ── */
+let WT = null, WCHK = {interval: 30};
+const WSEC = n => n < 60 ? n + " с" : n < 3600 ? Math.round(n / 60) + " мин" : +(n / 3600).toFixed(1) + " ч";
+const WMIN = n => n < 60 ? n + " мин" : n % 1440 === 0 ? n / 1440 + " дн." : +(n / 60).toFixed(1) + " ч";
+function wtOpts(el, list, cur, fmt){ const v = [...new Set([...list, cur])].sort((a, b) => a - b); el.innerHTML = v.map(x => `<option value="${x}" ${x === cur ? "selected" : ""}>${fmt(x)}</option>`).join(""); }
+function wtWinHtml(p, w, days){
+  const all = w.from === "00:00" && w.to === "24:00";
+  return `<div class="rchips" id="${p}Days">${days.map((d, i) => `<button type="button" class="chip ${w.days.includes(i) ? "on" : ""}" data-d="${i}">${d}</button>`).join("")}</div>
+    <label class="row" style="border:0;padding:0;margin-top:8px;cursor:pointer"><span class="lbl">Круглосуточно</span><span class="sw-t"><input type="checkbox" id="${p}All" ${all ? "checked" : ""}><span></span></span></label>
+    <div class="times ${all ? "hidden" : ""}" id="${p}Times"><span class="hint" style="margin:0">с</span><input type="time" id="${p}From" value="${all ? "08:00" : w.from}"><span class="hint" style="margin:0">до</span><input type="time" id="${p}To" value="${all ? "22:00" : (w.to === "24:00" ? "00:00" : w.to)}"></div>`;
+}
+function wtWinBind(p){
+  $$(`#${p}Days .chip`).forEach(b => b.onclick = () => b.classList.toggle("on"));
+  $(`#${p}All`).onchange = e => $(`#${p}Times`).classList.toggle("hidden", e.target.checked);
+}
+function wtWinRead(p){
+  const all = $(`#${p}All`).checked;
+  return {days: $$(`#${p}Days .chip.on`).map(b => +b.dataset.d), from: all ? "00:00" : ($(`#${p}From`).value || "00:00"), to: all ? "24:00" : ($(`#${p}To`).value || "24:00")};
+}
+function wtSync(){
+  const on = $("#wtAOn").checked, sc = ($("#wtAScope input:checked") || {}).value || "all";
+  $("#wtABody").classList.toggle("hidden", !on);
+  $("#wtACourses").classList.toggle("hidden", sc !== "selected"); $("#wtAPastRow").classList.toggle("hidden", sc !== "all");
+}
+async function loadWatchInfo(){
+  try { WT = await api("/api/watch"); } catch (e) { return; }
+  WCHK = {interval: WT.cfg.check.interval};
+  $("#watchInfo").textContent = WT.summary.check + " · " + WT.summary.auto + (WT.summary.last_text ? " · последнее: " + WT.summary.last_text : "");
+  return WT;
+}
+async function openWatch(){
+  if (!(await loadWatchInfo())) return;
+  const c = WT.cfg.check, a = WT.cfg.auto;
+  $("#wtCOn").checked = c.enabled; $("#wtCDown").checked = c.notify_down; $("#wtCUp").checked = c.notify_up;
+  wtOpts($("#wtCInt"), WT.intervals, c.interval, WSEC);
+  wtOpts($("#wtCAfter"), [1, 2, 3, 5], c.down_after, n => n === 1 ? "после 1 неудачи" : "после " + n + " неудач");
+  $("#wtCWin").innerHTML = wtWinHtml("wtC", c.window, WT.days); wtWinBind("wtC");
+  $("#wtAOn").checked = a.enabled;
+  wtOpts($("#wtAEvery"), WT.every, a.every, n => "раз в " + WMIN(n));
+  wtOpts($("#wtARetry"), [5, 10, 15, 30, 60, 120, 360], a.retry, n => "через " + WMIN(n));
+  $("#wtAScope").innerHTML = Object.entries(WT.scopes).map(([k, v]) => `<label><span class="sw-t"><input type="radio" name="wtScope" value="${k}" ${a.scope === k ? "checked" : ""}><span></span></span><span>${esc(v)}<small class="hint" style="margin:0"> ${{all: "все не скрытые курсы", selected: "отметьте ниже", existing: "курсы, из которых уже что-то скачано"}[k] || ""}</small></span></label>`).join("");
+  const list = courses.filter(x => !x.hidden), known = new Set(list.map(x => x.id));
+  $("#wtACourses").innerHTML = (list.length ? list : []).map(x => `<label><span class="sw-t"><input type="checkbox" data-wc="${x.id}" ${a.courses.includes(x.id) ? "checked" : ""}><span></span></span><span>${esc(x.fullname)}${x.past ? ' <small class="hint" style="margin:0">прошлый</small>' : ""}</span></label>`).join("")
+    + a.courses.filter(id => !known.has(id)).map(id => `<label><span class="sw-t"><input type="checkbox" data-wc="${id}" checked><span></span></span><span>курс №${id} <small class="hint" style="margin:0">нет в списке</small></span></label>`).join("");
+  if (!$("#wtACourses").innerHTML) $("#wtACourses").innerHTML = '<span class="hint">Список курсов появится после входа в Moodle.</span>';
+  $("#wtAPast").checked = a.include_past;
+  $("#wtAWin").innerHTML = wtWinHtml("wtA", a.window, WT.days); wtWinBind("wtA");
+  $$("#wtAScope input").forEach(i => i.onchange = wtSync); $("#wtAOn").onchange = wtSync; wtSync();
+  const as = WT.autostart;
+  $("#wtBg").innerHTML = as.supported
+    ? `<label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Запускать слежение при входе в Windows<small>без окна, в фоне: проверка Moodle и автообновление идут, пока компьютер включён. Выключить — здесь же. Файл автозапуска лежит в вашей папке автозагрузки, права администратора не нужны</small></span><span class="sw-t"><input type="checkbox" id="wtAuto" ${as.on ? "checked" : ""}><span></span></span></label>`
+    : `<p class="hint" style="margin:0">Без окна: <code>python moodle_offline.py --watch -y</code> (Linux, Android/Termux — см. README). Автозапуск из окна есть только в Windows.</p>`;
+  if (as.supported) $("#wtAuto").onchange = async e => {
+    const r = await api("/api/watch/autostart", {enabled: e.target.checked});
+    if (!r.ok) { e.target.checked = !e.target.checked; $("#wtMsg").textContent = r.error || "Не получилось"; return; }
+    toast(e.target.checked ? "Слежение будет запускаться при входе в Windows" : "Автозапуск слежения выключен", "ok");
+  };
+  $("#wtMsg").textContent = WT.other ? "Автообновление сейчас ведёт другая программа (" + WT.other + "); окно его не запускает." : (WT.why && a.enabled ? "Сейчас: " + WT.why : "");
+  $("#wtAuditOut").textContent = ""; $("#watchModal").classList.remove("hidden");
+}
+function wtCollect(){
+  const sc = ($("#wtAScope input:checked") || {}).value || "all";
+  return {check: {enabled: $("#wtCOn").checked, interval: +$("#wtCInt").value, window: wtWinRead("wtC"), notify_down: $("#wtCDown").checked,
+                  notify_up: $("#wtCUp").checked, down_after: +$("#wtCAfter").value},
+          auto: {enabled: $("#wtAOn").checked, every: +$("#wtAEvery").value, retry: +$("#wtARetry").value, scope: sc,
+                 courses: $$("#wtACourses [data-wc]").filter(i => i.checked).map(i => +i.dataset.wc), include_past: $("#wtAPast").checked, window: wtWinRead("wtA")}};
+}
+async function wtSave(quiet){
+  const cfg = wtCollect();
+  if (cfg.auto.enabled && cfg.auto.scope === "selected" && !cfg.auto.courses.length) { $("#wtMsg").textContent = "Выберите хотя бы один курс (или другой вариант «Что обновлять»)"; return false; }
+  const r = await api("/api/watch/settings", {cfg});
+  if (!r.ok) { $("#wtMsg").textContent = r.error || "Не сохранилось"; return false; }
+  WT = r; WCHK = {interval: r.cfg.check.interval}; await loadWatchInfo();
+  return true;
+}
+$("#watchOpen").onclick = openWatch;
+$("#wtClose").onclick = $("#wtCancel").onclick = () => $("#watchModal").classList.add("hidden");
+$("#wtSave").onclick = async () => { if (await wtSave()) { $("#watchModal").classList.add("hidden"); toast("Таймер сохранён", "ok"); } };
+$("#wtAudit").onclick = async () => {
+  const btn = $("#wtAudit"); btn.disabled = true; $("#wtAuditOut").textContent = "Считаю файлы на диске…";
+  try {
+    if (!(await wtSave())) { $("#wtAuditOut").textContent = ""; return; }
+    const r = await api("/api/watch/audit", {});
+    if (!r.ok) { $("#wtAuditOut").textContent = r.error || "Не получилось"; return; }
+    if (!r.scope) { $("#wtAuditOut").textContent = "Нет курсов для проверки — выберите их выше."; return; }
+    if (r.empty) { $("#wtAuditOut").textContent = "Из выбранных курсов (" + r.scope + ") на диске пока ничего нет — «Обновить сейчас» скачает всё."; return; }
+    const bad = r.courses.filter(c => c.missing).sort((a, b) => b.missing - a.missing);
+    $("#wtAuditOut").innerHTML = r.missing
+      ? `На месте ${r.files - r.missing} из ${r.files} файлов, <b>не хватает ${r.missing}</b>: ` + bad.slice(0, 8).map(c => `${esc(c.name)} (${c.missing})`).join(", ") + (bad.length > 8 ? " и др." : "") + ". «Обновить сейчас» докачает только их."
+      : `Всё на месте: ${r.files} файл(ов) в ${r.courses.length} курс(ах). «Обновить сейчас» заглянет только за новым.`;
+  } finally { btn.disabled = false; }
+};
+$("#wtRun").onclick = async () => {
+  if (!(await wtSave())) return;
+  const r = await api("/api/watch/run", {});
+  if (r.geo) return toast("Похоже, включён VPN — запустите загрузку на главной вкладке и подтвердите предупреждение", "bad");
+  if (!r.ok) { $("#wtMsg").textContent = r.error || "Не получилось начать"; return; }
+  $("#watchModal").classList.add("hidden"); toast(r.armed ? "Moodle недоступен — начну, как только сайт оживёт" : "Автообновление идёт — ход виден на главной вкладке", "ok");
+};
+loadWatchInfo(); setInterval(() => { if (!document.hidden && $("#watchModal").classList.contains("hidden")) loadWatchInfo(); }, 60000);
 
 /* ── курс «как на сайте» ── */
 const ICON = {resource:["#d93a3a","M7 3h7l5 5v13H7z M14 3v5h5"], folder:["#e8a10a","M3 7h6l2 2h10v10H3z"], url:["#2f6fde","M10 14l4-4 M8 16l-2 2a3 3 0 0 1-4-4l3-3 M16 8l2-2a3 3 0 0 1 4 4l-3 3"],
