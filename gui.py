@@ -702,6 +702,7 @@ class App:
             except TypeError:
                 pass
         if not courses:   # кэша нет — собираем карточки из уже скачанного
+            self.adopt_courses(force=True)
             out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
             try:
                 with mo.fopen(out / mo.STATE_FILE, "r", encoding="utf-8") as f:
@@ -731,7 +732,25 @@ class App:
             pass
 
     # ── курсы ──
+    def adopt_courses(self, force=False) -> list:
+        """Курсы, которые лежат в папке сохранения, но не записаны в состояние (после «Переноса данных» или копирования папки),
+        записываем в него. Недорого (читается только список папок), поэтому проверяем не чаще раза в полминуты и не во время
+        загрузки: у неё своя копия состояния, и она его перезапишет."""
+        now = time.monotonic()
+        if not force and (self.job_state != "idle" or now - getattr(self, "_adopt_at", -1e9) < 30):
+            return []
+        self._adopt_at = now
+        try:
+            added = mo.adopt_courses(Path(self.settings.get("out_dir") or mo.DEFAULT_OUT))
+        except Exception as e:       # необязательная починка: не должна ломать список курсов
+            self.rep.log(f"Курсы из папки сохранения не добавлены в список: {mo.describe_error(e)}", "warn")
+            return []
+        if added:
+            self.rep.log(f"В память программы добавлены курсы из папки сохранения: {len(added)}.")
+        return added
+
     def course_list(self):
+        self.adopt_courses()
         out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
         state_courses = {}
         try:
@@ -772,6 +791,8 @@ class App:
 
     # ── просмотр курса «как на сайте» ──
     def course_structure(self, cid: int, live=False):
+        if not live:
+            self.adopt_courses()
         out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
         sc = {}
         try:
@@ -1513,13 +1534,18 @@ class App:
             self.login_state = "idle"
             self.go_offline("данные с другого устройства")
         self._news = self._cal = None      # лента и сроки могли обновиться — перечитать
+        adopted = self.adopt_courses(force=True) if "materials" in cats else []   # файлы курсов пришли — запишем курсы в память
         parts = [f"Перенос готов за {mo.fmt_dur(took)}: получено файлов {res['copied']} из {res['total']} ({transfer._fmt_size(res['bytes'])})"]
         if changed:
             parts.append(f"настроек применено: {len(changed)}")
         if res["failed"]:
             parts.append(f"не получилось: {res['failed']}")
+        if adopted:
+            parts.append(f"курсов появилось в разделе «Курсы» как скачанные: {len(adopted)}")
         if not res["total"] and not changed:
             parts = ["Всё уже на месте — ничего нового нет"]
+            if adopted:
+                parts.append(f"курсов появилось в разделе «Курсы» как скачанные: {len(adopted)}")
         if res["from"]:
             parts.append(f"данные с устройства «{res['from']}»")
         return ", ".join(parts) + "."

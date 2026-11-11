@@ -1960,7 +1960,7 @@ function renderCourse(){
   const img = c.image ? (c.image.startsWith("data:") ? c.image : c.image + "&t=" + encodeURIComponent(T)) : "";
   let html = `<button class="btn ghost" id="cvBack" style="margin-bottom:10px">← Все курсы</button><div class="cv-head"><div class="cv-cover" style="${coverStyle(c)}">${img ? `<img src="${esc(img)}" alt="" onerror="this.remove()">` : ""}</div>
     <div class="cv-info"><div style="min-width:260px;flex:1"><div class="cat">${esc(c.category || "")}</div><h2>${esc(d.fullname || c.fullname)}</h2>
-      <div class="mmeta">${d.error ? "" : d.downloaded ? `Сохранено на компьютере · обновлено ${esc(d.updated)}` : "Ещё не скачан — показана структура с сайта, файлы откроются после загрузки"}</div>
+      <div class="mmeta">${d.error ? "" : d.downloaded ? `Сохранено на этом устройстве · обновлено ${esc(d.updated)}` : "Ещё не скачан — показана структура с сайта, файлы откроются после загрузки"}</div>
       ${c.progress != null ? `<div class="prog" style="margin-top:8px;max-width:340px"><i style="width:${Math.round(c.progress)}%"></i></div>` : ""}</div>
     <div class="cv-acts"><button class="btn primary" id="cvDl">${d.downloaded ? "Обновить курс" : "Скачать курс"}</button>
       ${(d.url || c.url) ? `<button class="btn" id="cvSite">Открыть на сайте</button>` : ""}${d.dir ? `<button class="btn" id="cvDir">Папка курса</button>` : ""}
