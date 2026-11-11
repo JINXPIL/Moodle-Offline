@@ -40,7 +40,8 @@ android {
         targetSdk = 34
         versionCode = vp[0] * 10000 + vp[1] * 100 + vp[2]
         versionName = appVersion
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        // Python 3.13 в Chaquopy есть только для 64-битных процессоров: arm64-v8a (почти все телефоны) и x86_64 (эмулятор)
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     signingConfigs {
