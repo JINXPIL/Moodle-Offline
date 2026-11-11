@@ -27,3 +27,11 @@ build/
 dist/
 *.spec
 *.zip
+
+# Android: ключи подписи — никогда не коммитить; сборка приложения
+*.p12
+*.jks
+android-app/.gradle/
+android-app/app/build/
+android-app/local.properties
+smoke-out/

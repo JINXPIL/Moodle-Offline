@@ -461,7 +461,7 @@ body.android .no-android{display:none!important}
             <div class="row" style="flex-wrap:wrap"><div class="lbl">Таймер и автообновление<small id="watchInfo">как часто проверять Moodle и докачивать недостающее само</small></div>
               <button class="btn" id="watchOpen">Настроить…</button></div>
             <details class="adv"><summary>Дополнительно</summary>
-              <div class="row only-android"><div class="lbl">Остановить программу<small>выключит сервер в Termux; таймер и автообновление остановятся</small></div><button class="btn danger" id="quitBtn">Остановить</button></div>
+              <div class="row only-android"><div class="lbl">Остановить программу<small>выключит программу в фоне; таймер и автообновление остановятся</small></div><button class="btn danger" id="quitBtn">Остановить</button></div>
               <div class="row"><div class="lbl">Имена файлов как на сервере<small>а не как называется элемент курса</small></div><label class="sw-t"><input type="checkbox" data-s="original_names"><span></span></label></div>
               <div class="row"><div class="lbl">Оглавление и в режиме папок</div><label class="sw-t"><input type="checkbox" data-s="index_in_mode2"><span></span></label></div>
               <div class="row"><div class="lbl">Через системный прокси<small>обычно не нужно — Moodle лучше напрямую</small></div><label class="sw-t"><input type="checkbox" data-s="use_system_proxy"><span></span></label></div>
@@ -764,6 +764,7 @@ history.replaceState(null, "", "/");
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let ANDROID = false;   // окно открыто в браузере телефона (программа работает в Termux)
+const IS_APK = () => !!(S && S.android_info && S.android_info.kind === "apk");   // окно внутри приложения .apk (а не в браузере с Termux)
 function androidOpen(b){
   const p = b.path || "", AI = (S && S.android_info) || {}, base = AI.out || "";
   if (p && !b.reveal && /\.[A-Za-z0-9]{1,6}$/.test(p)) { window.open(fileUrl(p), "_blank"); return {ok: true}; }
@@ -892,13 +893,23 @@ $("#dataImport").onclick = async () => {
 
 /* ── настройки ── */
 function androidTexts(){
-  $("#nsToast").closest(".hd").firstElementChild.innerHTML = 'Уведомление на телефоне<small>нужны приложение Termux:API и пакет <code>termux-api</code> (в Termux: <code>pkg install termux-api</code>)</small>';
+  $("#nsToast").closest(".hd").firstElementChild.innerHTML = IS_APK()
+    ? 'Уведомление на телефоне<small>приходит от самого приложения; при первом запуске Android спросил разрешение — если отказали, включите уведомления в настройках приложения</small>'
+    : 'Уведомление на телефоне<small>нужны приложение Termux:API и пакет <code>termux-api</code> (в Termux: <code>pkg install termux-api</code>)</small>';
   $("#wtCNote").textContent = "Сообщения приходят туда же, куда и «Что нового» (уведомление телефона, Telegram, webhook — каналы настраиваются в «Что нового»).";
 }
 function androidHint(st){
   const AI = st.android_info, el = $("#andHint");
   if (!AI || !AI.private_out) { el.classList.add("hidden"); return; }
   el.classList.remove("hidden");
+  if (AI.kind === "apk") {
+    el.innerHTML = AI.shared
+      ? `Материалы лежат в памяти приложения — приложение «Файлы» их не видит. <button class="btn" id="andShare">Положить в «Документы»</button><br>Уже скачанное останется на старом месте.`
+      : `Материалы лежат в памяти приложения — приложение «Файлы» их не видит. Чтобы они были в «Документах», разрешите приложению доступ к файлам. <button class="btn" id="andPerm">Разрешить доступ</button><br>Android откроет настройки: включите переключатель и вернитесь в программу.`;
+    const pb = $("#andPerm"); if (pb) pb.onclick = () => api("/api/android/action", {name: "allfiles"});
+    const sb = $("#andShare"); if (sb) sb.onclick = () => api("/api/settings", {out_dir: AI.suggest}).then(() => { toast("Новая папка: " + AI.suggest, "ok"); loadCourses(); });
+    return;
+  }
   el.innerHTML = AI.shared
     ? `Материалы лежат внутри Termux — приложение «Файлы» их не видит. <button class="btn" id="andShare">Положить в общую память</button><br>Уже скачанное останется на старом месте.`
     : `Материалы лежат внутри Termux — приложение «Файлы» их не видит. Чтобы они появились в общей памяти, в Termux выполните <code>termux-setup-storage</code>, разрешите доступ и обновите страницу.`;
@@ -925,8 +936,8 @@ $$("[data-s]").forEach(i => i.onchange = () => api("/api/settings", {[i.dataset.
 $("#outDir").onchange = e => api("/api/settings", {out_dir: e.target.value.trim()}).then(loadCourses);
 $("#pickDir").onclick = async () => { const r = await api("/api/pick_folder", {}); if (r.ok) { $("#outDir").value = r.path; loadCourses(); } };
 $("#openDir").onclick = () => api("/api/open", {path: ""});
-$("#quitBtn").onclick = async () => { if (!confirm("Остановить программу? Таймер и автообновление перестанут работать, пока вы не запустите её снова в Termux.")) return;
-  await api("/api/quit", {}); toast("Программа остановлена. Эту вкладку можно закрыть."); setTimeout(() => { document.body.innerHTML = '<p style="padding:24px;font:16px system-ui">Программа остановлена. Чтобы запустить снова, откройте Termux и выполните <code>./run.sh</code></p>'; }, 800); };
+$("#quitBtn").onclick = async () => { if (!confirm("Остановить программу? Таймер и автообновление перестанут работать, пока вы не " + (IS_APK() ? "откроете приложение снова." : "запустите её снова в Termux."))) return;
+  await api("/api/quit", {}); toast("Программа остановлена. Эту вкладку можно закрыть."); setTimeout(() => { document.body.innerHTML = '<p style="padding:24px;font:16px system-ui">Программа остановлена. ' + (IS_APK() ? 'Чтобы запустить снова, откройте приложение Moodle Offline.' : 'Чтобы запустить снова, откройте Termux и выполните <code>./run.sh</code>') + '</p>'; }, 800); };
 const saveHours = () => api("/api/settings", {quiet_hours: $("#qhFrom").value + "-" + $("#qhTo").value}).then(r => { if (!r.ok) toast(r.error, "bad"); });
 $("#qhFrom").onchange = saveHours; $("#qhTo").onchange = saveHours;
 async function saveSched(){ const r = await api("/api/schedule", {enabled: $("#schedOn").checked, time: $("#schedTime").value});
@@ -1592,13 +1603,18 @@ async function openWatch(){
   $("#wtAPast").checked = a.include_past;
   $("#wtAWin").innerHTML = wtWinHtml("wtA", a.window, WT.days); wtWinBind("wtA");
   $$("#wtAScope input").forEach(i => i.onchange = wtSync); $("#wtAOn").onchange = wtSync; wtSync();
-  const as = WT.autostart, wk = ANDROID ? `<label class="row" style="border:0;padding:0;margin-top:10px;cursor:pointer"><span class="lbl">Не давать телефону засыпать<small>включает wake lock в Termux: проверки и автообновление идут и с выключенным экраном, но батарея садится быстрее</small></span><span class="sw-t"><input type="checkbox" id="wtWake" ${(S && S.settings.android_wakelock) ? "checked" : ""}><span></span></span></label>` : "";
-  const abody = as.kind === "termux-boot"
+  const as = WT.autostart, wk = ANDROID ? `<label class="row" style="border:0;padding:0;margin-top:10px;cursor:pointer"><span class="lbl">Не давать телефону засыпать<small>проверки и автообновление идут и с выключенным экраном, но батарея садится быстрее</small></span><span class="sw-t"><input type="checkbox" id="wtWake" ${(S && S.settings.android_wakelock) ? "checked" : ""}><span></span></span></label>` : "";
+  const AIw = (S && S.android_info) || {};
+  const bat = IS_APK() ? `<div class="row" style="border:0;padding:0;margin-top:10px"><span class="lbl">Не ограничивать работу в фоне<small>${AIw.battery_ok ? "разрешено: Android не усыпляет программу ночью" : "без этого Android может усыпить программу, когда экран выключен, и проверки встанут"}</small></span>${AIw.battery_ok ? "" : '<button class="btn" id="wtBat">Разрешить</button>'}</div>` : "";
+  const abody = as.kind === "apk-boot"
+    ? `<label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Запускать слежение при включении телефона<small>без окна: проверка Moodle и автообновление идут в фоне, в шторке висит уведомление программы</small></span><span class="sw-t"><input type="checkbox" id="wtAuto" ${as.on ? "checked" : ""}><span></span></span></label>`
+    : as.kind === "termux-boot"
     ? `<label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Запускать слежение при включении телефона<small>без окна: проверка Moodle и автообновление идут в фоне. Нужно приложение Termux:Boot (из F-Droid) — установите его и один раз откройте${as.app_ready ? "" : " (папка автозапуска ещё не создана)"}</small></span><span class="sw-t"><input type="checkbox" id="wtAuto" ${as.on ? "checked" : ""}><span></span></span></label>`
     : as.supported
     ? `<label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Запускать слежение при входе в Windows<small>без окна, в фоне: проверка Moodle и автообновление идут, пока компьютер включён. Выключить — здесь же. Файл автозапуска лежит в вашей папке автозагрузки, права администратора не нужны</small></span><span class="sw-t"><input type="checkbox" id="wtAuto" ${as.on ? "checked" : ""}><span></span></span></label>`
     : `<p class="hint" style="margin:0">Без окна: <code>python moodle_offline.py --watch -y</code> (Linux, см. README). Автозапуск из окна есть только в Windows и на Android.</p>`;
-  $("#wtBg").innerHTML = abody + wk;
+  $("#wtBg").innerHTML = abody + wk + bat;
+  if ($("#wtBat")) $("#wtBat").onclick = () => api("/api/android/action", {name: "battery"});
   if (as.supported) $("#wtAuto").onchange = async e => {
     const r = await api("/api/watch/autostart", {enabled: e.target.checked});
     if (!r.ok) { e.target.checked = !e.target.checked; $("#wtMsg").textContent = r.error || "Не получилось"; return; }
