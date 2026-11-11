@@ -26,11 +26,27 @@ done
 grep -E "SELFTEST|FATAL|Traceback|AndroidRuntime" "$OUT/logcat.txt" | tee "$OUT/selftest.txt"
 if grep -q "SELFTEST DONE ok=[0-9]* fail=0" "$OUT/selftest.txt"; then echo "самопроверка: ПРОЙДЕНА"; else echo "самопроверка: НЕ ПРОЙДЕНА"; fail=1; fi
 
+# снимок экрана печатаем в журнал уменьшенным и в base64: так его можно посмотреть, не скачивая артефакты
+show_image() {
+  local name="$1"
+  if command -v convert > /dev/null; then convert "$OUT/$name.png" -resize 360x -quality 55 "$OUT/$name.jpg"; else cp "$OUT/$name.png" "$OUT/$name.jpg"; fi
+  echo "=== IMG $name BEGIN"; base64 -w 200 "$OUT/$name.jpg"; echo "=== IMG $name END"
+}
+
 say "окно"
 sleep 12
 adb exec-out screencap -p > "$OUT/screen1.png"
-adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1
+adb shell dumpsys window | grep -E "mCurrentFocus" | head -2
+for i in 1 2 3 4 5; do
+  adb shell uiautomator dump /sdcard/ui.xml > "$OUT/dump.log" 2>&1 && break
+  sleep 3
+done
+cat "$OUT/dump.log"
 adb pull /sdcard/ui.xml "$OUT/ui.xml" > /dev/null 2>&1
+echo "--- текст в окне (из uiautomator):"
+grep -o 'text="[^"]\+"' "$OUT/ui.xml" 2>/dev/null | head -40
+grep -E "MoodleOffline|chromium" "$OUT/logcat.txt" | grep -vE "SELFTEST" | tail -20
+show_image screen1
 if grep -q "Moodle" "$OUT/ui.xml" 2>/dev/null; then echo "в окне есть интерфейс программы: ДА"; else echo "в окне есть интерфейс программы: НЕТ"; fail=1; fi
 
 say "свернули приложение — служба должна жить"
@@ -45,7 +61,9 @@ say "открыли снова"
 adb shell am start -n "$PKG/.MainActivity"
 sleep 6
 adb exec-out screencap -p > "$OUT/screen2.png"
+show_image screen2
 adb logcat -d > "$OUT/logcat-final.txt"
+grep -E "MoodleOffline:|chromium.*(ERROR|Uncaught)" "$OUT/logcat-final.txt" | tail -20
 if grep -q "FATAL EXCEPTION" "$OUT/logcat-final.txt"; then echo "падений приложения: ЕСТЬ"; fail=1; else echo "падений приложения: нет"; fi
 
 say "итог: $([ $fail -eq 0 ] && echo ОК || echo ПРОВАЛ)"

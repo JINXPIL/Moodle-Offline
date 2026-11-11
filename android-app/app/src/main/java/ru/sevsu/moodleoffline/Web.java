@@ -9,12 +9,16 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.util.Log;
+import android.webkit.ConsoleMessage;
 import android.webkit.DownloadListener;
 import android.webkit.JsPromptResult;
 import android.webkit.JsResult;
 import android.webkit.URLUtil;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -80,9 +84,28 @@ final class Web {
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 return route(a, r.getUrl().toString(), false);
             }
+
+            // ошибки загрузки — в журнал (адрес без ключа доступа: только путь)
+            @Override
+            public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
+                Log.w("MoodleOffline", "web error " + r.getUrl().getPath() + ": " + e.getDescription());
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView v, WebResourceRequest r, WebResourceResponse e) {
+                Log.w("MoodleOffline", "web http " + e.getStatusCode() + " " + r.getUrl().getPath());
+            }
         });
 
         w.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage m) {
+                if (m.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    Log.w("MoodleOffline", "js error: " + m.message() + " (" + m.lineNumber() + ")");
+                }
+                return true;
+            }
+
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
                 WebView temp = new WebView(view.getContext());
