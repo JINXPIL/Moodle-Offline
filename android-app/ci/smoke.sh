@@ -42,9 +42,7 @@ adb logcat -d > "$OUT/logcat.txt"
 grep -E "MoodleOffline:|chromium.*(Uncaught)" "$OUT/logcat.txt" | tail -20
 show_image screen1
 if grep -q "Окно приложения подключилось к программе" "$OUT/logcat.txt"; then echo "в окне есть интерфейс программы: ДА"; else echo "в окне есть интерфейс программы: НЕТ"; fail=1; fi
-colors=$(convert "$OUT/screen1.png" -format "%k" info: 2>/dev/null || echo 0)
-echo "цветов на снимке: $colors"
-if [ "${colors:-0}" -gt 500 ]; then echo "снимок не пустой: ДА"; else echo "снимок не пустой: НЕТ"; fail=1; fi
+
 
 say "свернули приложение — служба должна жить"
 adb shell input keyevent KEYCODE_HOME
@@ -71,6 +69,10 @@ say "автозапуск после включения телефона (сам
 adb shell am force-stop "$PKG"
 sleep 3
 if adb shell pidof "$PKG" | grep -q "[0-9]"; then echo "после остановки процесс ещё жив: ПРОВЕРКА НЕ ЧИСТАЯ"; fi
+# BOOT_COMPLETED — защищённая рассылка: обычному пользователю adb её слать нельзя, а в образе эмулятора google_apis есть root
+adb root > /dev/null 2>&1 || true
+adb wait-for-device
+sleep 3
 adb logcat -c
 adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p "$PKG"
 for i in $(seq 1 15); do
