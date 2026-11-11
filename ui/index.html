@@ -285,6 +285,17 @@ input.txt:focus,select.txt:focus{border-color:var(--accent)}
 .modal-box header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
 .modal-box header b{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .modal-box iframe{flex:1;border:0;background:#fff}
+.updbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin:10px 18px 0;padding:10px 14px;background:var(--surface-solid);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;box-shadow:var(--shadow);animation:tin .2s}
+.updbar .ut{flex:1 1 240px;min-width:0}
+.updbar b{font-weight:600}
+.updbar .s{font-size:12px;color:var(--muted);margin-top:2px}
+.updbar .acts{display:flex;gap:8px;flex-wrap:wrap}
+.updnew .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.updbar .acts .btn,.updnew .acts .btn{height:32px;padding:0 12px}
+.updnew{border-top:1px solid var(--line);padding:10px 0 2px}
+.updnew details{margin-top:8px;font-size:12px;color:var(--muted)}
+.updnew summary{cursor:pointer}
+.updnotes{white-space:pre-wrap;word-break:break-word;font:12px/1.45 var(--font-body,inherit);margin:6px 0 0;max-height:180px;overflow:auto}
 .toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:60}
 .toast{background:var(--surface-solid);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;box-shadow:var(--shadow);padding:12px 14px;max-width:420px;animation:tin .2s}
 .toast.bad{border-left-color:var(--bad)}.toast.ok{border-left-color:var(--ok)}
@@ -408,6 +419,7 @@ body.android .no-android{display:none!important}
   .rules-foot{flex-wrap:wrap}
   .modgrid{grid-template-columns:1fr}
   .toasts{left:12px;right:12px;bottom:12px}
+  .updbar{margin:8px 12px 0}
   .toast{max-width:none}
   .dock{position:sticky;bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom));z-index:20;background:var(--surface-solid)}   /* не просвечивает: под ней прокручивается страница */
   .dock-head{padding:6px 12px;gap:4px 8px;flex-wrap:wrap;cursor:pointer}
@@ -429,8 +441,8 @@ body.android .no-android{display:none!important}
   .schback{display:inline-flex;margin-bottom:12px}
   #scheduleView .content{padding-bottom:4px}
   #scheduleView .side{scroll-margin-top:calc(var(--top-h,52px) + 6px)}
-  #scheduleView .schedframe{height:calc(100vh - var(--top-h,52px) - var(--bnav-h) - var(--dock-h,42px) - env(safe-area-inset-bottom) - 66px);
-    height:calc(100dvh - var(--top-h,52px) - var(--bnav-h) - var(--dock-h,42px) - env(safe-area-inset-bottom) - 66px);min-height:340px}
+  #scheduleView .schedframe{height:calc(100vh - var(--top-h,52px) - var(--bnav-h) - var(--dock-h,42px) - var(--upd-h,0px) - env(safe-area-inset-bottom) - 66px);
+    height:calc(100dvh - var(--top-h,52px) - var(--bnav-h) - var(--dock-h,42px) - var(--upd-h,0px) - env(safe-area-inset-bottom) - 66px);min-height:340px}
 }
 @media (max-width:520px){.brand{font-size:0;gap:0}}
 </style>
@@ -453,7 +465,7 @@ body.android .no-android{display:none!important}
     <h4 style="margin-top:16px">Акцентный цвет</h4>
     <div class="swatches" id="swatches"></div>
   </div>
-  <div id="bannerWrap"></div>
+  <div id="topStack"><div id="bannerWrap"></div><div class="updbar hidden" id="updBar" role="status"></div></div>
   <main>
     <!-- Вход -->
     <section class="view" id="loginView">
@@ -544,6 +556,14 @@ body.android .no-android{display:none!important}
             <div class="row no-android" style="flex-wrap:wrap"><div class="lbl">Данные программы<small id="dataInfo">вход, настройки и кэш лежат в папке пользователя</small></div>
                 <button class="btn" id="dataImport" title="Если при смене версии программа не нашла старые данные сама — укажите папку со старой версией">Перенести из старой версии…</button></div>
             </details>
+          </div>
+          <div class="panel" id="updPanel">
+            <h3>Обновление программы</h3>
+            <div class="row" style="border-top:0;padding-top:0"><div class="lbl"><span>Версия <b id="updCur"></b></span><small id="updInfo">проверка ещё не выполнялась</small></div>
+              <button class="btn" id="updCheck">Проверить сейчас</button></div>
+            <div class="updnew hidden" id="updNew"></div>
+            <div class="row"><div class="lbl">Проверять само<small>раз в сутки спрашиваю только GitHub «какая версия последняя»; личные данные не отправляются</small></div><label class="sw-t"><input type="checkbox" id="updAuto"><span></span></label></div>
+            <div class="row"><div class="lbl">Как часто</div><select class="txt" id="updEvery" style="width:auto"><option value="6">каждые 6 ч</option><option value="12">каждые 12 ч</option><option value="24">раз в сутки</option><option value="72">раз в 3 дня</option><option value="168">раз в неделю</option></select></div>
           </div>
           <div class="panel">
             <button class="btn primary big" id="startBtn">Скачать выбранные</button>
@@ -1230,8 +1250,8 @@ const NARROW = matchMedia("(max-width:700px)");
 function placeTabs(){ const t = $("#mainTabs"); if (NARROW.matches) { if (t.parentElement !== document.body) document.body.appendChild(t); } else if (t.parentElement !== $(".top")) $(".brand").after(t); }
 NARROW.addEventListener("change", placeTabs); placeTabs();
 // высоты верхней шапки и панели «Загрузки» нужны CSS, чтобы окно расписания занимало ровно оставшееся место экрана
-function setBarVars(){ const r = document.documentElement.style; r.setProperty("--top-h", $(".top").offsetHeight + "px"); r.setProperty("--dock-h", $("#dock").offsetHeight + "px"); }
-if (window.ResizeObserver) { const ro = new ResizeObserver(setBarVars); ro.observe($(".top")); ro.observe($("#dock")); } addEventListener("resize", setBarVars); setBarVars();
+function setBarVars(){ const r = document.documentElement.style; r.setProperty("--top-h", $(".top").offsetHeight + "px"); r.setProperty("--dock-h", $("#dock").offsetHeight + "px"); r.setProperty("--upd-h", ($("#updBar").classList.contains("hidden") ? 0 : $("#updBar").offsetHeight + 8) + "px"); }
+if (window.ResizeObserver) { const ro = new ResizeObserver(setBarVars); ro.observe($(".top")); ro.observe($("#dock")); ro.observe($("#updBar")); } addEventListener("resize", setBarVars); setBarVars();
 $("#schToSettings").onclick = () => $("#scheduleView .side").scrollIntoView({behavior: "smooth", block: "start"});
 $("#schToView").onclick = () => window.scrollTo({top: 0, behavior: "smooth"});
 $$(".tab").forEach(t => t.onclick = () => { tab = t.dataset.tab; $$(".tab").forEach(x => x.classList.toggle("on", x === t));
@@ -2178,6 +2198,59 @@ $("#electivesView").addEventListener("click", async e => {
   }
 });
 
+/* ── обновление программы ── */
+let UPD = null, updBarTag = "", updDismissed = "";
+const updTs = t => t ? new Date(t * 1000).toLocaleString("ru-RU", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) : "";
+function renderUpd(u){
+  UPD = u; const lt = u.latest || {};
+  $("#updCur").textContent = u.current;
+  let info = u.error ? "Не удалось проверить: " + u.error : !u.last_check ? "Проверка ещё не выполнялась" : u.newer ? "Есть новая версия " + lt.version : "У вас последняя версия";
+  if (u.last_check && !u.error) info += " · проверено " + updTs(u.last_check);
+  $("#updInfo").textContent = info;
+  if (document.activeElement !== $("#updAuto")) $("#updAuto").checked = !!u.auto;
+  if (document.activeElement !== $("#updEvery")) $("#updEvery").value = String(u.every);
+  $("#updEvery").disabled = !u.auto;
+  const box = $("#updNew"); box.classList.toggle("hidden", !u.newer);
+  if (!u.newer) { box.innerHTML = ""; return; }
+  box.innerHTML = `<b>Версия ${esc(lt.version)}</b>${lt.published ? " · " + esc(lt.published) : ""}${lt.size ? " · " + hsize(lt.size) : ""}`
+    + `<div class="hint">${esc(u.how)}</div>`
+    + (lt.notes ? `<details><summary>Что изменилось</summary><pre class="updnotes">${esc(lt.notes)}</pre></details>` : "")
+    + `<div class="acts">${lt.asset_url ? `<button class="btn primary" data-url="${esc(lt.asset_url)}">Скачать ${esc(lt.asset_name)}</button>` : ""}`
+    + `<button class="btn" data-url="${esc(lt.page)}">Страница версии</button>`
+    + `<button class="btn ghost" id="updSkip">${u.skipped ? "Снова напоминать" : "Пропустить эту версию"}</button></div>`;
+  $("#updSkip").onclick = async () => { renderUpd(await api("/api/update/settings", {skip: u.skipped ? "" : lt.tag})); updBarTag = ""; };
+}
+async function loadUpd(){ try { renderUpd(await api("/api/update")); } catch (e) {} }
+$("#updCheck").onclick = async () => {
+  const b = $("#updCheck"); b.disabled = true; b.textContent = "Проверяю…";
+  try {
+    const r = await api("/api/update/check", {}); renderUpd(r); updBarTag = "";
+    if (r.error) toast(r.error, "bad"); else if (r.newer) toast("Есть новая версия " + r.latest.version, "ok"); else toast("У вас последняя версия — " + r.current, "ok");
+  } catch (e) { toast("Не получилось проверить обновления", "bad"); }
+  b.disabled = false; b.textContent = "Проверить сейчас";
+};
+$("#updAuto").onchange = async () => renderUpd(await api("/api/update/settings", {auto: $("#updAuto").checked}));
+$("#updEvery").onchange = async () => renderUpd(await api("/api/update/settings", {every: +$("#updEvery").value}));
+function goUpdPanel(){ showView("courses"); setTimeout(() => $("#updPanel").scrollIntoView({behavior: "smooth", block: "center"}), 60); }
+async function renderUpdBar(b){
+  const bar = $("#updBar");
+  if (!b || !b.newer || b.tag === updDismissed) { bar.classList.add("hidden"); updBarTag = b && b.newer ? b.tag : ""; return; }
+  if (updBarTag === b.tag) return;
+  updBarTag = b.tag;
+  let u; try { u = await api("/api/update"); } catch (e) { updBarTag = ""; return; }
+  renderUpd(u);
+  if (!u.newer || u.skipped) { bar.classList.add("hidden"); return; }
+  const lt = u.latest;
+  bar.innerHTML = `<div class="ut"><b>Вышла новая версия ${esc(lt.version)}</b><div class="s">У вас ${esc(u.current)}. Вход, настройки и материалы сохранятся.</div></div>`
+    + `<div class="acts">${lt.asset_url ? `<button class="btn primary" data-url="${esc(lt.asset_url)}">Скачать</button>` : `<button class="btn primary" id="updHow">Как обновить</button>`}`
+    + `<button class="btn" id="updMore">Подробнее</button><button class="btn ghost" id="updLater">Позже</button></div>`;
+  const how = $("#updHow"); if (how) how.onclick = goUpdPanel;
+  $("#updMore").onclick = () => { bar.classList.add("hidden"); goUpdPanel(); };
+  $("#updLater").onclick = () => { updDismissed = lt.tag; bar.classList.add("hidden"); };
+  bar.classList.remove("hidden");
+}
+loadUpd();
+
 /* ── опрос сервера ── */
 async function poll(){
   let delay = 1200;
@@ -2200,7 +2273,7 @@ async function poll(){
     $("#uname").textContent = (L.user || L.username || "Гость") + (L.state === "offline" ? " · офлайн" : ""); $("#avatar").textContent = (L.user || L.username || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
     $("#rememberHint").textContent = L.can_encrypt ? "«Запомнить меня»: логин и пароль шифруются средствами Windows (DPAPI) и доступны только вашей учётной записи на этом ПК."
                                                    : "«Запомнить меня»: сохраню только cookie сессии; когда она истечёт, пароль спросят снова.";
-    loadSettings(st); renderData(st.data); renderNet(st); renderJob(st.job); renderNewsBadge(st.news_unread || 0); renderSearchRun(st.search || {}); renderCalBadge(st.cal_badge || 0); calJobWatch(st.job);
+    loadSettings(st); renderData(st.data); renderNet(st); renderJob(st.job); renderNewsBadge(st.news_unread || 0); renderSearchRun(st.search || {}); renderCalBadge(st.cal_badge || 0); calJobWatch(st.job); renderUpdBar(st.update);
     delay = st.job.state !== "idle" ? 600 : 1200;
   } catch (e) {
     $("#net .dot").className = "dot down"; $("#net .txt").textContent = "Программа закрыта — перезапустите её";

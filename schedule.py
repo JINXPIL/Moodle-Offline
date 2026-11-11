@@ -1115,12 +1115,41 @@ def render_ics(lessons: list, group: str) -> str:
     return "\r\n".join(lines) + "\r\n"
 
 
+def viewer_id() -> str:
+    """Короткий отпечаток текущего вида страницы: меняется, когда меняется сам просмотрщик."""
+    return hashlib.sha1(VIEWER_HTML.encode("utf-8")).hexdigest()[:10]
+
+
 def render_viewer(lessons: list, meta: dict) -> str:
     data = json.dumps({"meta": meta, "lessons": lessons}, ensure_ascii=False).replace("</", "<\\/")
-    return VIEWER_HTML.replace("__DATA__", data).replace("__GROUP__", htmllib.escape(meta.get("group", "")))
+    return (VIEWER_HTML.replace("__VID__", viewer_id()).replace("__DATA__", data)
+            .replace("__GROUP__", htmllib.escape(meta.get("group", ""))))
+
+
+def refresh_viewer(root: Path) -> bool:
+    """Если сохранённая «Расписание/index.html» собрана старым просмотрщиком — собрать заново из schedule.json.
+    Данные не трогает и в сеть не ходит. True — страница пересоздана."""
+    idx, sj = Path(root) / "index.html", Path(root) / "schedule.json"
+    if not sj.exists():
+        return False
+    try:
+        with mo.fopen(idx, "r", encoding="utf-8") as f:
+            if f"<!--viewer:{viewer_id()}-->" in f.read(400):
+                return False
+    except OSError:
+        pass                                  # страницы нет — соберём
+    try:
+        with mo.fopen(sj, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        html = render_viewer(d.get("lessons", []), d.get("meta", {}))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+    mo.write_text_atomic(idx, html)
+    return True
 
 
 VIEWER_HTML = r"""<!DOCTYPE html>
+<!--viewer:__VID__-->
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Расписание __GROUP__</title>
 <style>
