@@ -225,7 +225,8 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .mf button,.mi .side-b button{height:26px;padding:0 9px;border-radius:7px;border:1px solid var(--line);background:var(--raised);cursor:pointer;font-size:12px}
 .mf button:hover,.mi .side-b button:hover{border-color:var(--accent);color:var(--accent)}
 .mmeta{font-size:12px;color:var(--faint)}
-.schedframe{width:100%;height:100%;border:0;border-radius:var(--r);background:var(--surface)}
+.schedframe{width:100%;height:100%;flex:1;min-height:420px;border:0;border-radius:var(--r);background:var(--surface)}
+.schhead,.schback{display:none}
 .srclist label{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);cursor:pointer;font-size:13px}
 .srclist label:first-child{border-top:0}
 .ranges{display:flex;flex-wrap:wrap;gap:6px}
@@ -370,9 +371,10 @@ body.android .no-android{display:none!important}
   html,body{height:auto;min-height:100%}
   body{overflow:auto;overflow-x:hidden;background-attachment:scroll}
   #app{display:block;height:auto;min-height:100dvh}
-  .top{position:sticky;top:0;z-index:25;flex-wrap:wrap;gap:6px 10px;padding:8px 12px}
+  .top{position:sticky;top:0;z-index:25;flex-wrap:wrap;gap:6px 10px;padding:8px 12px;background:var(--surface-solid)}
   .brand{order:1;white-space:nowrap;gap:8px}
-  .spacer{order:2}
+  .spacer{display:none}
+  #net{order:2;flex:1 1 0;min-width:0}   /* статус сервера — в той же строке, а не отдельной */
   .user{order:3}#themeBtn{order:4}
   /* вкладки — нижняя панель, как в обычных приложениях: пальцем дотянуться удобнее, и ничего не обрезается */
   :root{--bnav-h:58px}
@@ -386,7 +388,7 @@ body.android .no-android{display:none!important}
   .mtabs .tic{display:block}
   .mtabs button.on{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);box-shadow:none}
   .mtabs .nbadge{position:absolute;top:1px;left:calc(50% + 4px);margin:0;min-width:16px;height:16px;line-height:16px;font-size:10px;padding:0 4px}
-  #net{order:6}#ip{order:7}
+  #ip{order:7}
   .pill{max-width:100%;min-width:0}
   .pill .txt{overflow:hidden;text-overflow:ellipsis}
   .user span#uname{display:none}
@@ -407,7 +409,7 @@ body.android .no-android{display:none!important}
   .modgrid{grid-template-columns:1fr}
   .toasts{left:12px;right:12px;bottom:12px}
   .toast{max-width:none}
-  .dock{position:sticky;bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom));z-index:20}
+  .dock{position:sticky;bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom));z-index:20;background:var(--surface-solid)}   /* не просвечивает: под ней прокручивается страница */
   .dock-head{padding:6px 12px;gap:4px 8px;flex-wrap:wrap;cursor:pointer}
   .dock-head h3{font-size:13px}
   .dock.collapsed .tab{display:none}
@@ -419,8 +421,18 @@ body.android .no-android{display:none!important}
   .icon-btn{width:40px;height:40px}
   .cv-info{padding:12px}
   .cv-acts{margin-left:0;width:100%}
-  .schedframe{min-height:60vh}
+  .schedframe{flex:none}
+  /* расписание — на всю высоту экрана: сверху шапка, снизу «Загрузки» и вкладки (их высоту ставит скрипт) */
+  #scheduleView .toolbar{display:none}
+  .schhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+  .schhead b{font:600 16px var(--font-display)}
+  .schback{display:inline-flex;margin-bottom:12px}
+  #scheduleView .content{padding-bottom:4px}
+  #scheduleView .side{scroll-margin-top:calc(var(--top-h,52px) + 6px)}
+  #scheduleView .schedframe{height:calc(100vh - var(--top-h,52px) - var(--bnav-h) - var(--dock-h,42px) - env(safe-area-inset-bottom) - 66px);
+    height:calc(100dvh - var(--top-h,52px) - var(--bnav-h) - var(--dock-h,42px) - env(safe-area-inset-bottom) - 66px);min-height:340px}
 }
+@media (max-width:520px){.brand{font-size:0;gap:0}}
 </style>
 </head>
 <body>
@@ -547,9 +559,11 @@ body.android .no-android{display:none!important}
         <div class="content" style="display:flex;flex-direction:column">
           <div class="toolbar"><h2>Расписание</h2><span class="hint" id="schInfo" style="margin:0"></span></div>
           <div id="schEmpty" class="empty hidden">Расписание ещё не сохранено. Выберите период в блоке «Период для офлайна» и нажмите «Сохранить для офлайна».</div>
-          <iframe class="schedframe hidden" id="schFrame" style="flex:1;min-height:420px"></iframe>
+          <div class="schhead"><b>Расписание</b><button class="btn" id="schToSettings">Настройки ↓</button></div>
+          <iframe class="schedframe hidden" id="schFrame"></iframe>
         </div>
         <aside class="side">
+          <button class="btn schback" id="schToView">↑ К расписанию</button>
           <div class="panel">
             <h3>Группа и источники</h3>
             <div class="field"><label>Группа</label><input class="txt" id="schGroup" list="schGroupList" placeholder="ИБ/б-25-2-о" autocomplete="off">
@@ -1215,6 +1229,11 @@ $(".dock-head").addEventListener("click", e => { if (matchMedia("(max-width:700p
 const NARROW = matchMedia("(max-width:700px)");
 function placeTabs(){ const t = $("#mainTabs"); if (NARROW.matches) { if (t.parentElement !== document.body) document.body.appendChild(t); } else if (t.parentElement !== $(".top")) $(".brand").after(t); }
 NARROW.addEventListener("change", placeTabs); placeTabs();
+// высоты верхней шапки и панели «Загрузки» нужны CSS, чтобы окно расписания занимало ровно оставшееся место экрана
+function setBarVars(){ const r = document.documentElement.style; r.setProperty("--top-h", $(".top").offsetHeight + "px"); r.setProperty("--dock-h", $("#dock").offsetHeight + "px"); }
+if (window.ResizeObserver) { const ro = new ResizeObserver(setBarVars); ro.observe($(".top")); ro.observe($("#dock")); } addEventListener("resize", setBarVars); setBarVars();
+$("#schToSettings").onclick = () => $("#scheduleView .side").scrollIntoView({behavior: "smooth", block: "start"});
+$("#schToView").onclick = () => window.scrollTo({top: 0, behavior: "smooth"});
 $$(".tab").forEach(t => t.onclick = () => { tab = t.dataset.tab; $$(".tab").forEach(x => x.classList.toggle("on", x === t));
   $("#dlist").classList.toggle("hidden", tab !== "files"); $("#elist").classList.toggle("hidden", tab !== "errors"); $("#log").classList.toggle("hidden", tab !== "log");
   $("#dock").classList.remove("collapsed"); if (tab === "log") $("#log").scrollTop = 1e9; });
