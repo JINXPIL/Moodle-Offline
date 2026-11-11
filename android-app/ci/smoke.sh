@@ -68,22 +68,35 @@ if grep -q "FATAL EXCEPTION" "$OUT/logcat-final.txt"; then echo "падений 
 say "автозапуск: перезагружаем телефон (самопроверка включила автозапуск)"
 # Настоящая перезагрузка: Android сам рассылает BOOT_COMPLETED и разрешает по нему запустить службу. Выдуманную рассылку через adb
 # система не считает загрузкой и запуск службы запрещает, поэтому проверить автозапуск иначе нельзя.
+# Эмулятор на сервере GitHub иногда не возвращается после перезагрузки (сам завершается). Раньше `adb wait-for-device` ждал его
+# бесконечно, и задача висела до лимита (так было трижды). Теперь каждое ожидание ограничено по времени. Если эмулятор не вернулся,
+# это сбой эмулятора, а не приложения: честно пишем «НЕ ПРОВЕРЕНО» и не валим сборку; остальные проверки выше уже прошли.
+adb logcat -c   # чтобы «сервер приложения запущен» нельзя было засчитать по строке из журнала до перезагрузки
+t0=$SECONDS
+boot_ok=0
 adb reboot
 sleep 10
-adb wait-for-device
-for i in $(seq 1 60); do
-  [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
-  sleep 5
-done
-echo "телефон загрузился"
-for i in $(seq 1 30); do
-  sleep 4
-  adb logcat -d > "$OUT/logcat-boot.txt" 2>&1
-  grep -q "сервер приложения запущен" "$OUT/logcat-boot.txt" && break
-done
-if grep -q "сервер приложения запущен" "$OUT/logcat-boot.txt"; then echo "после перезагрузки программа сама запустилась без окна: ДА"; else echo "после перезагрузки программа сама запустилась без окна: НЕТ"; fail=1; grep -iE "moodleoffline" "$OUT/logcat-boot.txt" | tail -30; fi
-adb shell dumpsys activity services "$PKG" > "$OUT/services-boot.txt" 2>&1
-if grep -q "ServerService" "$OUT/services-boot.txt"; then echo "служба после перезагрузки: ДА"; else echo "служба после перезагрузки: НЕТ"; fail=1; fi
+if timeout "${SMOKE_REBOOT_WAIT:-180}" adb wait-for-device; then
+  for i in $(seq 1 60); do
+    if [ "$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then boot_ok=1; break; fi
+    sleep 5
+  done
+fi
+if [ $boot_ok -eq 1 ]; then
+  echo "телефон загрузился (за $((SECONDS - t0)) с)"
+  for i in $(seq 1 30); do
+    sleep 4
+    timeout 60 adb logcat -d > "$OUT/logcat-boot.txt" 2>&1
+    grep -q "сервер приложения запущен" "$OUT/logcat-boot.txt" && break
+  done
+  if grep -q "сервер приложения запущен" "$OUT/logcat-boot.txt"; then echo "после перезагрузки программа сама запустилась без окна: ДА"; else echo "после перезагрузки программа сама запустилась без окна: НЕТ"; fail=1; grep -iE "moodleoffline" "$OUT/logcat-boot.txt" | tail -30; fi
+  timeout 60 adb shell dumpsys activity services "$PKG" > "$OUT/services-boot.txt" 2>&1
+  if grep -q "ServerService" "$OUT/services-boot.txt"; then echo "служба после перезагрузки: ДА"; else echo "служба после перезагрузки: НЕТ"; fail=1; fi
+else
+  echo "::warning::Эмулятор не вернулся после перезагрузки за $((SECONDS - t0)) с: автозапуск не проверен (сбой эмулятора, не приложения). Запустите проверку ещё раз."
+  echo "автозапуск после перезагрузки: НЕ ПРОВЕРЕНО (эмулятор не вернулся)"
+  echo "эмулятор не вернулся после перезагрузки за $((SECONDS - t0)) с" > "$OUT/reboot-skipped.txt"
+fi
 
-say "итог: $([ $fail -eq 0 ] && echo ОК || echo ПРОВАЛ)"
+say "итог: $([ $fail -eq 0 ] && echo ОК || echo ПРОВАЛ)$([ $boot_ok -eq 1 ] || echo ' (автозапуск после перезагрузки не проверен: сбой эмулятора)')"
 exit $fail

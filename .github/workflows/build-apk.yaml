@@ -83,7 +83,7 @@ jobs:
   smoke:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 15   # обычно 3–5 минут; если эмулятор завис, не ждём 40 минут
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
