@@ -86,7 +86,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.12.0"
+VERSION = "1.13.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -3629,6 +3629,25 @@ def watch_notify(evs: list, settings: dict, vault: "Vault", rep: Reporter, out: 
     deliver_news(events, settings, vault, rep, toast_on=toast_on)
 
 
+def update_tick(settings: dict, vault: "Vault", rep: Reporter, toast_on: bool = True) -> None:
+    """Слежение без окна: раз в сутки (по настройке) спросить GitHub, не вышла ли новая версия, и сказать об этом один раз."""
+    import updater
+    cfg = updater.normalize(settings.get("update"))
+    if not updater.due(cfg):
+        return
+    k = updater.kind(frozen=bool(getattr(sys, "frozen", False)), apk=android.is_apk(), android=android.is_android())
+    updater.run_check(cfg, VERSION, k, fetch=lambda cur: updater.fetch_latest(cur, bool(settings.get("use_system_proxy"))))
+    st = updater.status(cfg, VERSION, k)
+    if updater.should_notify(cfg, st):
+        cfg["notified"] = st["latest"]["tag"]
+        rep.log(f"Вышла новая версия {st['latest']['version']} (у вас {VERSION}). {st['how']}")
+        if toast_on:
+            notify(APP_NAME, updater.notice_text(st))
+    elif cfg.get("error"):
+        rep.log(f"Новую версию не проверил: {cfg['error']}", "debug")
+    vault.save_settings({**vault.load_settings(), "update": cfg})
+
+
 def cli_watch(args, settings: dict, vault: "Vault", rep: Reporter) -> int:
     """--watch: слежение без окна. По настройкам раз в N секунд проверяет Moodle (упал / ожил → уведомление),
     а рубильником «автообновление» по таймеру докачивает недостающее. Остановка — Ctrl+C."""
@@ -3705,6 +3724,10 @@ def cli_watch(args, settings: dict, vault: "Vault", rep: Reporter) -> int:
                     watch.record_result(DATA_DIR, False, msg, time.time())
                 finally:
                     client.no_wait = True
+            try:
+                update_tick(settings, vault, rep, toast_on=not args.no_notify)
+            except Exception as e:                       # проверка обновлений не должна ронять слежение
+                rep.log(f"Проверка обновлений: сбой ({describe_error(e)})", "debug")
             ticks += 1
             if args.watch_max and ticks >= args.watch_max:
                 return 0
@@ -4176,22 +4199,24 @@ def extra_sync(settings, vault, client, out, rep, control, notify_on=True):
             rep.log(f"Расписание не обновилось: {describe_error(e)}", "warn")
     if settings.get("electives_watch"):
         try:
-            import electives as el
+            import iotapi
             sec = vault.load_secret()
             creds = client.creds or ((sec.get("username"), sec.get("password")) if sec.get("password") else None)
-            e = el.Electives(out, DATA_DIR, rep, control, url=settings.get("electives_url"), creds=creds,
-                             cookies=sec.get("sso_cookies") or (sec.get("portals") or {}).get(
-                                 urlparse(settings.get("electives_url") or el.ELECTIVES_URL).hostname),
-                             use_system_proxy=bool(settings.get("use_system_proxy")))
+            e = iotapi.Iot(out, DATA_DIR, rep, control, creds=creds,
+                           cookies=sec.get("sso_cookies") or (sec.get("portals") or {}).get("iot.sevsu.ru"),
+                           use_system_proxy=bool(settings.get("use_system_proxy")),
+                           page_delay=parse_delay(settings.get("page_delay"), PAGE_DELAY),
+                           file_delay=parse_delay(settings.get("file_delay"), FILE_DELAY))
             st = e.refresh()
             if e.cookies_out and settings.get("remember"):
                 vault.save_secret({**vault.load_secret(), "sso_cookies": e.cookies_out[-60:]})
-            if st.get("new") and notify_on:
-                notify(APP_NAME, "Новые элективы: " + "; ".join(short(a["context"], 60) for a in st["new"][:3]))
+            if st.get("changes") and notify_on:
+                notify(APP_NAME, "Элективы: " + "; ".join(short(c, 70) for c in st["changes"][:3]))
         except (Stopped, KeyboardInterrupt):
             raise
         except Exception as e:
-            rep.log(f"Элективы не проверены: {describe_error(e)}", "warn")
+            rep.log(f"Элективы не проверены: {describe_error(e)}. Откройте вкладку «Элективы» в окне программы — "
+                    f"там можно ввести пароль и повторить.", "warn")
 
 
 def cli_search(args, settings: dict, rep: Reporter) -> int:

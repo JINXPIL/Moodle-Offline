@@ -42,6 +42,7 @@ import qr
 import reader
 import schedule as sched
 import transfer
+import updater
 
 UI_DIR = Path(os.environ.get("MOODLE_OFFLINE_UI") or (Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "ui"))
 TASK_NAME = "MoodleOffline - ночная синхронизация"
@@ -186,6 +187,7 @@ class App:
         self.el_lock = threading.Lock()
         self.reader_lock = threading.Lock()     # читалка: по одному запросу к Moodle за раз
         self.electives_checked = 0.0
+        self.upd_lock = threading.Lock()      # одна проверка обновлений за раз
         self.offline = {"reason": "", "since": "", "cached": ""}   # офлайн-режим: работаем с сохранённым
         self.relogin_tried = 0.0
         self.tracker = watch.Tracker()          # упал / ожил: по ряду проверок
@@ -294,6 +296,8 @@ class App:
             if time.monotonic() - self.cal_checked > CAL_WATCH_EVERY:     # напоминания о сроках: без сети, из сохранённого
                 self.cal_checked = time.monotonic()
                 threading.Thread(target=self.cal_watch_tick, daemon=True).start()
+            if updater.due(self._upd_cfg()) and not self.upd_lock.locked():       # раз в сутки спросить GitHub о новой версии
+                threading.Thread(target=self.update_check, args=(False,), daemon=True).start()
             hours = int(self.settings.get("electives_watch_hours", 6) or 6)
             if (self.settings.get("electives_watch") and self.job_state == "idle" and self._el_creds()
                     and time.monotonic() - self.electives_checked > hours * 3600):
@@ -856,6 +860,61 @@ class App:
         ct = (r.headers.get("Content-Type") or "application/octet-stream").split(";")[0].strip().lower()
         return r, ct, self._reader_name(r, final)
 
+    # ── обновление самой программы ──
+    def _upd_cfg(self) -> dict:
+        return updater.normalize(self.settings.get("update"))
+
+    def _upd_kind(self) -> str:
+        return updater.kind(frozen=bool(getattr(sys, "frozen", False)), apk=android.is_apk(), android=ANDROID)
+
+    def update_status(self) -> dict:
+        return {"ok": True, **updater.status(self._upd_cfg(), mo.VERSION, self._upd_kind())}
+
+    def update_brief(self) -> dict:
+        """Для общего состояния окна: без сети, только «есть ли новая версия»."""
+        st = updater.status(self._upd_cfg(), mo.VERSION, self._upd_kind())
+        lt = st.get("latest") or {}
+        return {"newer": bool(st["newer"] and not st["skipped"]), "version": lt.get("version", ""), "tag": lt.get("tag", "")}
+
+    def update_check(self, manual=True) -> dict:
+        """Спросить GitHub о последней версии. manual=False — по таймеру: тогда о новой версии скажет уведомление."""
+        if not self.upd_lock.acquire(blocking=False):
+            return self.update_status()
+        try:
+            k = self._upd_kind()
+            cfg = updater.run_check(self._upd_cfg(), mo.VERSION, k,
+                                    fetch=lambda cur: updater.fetch_latest(cur, bool(self.settings.get("use_system_proxy"))))
+            st = updater.status(cfg, mo.VERSION, k)
+            if updater.should_notify(cfg, st):
+                cfg["notified"] = st["latest"]["tag"]
+                if not manual:
+                    mo.notify(mo.APP_NAME, updater.notice_text(st))
+                    self.rep.log(f"Вышла новая версия {st['latest']['version']} (у вас {mo.VERSION}).")
+            with self.lock:
+                self.settings["update"] = cfg
+            self.save_settings()
+            return {"ok": True, **st}
+        finally:
+            self.upd_lock.release()
+
+    def update_settings(self, b: dict) -> dict:
+        with self.lock:
+            cfg = self._upd_cfg()
+            if "auto" in b:
+                cfg["auto"] = bool(b["auto"])
+            if "every" in b:
+                try:
+                    h = int(b["every"])
+                except (TypeError, ValueError):
+                    h = 0
+                if h in updater.EVERY_HOURS:
+                    cfg["every"] = h
+            if "skip" in b:                     # пропустить версию (tag) или снять пропуск (пустая строка)
+                cfg["skip"] = str(b["skip"] or "")
+            self.settings["update"] = cfg
+        self.save_settings()
+        return self.update_status()
+
     # ── расписание ──
     def schedule_status(self):
         out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
@@ -870,6 +929,10 @@ class App:
                 "pdf": bool(st.get("schedule_pdf", True)), "auto": bool(st.get("schedule_auto", True)),
                 "auto_range": st.get("schedule_auto_range") if st.get("schedule_auto_range") in sched.AUTO_RANGES else "2weeks",
                 "published_until": "", "saved": False, "count": 0, "updated": "", "first": "", "last": "", "dir": sched.SCHEDULE_DIR}
+        try:
+            sched.refresh_viewer(out / sched.SCHEDULE_DIR)      # после обновления программы страница сама получает новый вид
+        except Exception:
+            pass
         try:
             with mo.fopen(out / sched.SCHEDULE_DIR / "schedule.json", "r", encoding="utf-8") as f:
                 d = json.load(f)
@@ -1837,6 +1900,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.course_structure(int(q.get("id", 0) or 0), live=q.get("live") == "1"))
         if u.path == "/api/schedule/groups":
             return self._send(200, APP.schedule_groups(q.get("dept") or None, bool(q.get("refresh"))))
+        if u.path == "/api/update":
+            return self._send(200, APP.update_status())
         if u.path == "/api/schedule":
             return self._send(200, APP.schedule_status())
         if u.path == "/api/electives":
@@ -1933,6 +1998,10 @@ class Handler(BaseHTTPRequestHandler):
             if ANDROID and "android_wakelock" in b:
                 threading.Thread(target=android.wake_lock, args=(bool(b["android_wakelock"]),), daemon=True).start()
             return self._send(200, {"ok": True})
+        if p == "/api/update/check":
+            return self._send(200, APP.update_check(True))
+        if p == "/api/update/settings":
+            return self._send(200, APP.update_settings(b))
         if p == "/api/rules/save":
             return self._send(200, APP.rules_save(b))
         if p == "/api/news/read":
@@ -2094,6 +2163,7 @@ class Handler(BaseHTTPRequestHandler):
                                                 "use_system_proxy", "original_names", "index_in_mode2", "no_geo_check", "android_wakelock")},
             "platform": os.name, "android": ANDROID, "android_info": APP.android_info() if ANDROID else None, "browser_pdf": bool(mo.find_browser()),
             "news_unread": APP.news_unread(),
+            "update": APP.update_brief(),
             "cal_badge": APP.cal_badge(),
             "search": APP.search_progress(),
             "data": APP.data_info(),
