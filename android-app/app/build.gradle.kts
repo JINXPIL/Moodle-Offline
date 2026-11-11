@@ -5,7 +5,7 @@ plugins {
     id("com.chaquo.python")
 }
 
-// Версия приложения берётся из moodle_offline.py (там строка VERSION = "1.9.0"), чтобы не вести её в двух местах.
+// Версия приложения берётся из moodle_offline.py (там строка VERSION = "…"), чтобы не вести её в двух местах.
 val repoRoot: File = rootDir.parentFile
 val appVersion: String = Regex("""^VERSION\s*=\s*"([^"]+)"""", RegexOption.MULTILINE)
     .find(File(repoRoot, "moodle_offline.py").readText())?.groupValues?.get(1) ?: "0.0.0"

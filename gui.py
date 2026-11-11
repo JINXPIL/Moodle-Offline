@@ -35,7 +35,9 @@ import news
 import search
 import watch
 import electives as el
+import qr
 import schedule as sched
+import transfer
 
 UI_DIR = Path(os.environ.get("MOODLE_OFFLINE_UI") or (Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "ui"))
 TASK_NAME = "MoodleOffline - ночная синхронизация"
@@ -197,6 +199,9 @@ class App:
         self.search_thread = None
         self.search_prog = {"running": False, "phase": "", "done": 0, "total": 0, "current": ""}
         self.search_last = None       # итог последней индексации: {"ok", "text", ...}
+        self.tr_sender = None         # раздача данных по Wi-Fi (transfer.Sender)
+        self.tr_ip = None
+        self.tr_last = None           # итог последнего переноса: {"ok", "kind", "text", ...}
 
     # ── где хранятся данные и перенос с прошлой версии ──
     def data_info(self) -> dict:
@@ -885,7 +890,7 @@ class App:
         with self.lock:
             if self.job_state != "idle":
                 return {"ok": False, "error": "загрузка уже идёт"}
-            moodle_job = params.get("kind") not in ("schedule",)
+            moodle_job = params.get("kind") not in ("schedule", "transfer")
             if moodle_job and self.login_state == "offline" and not self.client:
                 if self.net["status"] == "down" or self.vault.load_secret():
                     self.armed = params
@@ -901,7 +906,7 @@ class App:
             self.job_kind = params.get("kind") or ("sync" if params.get("sync") else "full")
             self.job_started = time.time()
             self.control = mo.Control(mo.parse_hours(self.settings.get("quiet_hours"))
-                                      if self.settings.get("quiet_hours_on") else None)
+                                      if self.settings.get("quiet_hours_on") and params.get("kind") != "transfer" else None)
             self.control.reporter = self.rep
             self.rep.reset()
         self.job_thread = threading.Thread(target=self._job, args=(params,), daemon=True)
@@ -911,6 +916,8 @@ class App:
     def _job(self, params):
         if params.get("kind") == "schedule":
             return self._schedule_job(params)
+        if params.get("kind") == "transfer":
+            return self._transfer_job(params)
         if params.get("kind") == "calendar":
             return self._calendar_job(params)
         t0 = time.monotonic()
@@ -1004,6 +1011,150 @@ class App:
             with self.lock:
                 self.job_state = "idle"
                 self.control = None
+
+
+    # ── перенос данных на другое устройство (архив / Wi-Fi) ──
+    def _tr_roots(self):
+        return Path(self.settings.get("out_dir") or mo.DEFAULT_OUT), mo.DATA_DIR
+
+    def _tr_sender_info(self):
+        sd = self.tr_sender
+        if sd and not sd.active:
+            sd.stop()
+            self.tr_sender = sd = None
+        if not sd:
+            return None
+        info = sd.info(self.tr_ip)
+        info["qr"] = qr.to_svg(qr.make(info["url"]))
+        return info
+
+    def transfer_state(self):
+        out, data = self._tr_roots()
+        inv = transfer.inventory(out, data)
+        busy = self.job_state != "idle" and self.job_kind == "transfer"
+        prog = None
+        if busy:
+            f = self.rep.snapshot(self.rep.seq)["file"]
+            prog = {"title": f["title"], "done": f["done"], "total": f["total"], "speed": f["speed"]} if f else {}
+        return {"busy": busy, "prog": prog, "cats": [{"id": i, "title": t, "hint": h, "default": i in transfer.DEFAULT_CATS, **inv.get(i, {"files": 0, "bytes": 0, "stamp": 0})}
+                         for i, t, h in transfer.CATS],
+                "sender": self._tr_sender_info(), "last": self.tr_last, "android": ANDROID, "apk": android.is_apk(),
+                "dir": "Перенос"}
+
+    def transfer_serve(self, cats, ip=None):
+        out, data = self._tr_roots()
+        cats = [c for c in cats if c in transfer.CAT_IDS]
+        if not cats:
+            return {"ok": False, "error": "отметьте, что передавать"}
+        if self.tr_sender:
+            self.tr_sender.stop()
+        self.tr_ip = ip or None
+        self.tr_sender = transfer.Sender(out, data, cats, self.settings, self.rep)
+        try:
+            self.tr_sender.start()
+        except OSError as e:
+            self.tr_sender = None
+            return {"ok": False, "error": f"не удалось открыть порт: {mo.describe_error(e)}"}
+        self.rep.log(f"Передача по Wi-Fi включена на 15 минут: {self.tr_sender.info(self.tr_ip)['url']}")
+        return {"ok": True, "state": self.transfer_state()}
+
+    def transfer_stop(self):
+        if self.tr_sender:
+            self.tr_sender.stop()
+            self.tr_sender = None
+            self.rep.log("Передача по Wi-Fi остановлена.")
+        return {"ok": True}
+
+    def _transfer_job(self, params):
+        t0 = time.monotonic()
+        out, data = self._tr_roots()
+        action = params.get("action")
+        cats = [c for c in params.get("cats") or [] if c in transfer.CAT_IDS]
+        file = params.get("file")
+        try:
+            if action == "export":
+                dest = out / "Перенос" / f"MoodleOffline-перенос-{datetime.now():%Y-%m-%d_%H%M}.zip"
+                res = transfer.export_archive(dest, out, data, cats, self.settings, self.rep, self.control)
+                text = (f"Архив готов за {mo.fmt_dur(time.monotonic() - t0)}: {res['files']} файлов, "
+                        f"{transfer._fmt_size(res['size'])}. Лежит в папке «Перенос» в папке сохранения.")
+                if res["skipped"]:
+                    text += f" Не вошло: {len(res['skipped'])} (файлы заняты или исчезли)."
+                self.tr_last = {"ok": True, "kind": "export", "text": text, "path": f"Перенос/{dest.name}"}
+            else:
+                if action == "pull":
+                    base, _code = transfer.parse_address(params.get("address") or "")
+                    res = transfer.pull(base, cats, out, data, self.rep, self.control, bool(params.get("force")))
+                else:
+                    res = transfer.import_archive(Path(file), cats, out, data, self.rep, self.control, bool(params.get("force")))
+                text = self._tr_finish(res, cats, time.monotonic() - t0)
+                self.tr_last = {"ok": res["failed"] == 0, "kind": action, "text": text, "notes": res["notes"], "errors": res["errors"]}
+            self.last_result = {"ok": self.tr_last["ok"], "text": self.tr_last["text"], "aborted": None, "kind": "transfer"}
+            self.rep.log(self.tr_last["text"])
+            mo.notify(mo.APP_NAME, self.tr_last["text"], ok=self.tr_last["ok"])
+        except (mo.Stopped, KeyboardInterrupt):
+            self.tr_last = {"ok": False, "kind": action, "text": "Перенос остановлен. Скопированное сохранено, остальное — при повторе."}
+            self.last_result = {"ok": False, "text": self.tr_last["text"], "aborted": "stopped", "kind": "transfer"}
+        except Exception as e:
+            self.tr_last = {"ok": False, "kind": action, "text": f"Перенос: {mo.describe_error(e)}"}
+            self.last_result = {"ok": False, "text": self.tr_last["text"], "aborted": "error", "kind": "transfer"}
+            self.rep.log(self.tr_last["text"], "error")
+        finally:
+            if file:
+                mo.funlink(file)
+            with self.lock:
+                self.job_state = "idle"
+                self.control = None
+
+    def _tr_finish(self, res, cats, took):
+        """Применяет настройки и обновляет то, что программа держит в памяти; возвращает текст итога."""
+        changed = []
+        if res.get("settings"):
+            changed = transfer.apply_settings(res["settings"], self.settings)
+            if changed:
+                self.save_settings()
+        if "courses" in cats and self.login_state in ("idle", "offline", "error") and not self.client:
+            self.login_state = "idle"
+            self.go_offline("данные с другого устройства")
+        self._news = self._cal = None      # лента и сроки могли обновиться — перечитать
+        parts = [f"Перенос готов за {mo.fmt_dur(took)}: получено файлов {res['copied']} из {res['total']} ({transfer._fmt_size(res['bytes'])})"]
+        if changed:
+            parts.append(f"настроек применено: {len(changed)}")
+        if res["failed"]:
+            parts.append(f"не получилось: {res['failed']}")
+        if not res["total"] and not changed:
+            parts = ["Всё уже на месте — ничего нового нет"]
+        if res["from"]:
+            parts.append(f"данные с устройства «{res['from']}»")
+        return ", ".join(parts) + "."
+
+    def transfer_upload(self, rfile, length, cats, force):
+        """Архив, выбранный в окне, приходит сюда потоком — кладём во временный файл и запускаем импорт."""
+        if self.job_state != "idle":
+            return {"ok": False, "error": "сейчас идёт другая задача"}
+        tmp = mo.DATA_DIR / "incoming_transfer.zip"
+        mo.fmkdir(tmp.parent)
+        got = 0
+        with mo.fopen(tmp, "wb") as f:
+            while got < length:
+                chunk = rfile.read(min(1 << 20, length - got))
+                if not chunk:
+                    break
+                f.write(chunk)
+                got += len(chunk)
+        if got != length:
+            mo.funlink(tmp)
+            return {"ok": False, "error": "файл передался не до конца — попробуйте ещё раз"}
+        try:
+            man = transfer.read_archive_manifest(tmp)
+        except transfer.TransferError as e:
+            mo.funlink(tmp)
+            return {"ok": False, "error": str(e)}
+        r = self.start_job({"kind": "transfer", "action": "import", "cats": cats, "file": str(tmp), "force": force})
+        if not r.get("ok"):
+            mo.funlink(tmp)
+        r["summary"] = man.get("cats", {})
+        r["device"], r["created"] = man.get("device", ""), man.get("created", "")
+        return r
 
     # ── поиск по материалам ──
     def search_index(self) -> search.Index:
@@ -1464,6 +1615,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.schedule_status())
         if u.path == "/api/electives":
             return self._send(200, APP.electives_state())
+        if u.path == "/api/transfer":
+            return self._send(200, APP.transfer_state())
         if u.path == "/api/rules":
             return self._send(200, APP.rules_info())
         if u.path == "/api/news":
@@ -1507,8 +1660,12 @@ class Handler(BaseHTTPRequestHandler):
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         if not self._authorized(q):
             return self._send(403, {"error": "forbidden"})
-        b = self._body()
         p = u.path
+        if p == "/api/transfer/upload":      # большой файл — читаем потоком, не в память
+            cats = [c for c in (q.get("cats") or "").split(",") if c]
+            return self._send(200, APP.transfer_upload(self.rfile, int(self.headers.get("Content-Length") or 0), cats,
+                                                       q.get("force") == "1"))
+        b = self._body()
         if p == "/api/login":
             return self._send(200, APP.login(b.get("url", ""), b.get("username", ""), b.get("password", ""),
                                              bool(b.get("remember")), b.get("cookie", "")))
@@ -1590,6 +1747,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, APP.start_job({"kind": "schedule", "range": b.get("range", "2weeks"),
                                                       "from": b.get("from"), "to": b.get("to")}))
             return self._send(200, {"ok": True})
+        if p == "/api/transfer/serve":
+            return self._send(200, APP.transfer_serve(b.get("cats") or [], b.get("ip")))
+        if p == "/api/transfer/stop":
+            return self._send(200, APP.transfer_stop())
+        if p in ("/api/transfer/export", "/api/transfer/pull"):
+            if p.endswith("export") and not b.get("cats"):
+                return self._send(200, {"ok": False, "error": "отметьте, что переносить"})
+            return self._send(200, APP.start_job({"kind": "transfer", "action": p.rsplit("/", 1)[1], "cats": b.get("cats") or [],
+                                                  "address": b.get("address") or "", "force": bool(b.get("force"))}))
         if p == "/api/electives/refresh":
             for k in ("electives_url", "electives_watch", "electives_watch_hours"):
                 if k in b:

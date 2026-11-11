@@ -425,6 +425,7 @@ body.android .no-android{display:none!important}
         <div class="err hidden" id="lErr"></div>
         <button class="btn primary big" id="loginBtn">Войти</button>
         <button class="btn ghost big" id="offlineBtn" style="margin-top:8px">Без входа — офлайн</button>
+        <button class="btn ghost big" id="trOpenLogin" style="margin-top:8px">Принять данные с другого устройства</button>
         <p class="hint" id="offlineHint">Moodle не работает? Откроются уже скачанные курсы и файлы, расписание и элективы. Расписание группы можно обновлять и без Moodle.</p>
         <p class="hint" id="rememberHint"></p>
       </div></div>
@@ -487,6 +488,8 @@ body.android .no-android{display:none!important}
               <div class="row"><div class="lbl">Оглавление и в режиме папок</div><label class="sw-t"><input type="checkbox" data-s="index_in_mode2"><span></span></label></div>
               <div class="row"><div class="lbl">Через системный прокси<small>обычно не нужно — Moodle лучше напрямую</small></div><label class="sw-t"><input type="checkbox" data-s="use_system_proxy"><span></span></label></div>
               <div class="row"><div class="lbl">Не проверять страну IP</div><label class="sw-t"><input type="checkbox" data-s="no_geo_check"><span></span></label></div>
+            <div class="row" style="flex-wrap:wrap"><div class="lbl">Перенос данных<small>на телефон или компьютер: архивом или по Wi-Fi</small></div>
+                <button class="btn" id="trOpen">Перенос данных…</button></div>
             <div class="row no-android" style="flex-wrap:wrap"><div class="lbl">Данные программы<small id="dataInfo">вход, настройки и кэш лежат в папке пользователя</small></div>
                 <button class="btn" id="dataImport" title="Если при смене версии программа не нашла старые данные сама — укажите папку со старой версией">Перенести из старой версии…</button></div>
             </details>
@@ -777,6 +780,41 @@ body.android .no-android{display:none!important}
     <div class="rsec" id="wtBgSec"><h4>Работать без окна</h4><div id="wtBg"></div></div>
   </div>
   <div class="rules-foot"><span class="hint" id="wtMsg"></span><button class="btn" id="wtCancel">Отмена</button><button class="btn primary" id="wtSave">Сохранить</button></div>
+</div></div>
+<div class="modal hidden" id="trModal"><div class="modal-box rules-box">
+  <header><b>Перенос данных</b><button class="btn" id="trClose">Закрыть</button></header>
+  <div class="rules-body">
+    <div class="seg" id="trTabs"><button data-t="give" class="on">Отдать</button><button data-t="take">Принять</button></div>
+    <div class="rsec hidden" id="trLastBox" style="margin-top:12px"><h4 id="trLastH">Результат</h4><div id="trLast"></div></div>
+    <div id="trGive">
+      <div class="rsec"><h4>Что передать</h4><div class="modgrid" id="trCats"></div>
+        <p class="hint">Пароль, вход в Moodle, токены и адреса уведомлений <b>никогда</b> не переносятся. Настройки — только группа, правила скачивания, выбор курсов и расписания.</p></div>
+      <div class="rsec"><h4>Способ 1. По Wi-Fi (оба устройства в одной сети)</h4>
+        <p class="hint" style="margin-top:0">Это устройство 15 минут отдаёт данные по адресу с кодом. На втором откройте «Перенос данных → Принять» и введите адрес или наведите камеру на QR. Берётся только то, чего там нет или что изменилось. Сеть без шифрования — делайте это дома или в доверенной сети.</p>
+        <div class="path" style="flex-wrap:wrap"><button class="btn primary" id="trServe">Показать QR и адрес</button><button class="btn hidden" id="trStop">Остановить передачу</button></div>
+        <div id="trServeBox" class="hidden" style="margin-top:12px">
+          <div id="trQr" style="width:min(240px,70vw);background:#fff;padding:6px;border-radius:10px"></div>
+          <div class="path" style="margin-top:10px"><select class="txt" id="trIp" style="width:auto"></select><span class="hint" style="margin:auto 0">адрес этого устройства в сети</span></div>
+          <p style="margin:8px 0 2px">Адрес: <b id="trUrl" style="word-break:break-all"></b></p>
+          <p style="margin:2px 0">Код: <b id="trCode" style="font-size:20px;letter-spacing:2px"></b> <span class="hint" id="trLeft"></span></p>
+          <p class="hint" id="trClients"></p>
+        </div></div>
+      <div class="rsec"><h4>Способ 2. Одним файлом (.zip)</h4>
+        <p class="hint" style="margin-top:0">Программа соберёт архив в папку «Перенос» внутри папки сохранения. Передайте его любым способом (кабель, облако, мессенджер) и на втором устройстве выберите «Принять → Из файла».</p>
+        <div class="path" style="flex-wrap:wrap"><button class="btn primary" id="trExport">Собрать архив</button><button class="btn hidden" id="trShowDir">Показать папку «Перенос»</button></div></div>
+    </div>
+    <div id="trTake" class="hidden">
+      <div class="rsec"><h4>Что принять</h4><div class="modgrid" id="trCatsTake"></div>
+        <label class="row" style="border:0;padding:0;margin-top:8px;cursor:pointer"><span class="lbl">Заменить, даже если здесь свежее<small>без этого более новые данные на этом устройстве не затираются</small></span><span class="sw-t"><input type="checkbox" id="trForce"><span></span></span></label></div>
+      <div class="rsec"><h4>Способ 1. По Wi-Fi</h4>
+        <p class="hint" style="margin-top:0">На другом устройстве нажмите «Отдать → Показать QR и адрес» и вставьте сюда адрес целиком (или IP:порт и код).</p>
+        <div class="path"><input class="txt" id="trAddr" placeholder="192.168.1.5:8812 и код, или вся ссылка" autocapitalize="off" autocomplete="off" spellcheck="false"><button class="btn" id="trPaste">Вставить</button></div>
+        <div class="path" style="margin-top:8px"><button class="btn primary" id="trPull">Принять по Wi-Fi</button></div></div>
+      <div class="rsec"><h4>Способ 2. Из файла</h4>
+        <p class="hint" style="margin-top:0">Архив, собранный на другом устройстве («Отдать → Собрать архив»).</p>
+        <div class="path"><input type="file" id="trFile" accept=".zip,application/zip" class="txt"><button class="btn primary" id="trImport">Принять из файла</button></div></div>
+    </div>
+  </div>
 </div></div>
 <div class="toasts" id="toasts"></div>
 
@@ -1196,7 +1234,8 @@ function renderJob(j){
     if (atEnd) log.scrollTop = 1e9;
   }
   if (lastJob !== "idle" && j.state === "idle") { if (j.result) toast(j.result.text, j.result.ok ? "ok" : "bad"); loadCourses();
-    if (view === "schedule") loadSchedule(); if (CV) openCourse(CV.c.id); }
+    if (view === "schedule") loadSchedule(); if (CV) openCourse(CV.c.id);
+    if (j.result && j.result.kind === "transfer") { if (!$("#trModal").classList.contains("hidden")) trLoad(); loadSchedule(); } }
   lastJob = j.state; updateSelInfo();
 }
 
@@ -1806,6 +1845,73 @@ $("#schGroup").onchange = async () => { await api("/api/schedule/save", schPaylo
 $("#schOpen").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/index.html"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); });
 $("#schIcs").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/raspisanie.ics"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); else toast("Откроется программа календаря — подтвердите импорт"); });
 $("#schSnaps").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/снимки"}).then(r => { if (!r.ok) toast("Снимков пока нет", "bad"); });
+
+/* ── перенос данных ── */
+let TR = null, trTimer = null, trMode = "give";
+const trCatRow = (c, checked) => `<label><span class="sw-t"><input type="checkbox" data-c="${c.id}" ${checked ? "checked" : ""}><span></span></span><span>${esc(c.title)}${c.id === "settings" ? "" : `<br><small class="muted">${c.files ? c.files + " файл. · " + hsize(c.bytes) : "пока пусто"}${c.id === "materials" && c.bytes > 5e8 ? " — много!" : ""}</small>`}</span></label>`;
+const trChecked = box => $$(`${box} input:checked`).map(i => i.dataset.c);
+function trRender(){
+  if (!TR) return;
+  if (!$("#trCats").dataset.ready || !$("#trCats").dataset.cnt || $("#trCats").dataset.cnt !== String(TR.cats.length)) {
+    $("#trCats").innerHTML = TR.cats.map(c => trCatRow(c, c.default)).join("");
+    $("#trCatsTake").innerHTML = TR.cats.map(c => trCatRow({...c, files: 0, bytes: 0}, c.default).replace(/<br><small.*?<\/small>/, `<br><small class="muted">${esc(c.hint)}</small>`)).join("");
+    $("#trCats").dataset.ready = "1"; $("#trCats").dataset.cnt = String(TR.cats.length);
+  }
+  const sd = TR.sender;
+  $("#trServeBox").classList.toggle("hidden", !sd); $("#trStop").classList.toggle("hidden", !sd);
+  $("#trServe").textContent = sd ? "Обновить QR" : "Показать QR и адрес";
+  if (sd) {
+    $("#trQr").innerHTML = sd.qr;
+    if ($("#trIp").dataset.ips !== sd.ips.join()) { $("#trIp").innerHTML = sd.ips.map(i => `<option ${i === sd.ip ? "selected" : ""}>${esc(i)}</option>`).join(""); $("#trIp").dataset.ips = sd.ips.join(); }
+    $("#trUrl").textContent = sd.url; $("#trCode").textContent = sd.code;
+    const m = Math.floor(sd.left / 60), s2 = String(sd.left % 60).padStart(2, "0");
+    $("#trLeft").textContent = `ещё ${m}:${s2}`;
+    $("#trClients").textContent = sd.clients.length ? `Подключились: ${sd.clients.join(", ")} · отдано ${sd.files} файл. (${hsize(sd.bytes)})` : "Пока никто не подключился.";
+  }
+  const l = TR.last;
+  $("#trLastBox").classList.toggle("hidden", !l && !TR.busy);
+  $("#trLastH").textContent = TR.busy ? "Идёт перенос…" : "Результат";
+  if (TR.busy) {
+    const g = TR.prog || {};
+    $("#trLast").innerHTML = `<p style="margin:0">${g.title ? esc(g.title) + (g.total ? ` — ${hsize(g.done)} из ${hsize(g.total)}` : "") : "Готовлю список файлов…"}</p><p class="hint">Не закрывайте программу, пока идёт перенос. Если прервётся — повторите, докачает с того места.</p>`;
+  } else if (l) $("#trLast").innerHTML = `<p style="margin:0">${esc(l.text)}</p>` + (l.notes || []).slice(0, 5).map(n => `<p class="hint">${esc(n)}</p>`).join("")
+    + (l.errors || []).slice(0, 5).map(n => `<p class="hint" style="color:var(--bad)">${esc(n)}</p>`).join("");
+  $("#trShowDir").classList.toggle("hidden", !(l && l.kind === "export" && l.ok && !TR.busy));
+}
+let trSeen = "";
+async function trLoad(){
+  try { TR = await api("/api/transfer"); } catch { return; }
+  trRender();
+  const key = TR.busy ? "busy" : (TR.last ? TR.last.text : "");
+  if (key !== trSeen) { trSeen = key; if (key) $("#trLastBox").scrollIntoView({block: "nearest"}); }
+}
+function trOpen(mode){
+  $("#trModal").classList.remove("hidden"); trSetMode(mode || "give"); trLoad();
+  clearInterval(trTimer); trTimer = setInterval(() => { if ($("#trModal").classList.contains("hidden")) return clearInterval(trTimer); trLoad(); }, 1200);
+}
+function trSetMode(m){ trMode = m; $$("#trTabs button").forEach(b => b.classList.toggle("on", b.dataset.t === m)); $("#trGive").classList.toggle("hidden", m !== "give"); $("#trTake").classList.toggle("hidden", m !== "take"); }
+$$("#trTabs button").forEach(b => b.onclick = () => trSetMode(b.dataset.t));
+$("#trOpen").onclick = () => trOpen("give"); $("#trOpenLogin").onclick = () => { $("#trModal").dataset.login = "1"; trOpen("take"); };
+$("#trClose").onclick = () => { $("#trModal").classList.add("hidden"); clearInterval(trTimer); };
+const trStart = async (path, body, msg) => { const r = await api(path, body); if (!r.ok) return toast(r.error || "Не получилось", "bad"); toast(msg); trLoad(); };
+$("#trServe").onclick = async () => { const cats = trChecked("#trCats"); if (!cats.length) return toast("Отметьте, что передавать", "bad");
+  const r = await api("/api/transfer/serve", {cats, ip: $("#trIp").value || undefined}); if (!r.ok) return toast(r.error, "bad"); TR = r.state; trRender(); };
+$("#trIp").onchange = $("#trServe").onclick;
+$("#trStop").onclick = async () => { await api("/api/transfer/stop", {}); trLoad(); };
+$("#trExport").onclick = () => { const cats = trChecked("#trCats"); if (!cats.length) return toast("Отметьте, что переносить", "bad"); trStart("/api/transfer/export", {cats}, "Собираю архив…"); };
+$("#trShowDir").onclick = () => api("/api/open", {path: (TR && TR.last && TR.last.path) || "Перенос", reveal: !!(TR && TR.last && TR.last.path)}).then(r => { if (!r.ok) toast("Папка не открылась", "bad"); });
+$("#trPaste").onclick = async () => { try { $("#trAddr").value = (await navigator.clipboard.readText()).trim(); } catch { toast("Вставьте вручную: долгое нажатие в поле → «Вставить»", "bad"); } };
+$("#trPull").onclick = () => { const a = $("#trAddr").value.trim(), cats = trChecked("#trCatsTake");
+  if (!a) return toast("Вставьте адрес с другого устройства", "bad"); if (!cats.length) return toast("Отметьте, что принять", "bad");
+  trStart("/api/transfer/pull", {address: a, cats, force: $("#trForce").checked}, "Принимаю по Wi-Fi…"); };
+$("#trImport").onclick = async () => { const f = $("#trFile").files[0], cats = trChecked("#trCatsTake");
+  if (!f) return toast("Выберите файл архива", "bad"); if (!cats.length) return toast("Отметьте, что принять", "bad");
+  $("#trImport").disabled = true; toast("Загружаю архив в программу…");
+  try {
+    const r = await (await fetch(`/api/transfer/upload?cats=${cats.join(",")}&force=${$("#trForce").checked ? 1 : 0}&t=${encodeURIComponent(T)}`, {method: "POST", body: f})).json();
+    if (!r.ok) toast(r.error || "Не получилось", "bad"); else toast("Принимаю данные из файла…");
+  } catch (e) { toast("Не удалось передать файл: " + e.message, "bad"); }
+  $("#trImport").disabled = false; trLoad(); };
 
 /* ── элективы ── */
 let EL = null;
