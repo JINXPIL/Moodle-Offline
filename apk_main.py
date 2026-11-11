@@ -60,7 +60,7 @@ def _selftest() -> None:
     def imports():
         import importlib
         for m in ("moodle_offline", "gui", "schedule", "electives", "news", "search", "deadlines", "watch", "datadir",
-                  "dl_rules", "cdp", "android", "transfer", "qr"):
+                  "dl_rules", "cdp", "android", "transfer", "qr", "iotapi"):
             importlib.import_module(m)
         return "все модули программы"
 
