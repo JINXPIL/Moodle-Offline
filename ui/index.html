@@ -231,6 +231,45 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .ranges{display:flex;flex-wrap:wrap;gap:6px}
 .ranges button{border:1px solid var(--line);background:var(--raised);border-radius:999px;padding:5px 11px;cursor:pointer;font-size:12.5px}
 .ranges button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.eblock{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow);margin-bottom:14px}
+.eblock.can{border-color:var(--accent)}
+.eblock .eh{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.eblock h3{margin:0;font-size:16px;line-height:1.3}
+.eblock .est{font-size:12px;padding:3px 9px;border-radius:999px;background:var(--bg2);color:var(--muted);white-space:nowrap}
+.eblock.can .est{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.eblock .ean{font-size:13px;color:var(--muted);margin:8px 0}
+.eblock .mychoice{margin:10px 0;padding:9px 12px;border-radius:10px;background:color-mix(in srgb,var(--ok) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--ok) 30%,transparent);font-size:13.5px;line-height:1.6}
+.eopt{display:grid;grid-template-columns:1fr minmax(120px,170px);gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.eopt:first-of-type{border-top:0}
+.eopt .en{line-height:1.35}.eopt .en small{display:block;color:var(--muted);font-size:12px}
+.eopt .en small.full{color:var(--warn)}
+.eopt select{height:34px}
+.eopt.on{background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:8px}
+.esum{margin:10px 0;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--accent) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+.esum ol{margin:6px 0 8px;padding-left:20px;line-height:1.6}
+.eact{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.eev{display:grid;grid-template-columns:130px 1fr auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.eev:first-of-type{border-top:0}
+.eev .w{font-weight:600;font-size:13.5px}.eev small{display:block;color:var(--muted);font-size:12px;line-height:1.4}
+.eev.cancel{opacity:.6}
+.esec{margin:18px 0 8px;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+@media (max-width:700px){.eopt{grid-template-columns:1fr}.eev{grid-template-columns:1fr}.eev .eact{margin:0}}
+.rd-box{width:min(920px,96vw)}
+.rd-note{padding:8px 16px;font-size:12.5px;background:color-mix(in srgb,var(--warn) 14%,var(--surface-solid));border-bottom:1px solid var(--line)}
+.rd-body{flex:1;overflow:auto;padding:18px 22px}
+.rd-foot{padding:8px 16px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
+.rd{max-width:760px;margin:0 auto;line-height:1.6;overflow-wrap:anywhere}
+.rd h2,.rd h3,.rd h4{margin:1.1em 0 .4em;line-height:1.3}
+.rd img,.rd video{max-width:100%;height:auto;border-radius:8px}
+.rd table{display:block;overflow:auto;border-collapse:collapse;margin:10px 0;max-width:100%}
+.rd th,.rd td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+.rd th{background:var(--bg2);font-weight:600}
+.rd a[data-rgo],.rd a[data-rfile],.rd a[data-rext]{color:var(--accent);cursor:pointer;text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.rd a[data-rfile]::before{content:"📎 "}.rd a[data-rext]::after{content:" ↗";font-size:.85em}
+.rd blockquote{margin:10px 0;padding:6px 14px;border-left:3px solid var(--line-strong);color:var(--muted)}
+.rd pre{background:var(--bg2);padding:10px 12px;border-radius:8px;overflow:auto}
+.rd hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+.rd .rdload{text-align:center;color:var(--muted);padding:40px 0}
 .ecards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
 .ecard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px}
 .ecard .ctx{line-height:1.4}.ecard.mine{border-color:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb,var(--ok) 30%,transparent)}
@@ -545,25 +584,29 @@ body.android .no-android{display:none!important}
     </section>
     <!-- Элективы -->
     <section class="view hidden" id="electivesView">
-      <div class="banner only-android"><div><b>На телефоне вкладка работает не полностью</b>Страницу элективов строит скрипт сайта, и открывается она в Edge/Chrome на компьютере. С телефона можно смотреть то, что уже сохранено.</div></div>
       <div class="layout">
         <div class="content">
-          <div class="toolbar"><h2 id="elTitle">Спортивные элективы</h2><span class="hint" id="elInfo" style="margin:0"></span></div>
-          <div id="elMsgs"></div>
-          <div class="ecards" id="elCards"></div>
+          <div class="toolbar"><h2 id="elTitle">Элективы</h2><span class="hint" id="elInfo" style="margin:0"></span></div>
+          <div id="elOffline" class="hint hidden" style="margin:0 0 10px"></div>
+          <div id="elBody"></div>
+          <details class="adv hidden" id="elOld" style="margin-top:18px"><summary>Запасной способ: снимок страницы через браузер</summary>
+            <p class="hint">Если обычное обновление не работает, программа может открыть страницу в фоновом Edge/Chrome и найти на ней кнопки записи.</p>
+            <button class="btn" id="elSnapGo">Снять снимок страницы</button>
+            <div class="ecards" id="elCards" style="margin-top:10px"></div></details>
         </div>
         <aside class="side">
           <div class="panel">
-            <h3>Запись на неделю</h3>
-            <button class="btn primary big" id="elRefresh">Обновить варианты</button>
+            <h3>Элективы СевГУ</h3>
+            <button class="btn primary big" id="elRefresh">Обновить с сайта</button>
             <div id="elPassBox" class="hidden" style="margin-top:12px">
-              <div class="field"><label>Пароль учётной записи СевГУ (как для Moodle)</label><input class="txt" type="password" id="elPass"></div>
+              <div class="field"><label>Логин учётной записи СевГУ</label><input class="txt" id="elUser" autocomplete="username"></div>
+              <div class="field"><label>Пароль (как для Moodle)</label><input class="txt" type="password" id="elPass" autocomplete="current-password"></div>
               <button class="btn" id="elPassGo">Войти и обновить</button></div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="btn" id="elSite">Открыть на сайте</button><button class="btn" id="elSnap">Офлайн-копия</button></div>
-            <div class="row" style="margin-top:10px;flex-wrap:wrap"><div class="lbl">Следить за новыми вариантами<small>уведомлю, когда появятся новые</small></div><label class="sw-t"><input type="checkbox" id="elWatch"><span></span></label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="btn" id="elSite">Открыть на сайте</button></div>
+            <div class="row" style="margin-top:10px;flex-wrap:wrap"><div class="lbl">Следить за изменениями<small>уведомлю: новый блок, открылся выбор, вас распределили, появились занятия</small></div><label class="sw-t"><input type="checkbox" id="elWatch"><span></span></label>
               <div class="times" style="width:100%"><span class="hint" style="margin:0">каждые</span><select id="elHours" class="txt" style="width:auto"><option>3</option><option selected>6</option><option>12</option><option>24</option></select><span class="hint" style="margin:0">ч</span></div></div>
-            <details class="adv"><summary>Адрес страницы</summary><input class="txt" id="elUrl" style="margin-top:8px"></details>
-            <p class="hint">Записываю только по вашему нажатию — это то же, что кнопка на сайте. Автоматически «ловить» места программа не будет.</p>
+            <details class="adv"><summary>Адрес страницы (для запасного способа)</summary><input class="txt" id="elUrl" style="margin-top:8px"></details>
+            <p class="hint">Программа входит на сайт под вашей учётной записью и делает то же, что кнопки на сайте. Выбор сохраняется и запись делается только по вашему нажатию — «ловить» места автоматически она не будет. Работает и на телефоне: браузер не нужен.</p>
           </div>
         </aside>
       </div>
@@ -661,6 +704,14 @@ body.android .no-android{display:none!important}
   </section>
 </div>
 <div class="modal hidden" id="modal"><div class="modal-box"><header><b id="mTitle"></b><button class="btn" id="mOpen">Открыть в программе</button><button class="btn" id="mReveal">Показать в папке</button><button class="icon-btn" id="mClose"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><iframe id="mFrame"></iframe></div></div>
+<div class="modal hidden" id="rdModal"><div class="modal-box rd-box">
+  <header><button class="btn" id="rdBack" title="Назад" aria-label="Назад">←</button><button class="btn" id="rdFwd" title="Вперёд" aria-label="Вперёд">→</button><b id="rdTitle"></b>
+    <button class="btn" id="rdRefresh" title="Прочитать страницу с сайта заново">↻</button><button class="btn" id="rdSite">На сайте</button>
+    <button class="icon-btn" id="rdClose" aria-label="Закрыть"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="rd-note hidden" id="rdNote"></div>
+  <div class="rd-body" id="rdScroll"><div class="rd" id="rdBody"></div></div>
+  <div class="rd-foot" id="rdFoot">Здесь можно читать страницы, ходить по ссылкам и открывать файлы. Сдать работу, ответить на форуме или пройти тест — кнопкой «На сайте».</div>
+</div></div>
 <div class="modal hidden" id="rulesModal"><div class="modal-box rules-box">
   <header><b>Правила скачивания</b><button class="btn" id="rClose">Закрыть</button></header>
   <div class="rules-body">
@@ -1776,7 +1827,7 @@ function renderCourse(){
     for (const it of s.items) {
       const files = (it.files || []).map(f => { const p = (d.dir ? d.dir + "/" : "") + f.path, e = extOf(p);
         return `<div class="mf"><span class="fn" title="${esc(f.title)}">${esc(f.title)}</span><span class="mmeta">${hsize(f.size)}</span>${PREVIEW.has(e) ? `<button data-prev="${esc(p)}">Просмотр</button>` : ""}<button data-ext="${esc(p)}">Открыть</button><button data-rev="${esc(p)}">В папке</button></div>`; }).join("");
-      const site = it.url ? `<button data-url="${esc(it.url)}">На сайте</button>` : "";
+      const site = (it.url ? `<button data-rd="${esc(it.url)}" data-rdn="${esc(it.name)}" class="rdb">Открыть здесь</button>` : "") + (it.url ? `<button data-url="${esc(it.url)}">На сайте</button>` : "");
       const extl = it.external ? `<button data-url="${esc(it.external)}">Ссылка</button>` : "";
       const note = it.online_only ? `<div class="mmeta">только онлайн${it.url ? "" : " · недоступно"}</div>` : it.error ? `<div class="mmeta" style="color:var(--bad)">${esc(it.error)}</div>` : (!d.downloaded ? `<div class="mmeta">не скачано</div>` : "");
       html += `<div class="mi ${it.online_only && !it.url ? "dim" : ""}">${icon(it.modtype)}<div style="min-width:0"><div class="mname"><span class="kb ${KC[it.kind] || "ДР"}">${KC[it.kind] || "ДР"}</span>${esc(it.name)}</div>
@@ -1795,8 +1846,49 @@ function bindCV(){
   on("cvDl", () => { selected.add(c.id); saveSel(); start(false, false, [c.id]); });
   const q = $("#cvQ"); if (q) q.oninput = e => { cvQ = e.target.value.trim().toLowerCase(); const pos = e.target.selectionStart; renderCourse(); const n = $("#cvQ"); n.focus(); n.setSelectionRange(pos, pos); };
   $$("#courseView .chip").forEach(b => b.onclick = () => { cvK = b.dataset.k; renderCourse(); });
+  $$("#courseView [data-rd]").forEach(b => b.onclick = () => rdOpen(b.dataset.rd, b.dataset.rdn));
   $$("#courseView .toc a").forEach(a => a.onclick = e => { e.preventDefault(); const t = $("#msec-" + a.dataset.sec); if (t) t.scrollIntoView({behavior: "smooth", block: "start"}); });
 }
+
+
+/* ── читалка: страницы и файлы курса внутри программы ── */
+let RD = {hist: [], pos: -1, cur: null};
+const rdFile = u => "/api/reader/file?url=" + encodeURIComponent(u) + "&t=" + encodeURIComponent(T);
+function rdOpen(url, title){ RD = {hist: [{url, title: title || ""}], pos: 0, cur: null}; $("#rdModal").classList.remove("hidden"); rdLoad(false); }
+async function rdLoad(live){
+  const h = RD.hist[RD.pos]; if (!h) return;
+  $("#rdTitle").textContent = h.title || "Загружаю…"; $("#rdNote").classList.add("hidden");
+  $("#rdBody").innerHTML = '<div class="rdload"><span class="spin" style="display:inline-block;vertical-align:-3px"></span> Открываю страницу (несколько секунд — бережные паузы к серверу)…</div>';
+  $("#rdBack").disabled = RD.pos <= 0; $("#rdFwd").disabled = RD.pos >= RD.hist.length - 1;
+  const r = await api("/api/reader", {url: h.url, live: !!live}).catch(e => ({ok: false, error: String(e)}));
+  if (RD.hist[RD.pos] !== h) return;                        // пока грузилось, ушли на другую страницу
+  RD.cur = r;
+  if (r.ok && r.external) { rdBackOne(); openUrl(r.external); toast("Эта ссылка ведёт на другой сайт — открыл в браузере", "ok"); return; }
+  if (r.ok && r.file) { rdBackOne(); const ct = r.ct || ""; return rdFileOpen(r.file, r.name); }
+  if (!r.ok) { $("#rdBody").innerHTML = `<div class="empty">${esc(r.error || "Не получилось открыть")}</div>`; return; }
+  h.title = r.title || h.title; $("#rdTitle").textContent = h.title || "Страница";
+  const note = r.note || (r.cached ? `Сохранённая копия от ${r.saved}` : "");
+  $("#rdNote").textContent = note; $("#rdNote").classList.toggle("hidden", !note);
+  $("#rdBody").innerHTML = r.html || '<div class="empty">На странице нет текста — возможно, всё содержимое только на сайте.</div>';
+  $$("#rdBody img[data-src], #rdBody video[data-src], #rdBody source[data-src], #rdBody audio[data-src]").forEach(el => { el.src = rdFile(el.dataset.src); if (el.tagName === "IMG") el.loading = "lazy"; });
+  $$("#rdBody video, #rdBody audio").forEach(el => { if (el.querySelector("source")) el.load(); });
+  $("#rdScroll").scrollTop = 0;
+}
+function rdBackOne(){ if (RD.pos > 0) { RD.hist.splice(RD.pos, 1); RD.pos--; $("#rdBack").disabled = RD.pos <= 0; $("#rdFwd").disabled = true; const h = RD.hist[RD.pos]; $("#rdTitle").textContent = h.title || ""; if (RD.cur && RD.cur.html != null) {} } else { $("#rdModal").classList.add("hidden"); } }
+function rdFileOpen(url, name){ toast(`Открываю файл${name ? " «" + name + "»" : ""}…`); openUrl(location.origin + rdFile(url)); }
+function rdGo(url, title){ RD.hist = RD.hist.slice(0, RD.pos + 1); RD.hist.push({url, title: title || ""}); RD.pos++; rdLoad(false); }
+$("#rdBack").onclick = () => { if (RD.pos > 0) { RD.pos--; rdLoad(false); } };
+$("#rdFwd").onclick = () => { if (RD.pos < RD.hist.length - 1) { RD.pos++; rdLoad(false); } };
+$("#rdRefresh").onclick = () => rdLoad(true);
+$("#rdSite").onclick = () => { const h = RD.hist[RD.pos]; if (h) openUrl(h.url); };
+$("#rdClose").onclick = () => $("#rdModal").classList.add("hidden");
+$("#rdModal").addEventListener("click", e => { if (e.target.id === "rdModal") $("#rdModal").classList.add("hidden"); });
+$("#rdBody").addEventListener("click", e => {
+  const a = e.target.closest("a"); if (!a) return; e.preventDefault();
+  const t = (a.textContent || "").trim().slice(0, 80);
+  if (a.dataset.rgo) rdGo(a.dataset.rgo, t); else if (a.dataset.rfile) rdFileOpen(a.dataset.rfile, t); else if (a.dataset.rext) openUrl(a.dataset.rext);
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#rdModal").classList.contains("hidden")) $("#rdClose").click(); });
 
 /* ── расписание ── */
 let SCH = null, schRange = "2weeks", GRP = null;
@@ -1913,46 +2005,158 @@ $("#trImport").onclick = async () => { const f = $("#trFile").files[0], cats = t
   } catch (e) { toast("Не удалось передать файл: " + e.message, "bad"); }
   $("#trImport").disabled = false; trLoad(); };
 
-/* ── элективы ── */
-let EL = null;
+/* ── элективы: данные берём у сайта напрямую (вход единым аккаунтом), выбор «основной + резервы» и запись — по вашей кнопке ── */
+let EL = null, ELP = {}, elArmed = "";
+const ELSITE = "https://iot.sevsu.ru";
 async function loadElectives(){ EL = await api("/api/electives"); renderElectives(); }
+const elRoles = b => [...Array(b.primary_count || 1).keys()].map(i => ({k: "p" + i, label: (b.primary_count || 1) > 1 ? `Основной ${i + 1}` : "Основной"}))
+  .concat([...Array(b.backup_count || 0).keys()].map(i => ({k: "b" + i, label: `Резерв ${i + 1}`})));
+function elInit(b){
+  const pick = {}, c = b.choice || {};
+  (c.primary || []).forEach((x, i) => pick["p" + i] = x.id); (c.backup || []).forEach((x, i) => pick["b" + i] = x.id);
+  return {pick, review: false};
+}
+function elNeed(b, st){
+  const roles = elRoles(b), byid = Object.fromEntries((b.options || []).map(o => [String(o.id), o]));
+  const prim = roles.filter(r => r.k[0] === "p"), back = roles.filter(r => r.k[0] === "b");
+  const noBackup = prim.some(r => st.pick[r.k] != null && byid[String(st.pick[r.k])] && byid[String(st.pick[r.k])].backup_ok === false);
+  return roles.filter(r => st.pick[r.k] == null && !(noBackup && back.includes(r)));
+}
+const elName = (b, id) => ((b.options || []).find(o => String(o.id) === String(id)) || {}).name || String(id);
+function elChoiceLine(b, c){
+  const parts = [...(c.primary || []).map(x => `<b>Основной:</b> ${esc(x.name || elName(b, x.id))}`), ...(c.backup || []).map((x, i) => `<b>Резерв ${i + 1}:</b> ${esc(x.name || elName(b, x.id))}`)];
+  return parts.join("<br>");
+}
+function elBlock(b){
+  const st = ELP[b.id] || (ELP[b.id] = elInit(b)), roles = elRoles(b), can = b.can_choose && !b.needs_site;
+  const own = b.choice && (b.choice.primary || []).length ? `<div class="mychoice"><b>Ваш выбор сохранён на сайте</b><br>${elChoiceLine(b, b.choice)}</div>` : "";
+  const when = [b.closes ? `выбор до ${b.closes}` : "", b.final_at ? `итоги ${b.final_at}` : ""].filter(Boolean).join(" · ");
+  let body = "";
+  if (b.outcome && b.outcome.length) body += `<div class="mychoice"><b>Вы распределены:</b> ${b.outcome.map(o => esc(o.name || "вариант " + o.id)).join(", ")}</div>`;
+  body += own;
+  if (b.announcement) body += `<details class="adv"><summary>Объявление</summary><div class="ean">${esc(b.announcement)}</div></details>`;
+  if (can) {
+    body += `<div class="hint" style="margin:8px 0 4px">${b.primary_count > 1 ? `Основных вариантов: ${b.primary_count}` : "Один основной вариант"}${b.backup_count ? `, резервов по приоритету: ${b.backup_count} — если с основным не получится, возьмут первый резерв, затем второй.` : "."}</div>`;
+    body += (b.options || []).map(o => {
+      const role = roles.find(r => st.pick[r.k] != null && String(st.pick[r.k]) === String(o.id));
+      const sp = o.capacity != null ? (o.left === 0 ? `<small class="full">мест нет (${o.occupied} из ${o.capacity})</small>` : `<small>мест: ${o.left} из ${o.capacity}</small>`) : "";
+      const warn = o.filling === false ? `<small class="full">набор закрыт</small>` : o.requisites_ok === false ? `<small class="full">может не подойти по условиям</small>` : "";
+      const url = o.url ? ` <a href="#" data-url="${esc(o.url)}">подробнее</a>` : "";
+      return `<div class="eopt ${role ? "on" : ""}"><div class="en"><b>${esc(o.name)}</b>${url}${sp}${warn}${o.desc ? `<small>${esc(o.desc)}</small>` : ""}</div>
+        <select class="txt" data-blk="${b.id}" data-opt="${o.id}" ${st.review ? "disabled" : ""}><option value="">не выбирать</option>${roles.map(r => `<option value="${r.k}" ${role && role.k === r.k ? "selected" : ""}>${r.label}</option>`).join("")}</select></div>`; }).join("");
+    const need = elNeed(b, st);
+    if (st.review) {
+      const lines = roles.filter(r => st.pick[r.k] != null).map(r => `<li><b>${r.label}:</b> ${esc(elName(b, st.pick[r.k]))}</li>`).join("");
+      body += `<div class="esum"><b>Проверьте выбор</b><ol style="list-style:none;padding-left:0">${lines}</ol>
+        <div class="hint" style="margin:0 0 8px">Это сохранится на сайте вуза — так же, как если бы вы нажали «Сохранить» там.</div>
+        <div class="eact"><button class="btn primary" data-esave="${b.id}">Сохранить на сайте</button><button class="btn" data-eback="${b.id}">Изменить</button></div></div>`;
+    } else {
+      body += `<div class="eact"><button class="btn primary" data-ereview="${b.id}" ${need.length ? "disabled" : ""}>${b.choice && (b.choice.primary || []).length ? "Изменить выбор…" : "Проверить и сохранить…"}</button>
+        <span class="hint" style="margin:0">${need.length ? "Осталось выбрать: " + need.map(r => r.label.toLowerCase()).join(", ") : "Всё выбрано — осталось сохранить"}</span></div>`;
+    }
+  } else if (b.needs_site && b.can_choose) {
+    body += `<div class="hint">В этом блоке нужно выбирать подварианты — это можно сделать только на сайте.</div><div class="eact"><button class="btn primary" data-url="${ELSITE}/electives/${esc(b.slug)}">Открыть на сайте</button></div>`;
+  } else if ((b.options || []).length) {
+    body += `<details class="adv"><summary>Варианты (${b.options.length})</summary>${b.options.map(o => `<div class="eopt"><div class="en"><b>${esc(o.name)}</b>${o.capacity != null ? `<small>мест: ${o.occupied} занято из ${o.capacity}</small>` : ""}</div></div>`).join("")}</details>`;
+  }
+  const site = !can ? `<div class="eact"><button class="btn ghost" data-url="${ELSITE}/electives/${esc(b.slug)}">Открыть на сайте</button></div>` : `<div class="eact"><button class="btn ghost" data-url="${ELSITE}/electives/${esc(b.slug)}">На сайте</button></div>`;
+  return `<div class="eblock ${b.can_choose ? "can" : ""}"><div class="eh"><div><h3>${esc(b.name)}</h3><div class="mmeta">${[b.year ? b.year + (b.term ? "/" + b.term : "") : "", when].filter(Boolean).join(" · ")}</div></div><span class="est">${esc(b.status_text)}</span></div>${body}${site}</div>`;
+}
+function elEvents(s){
+  const ev = s.events || []; if (!ev.length) return "";
+  return `<div class="esec">Ближайшие занятия</div><div class="eblock">` + ev.map(e => {
+    let act = "";
+    if (e.cancelled) act = `<span class="mmeta">отменено${e.cancel_reason ? ": " + esc(e.cancel_reason) : ""}</span>`;
+    else if (e.reg_id && e.reg_status === "registered") act = `<div class="eact" style="margin:0"><span class="mmeta" style="color:var(--ok)">Вы записаны</span><button class="btn danger" data-ereg-off="${e.reg_id}">${elArmed === "off" + e.reg_id ? "Точно отписаться?" : "Отписаться"}</button></div>`;
+    else if (e.can_register) act = `<button class="btn primary" data-ereg-on="${e.id}">${elArmed === "on" + e.id ? "Точно записаться?" : "Записаться"}</button>`;
+    else act = `<span class="mmeta">${e.left === 0 ? "мест нет" : "запись недоступна"}</span>`;
+    const att = e.attendance_text ? ` · ${esc(e.attendance_text)}` : "";
+    return `<div class="eev ${e.cancelled ? "cancel" : ""}"><div class="w">${esc(e.when)}</div><div><b>${esc(e.name)}</b><small>${[e.where, (e.people || []).join(", "), e.left != null ? "мест: " + e.left : ""].filter(Boolean).map(esc).join(" · ")}${att}</small></div><div>${act}</div></div>`; }).join("") + `</div>`;
+}
 function renderElectives(){
-  const s = EL || {};
+  const s = EL || {}, api_ = s.api || null;
   if (document.activeElement !== $("#elUrl")) $("#elUrl").value = s.url || "";
   $("#elWatch").checked = !!s.watch; $("#elHours").value = String(s.watch_hours || 6);
   $("#elPassBox").classList.toggle("hidden", !!s.has_creds && !s.need_password);
-  $("#elTitle").textContent = s.title || "Спортивные элективы";
-  $("#elInfo").textContent = s.updated ? "обновлено " + s.updated : "";
-  $("#elMsgs").innerHTML = (s.messages || []).length ? `<div class="msgs">${s.messages.map(esc).join("<br>")}</div>` : "";
-  const acts = s.actions || [];
-  $("#elCards").innerHTML = acts.length ? acts.map(a => {
+  if (document.activeElement !== $("#elUser") && !$("#elUser").value) $("#elUser").value = s.username || "";
+  $("#elInfo").textContent = api_ && api_.updated ? "обновлено " + api_.updated + (api_.me && api_.me.name ? " · " + api_.me.name : "") : "";
+  $("#elOffline").classList.toggle("hidden", !api_);
+  $("#elOld").classList.toggle("hidden", !(s.snapshot || (!s.android && s.browser)));
+  $("#elSnapGo").classList.toggle("hidden", !!s.android || !s.browser);
+  let h = "";
+  if (!api_ || !(api_.blocks || []).length) {
+    h = `<div class="empty">${api_ ? "На сайте для вас нет блоков выбора." : "Нажмите «Обновить с сайта» — программа войдёт под вашей учётной записью и покажет, что выбрано и что можно выбрать."}</div>`;
+  } else {
+    const bl = api_.blocks, can = bl.filter(b => b.can_choose), mine = bl.filter(b => !b.can_choose && (b.is_member || (b.outcome || []).length)), arch = bl.filter(b => !b.can_choose && !b.is_member && !(b.outcome || []).length);
+    if ((api_.changes || []).length) h += `<div class="msgs">Новое с прошлого раза:<br>${api_.changes.map(esc).join("<br>")}</div>`;
+    if (can.length) h += `<div class="esec">Сейчас можно выбрать</div>` + can.map(elBlock).join("");
+    h += elEvents(api_);
+    if (mine.length) h += `<div class="esec">Ваши блоки</div>` + mine.map(elBlock).join("");
+    if (arch.length) h += `<details class="adv" style="margin-top:10px"><summary>Остальные блоки на сайте (${arch.length})</summary><div style="margin-top:8px">${arch.map(elBlock).join("")}</div></details>`;
+    if (!can.length) h = `<div class="hint" style="margin:0 0 8px">Сейчас ни в одном блоке выбор не открыт.</div>` + h;
+  }
+  $("#elBody").innerHTML = h;
+  const sn = s.snapshot || {}, acts = sn.actions || [];
+  $("#elCards").innerHTML = acts.map(a => {
     const mine = a.leave, btn = a.disabled && !mine ? `<button class="btn" disabled>${esc(a.label || "Недоступно")}</button>`
-      : a.kind === "js" ? `<button class="btn" data-url="${esc(s.final_url || s.url)}">Только на сайте</button>`
+      : a.kind === "js" ? `<button class="btn" data-url="${esc(sn.final_url || s.url)}">Только на сайте</button>`
       : `<button class="btn ${mine ? "danger" : "primary"}" data-act="${a.id}" ${a.disabled ? "disabled" : ""}>${esc(a.disabled && !mine ? (a.label || "Недоступно") : a.label)}</button>`;
-    return `<div class="ecard ${mine ? "mine" : ""}"><div class="ctx">${esc(a.context || "(без описания)")}</div><div class="row2">${btn}${mine ? '<span class="mmeta">вы записаны</span>' : ""}</div></div>`; }).join("")
-    : `<div class="empty">${s.updated ? "На странице не нашлось кнопок записи. Посмотрите «Офлайн-копию» — что увидела программа. Если на сайте кнопки есть, пришлите из папки .moodle_offline файлы electives_page.html, electives_text.txt и electives_screen.png (паролей в них нет) — я подгоню разбор." : "Нажмите «Обновить варианты» — программа откроет страницу элективов под вашей учётной записью."}</div>`;
+    return `<div class="ecard ${mine ? "mine" : ""}"><div class="ctx">${esc(a.context || "(без описания)")}</div><div class="row2">${btn}${mine ? '<span class="mmeta">вы записаны</span>' : ""}</div></div>`; }).join("");
 }
-async function elRefresh(password){
-  const b = $("#elRefresh"); b.disabled = true; b.innerHTML = '<span class="spin" style="display:inline-block;vertical-align:-3px"></span> Открываю страницу…';
-  const r = await api("/api/electives/refresh", {password: password || "", electives_url: $("#elUrl").value.trim()}).catch(e => ({ok: false, error: String(e)}));
-  b.disabled = false; b.textContent = "Обновить варианты";
-  if (!r.ok) { toast("Элективы: " + r.error, "bad"); if (r.need_password) { EL = {...(EL || {}), need_password: true}; renderElectives(); } return; }
-  EL = r.state; renderElectives(); toast(r.new ? `Новых вариантов: ${r.new}` : (EL.actions || []).length ? "Список обновлён" : "Кнопки записи не нашлись", (EL.actions || []).length ? "ok" : "bad");
+async function elCall(path, body, busy){
+  if (busy) { busy.disabled = true; busy.dataset.t = busy.textContent; busy.innerHTML = '<span class="spin" style="display:inline-block;vertical-align:-3px"></span> Работаю…'; }
+  const r = await api(path, {...body, password: $("#elPass").value || "", username: $("#elUser").value.trim()}).catch(e => ({ok: false, error: String(e)}));
+  if (busy) { busy.disabled = false; busy.textContent = busy.dataset.t; }
+  if (!r.ok) { toast("Элективы: " + r.error, "bad"); if (r.need_password) { EL = {...(EL || {}), need_password: true}; renderElectives(); } return null; }
+  if (r.state) EL = r.state; return r;
+}
+async function elRefresh(){
+  const r = await elCall("/api/electives/refresh", {electives_url: $("#elUrl").value.trim()}, $("#elRefresh")); if (!r) return;
+  ELP = {}; renderElectives(); toast((r.changes || []).length ? "Новое: " + r.changes.join("; ") : "Список обновлён", "ok");
 }
 $("#elRefresh").onclick = () => elRefresh();
-$("#elPassGo").onclick = () => elRefresh($("#elPass").value);
-$("#elSite").onclick = () => openUrl((EL && (EL.final_url || EL.url)) || $("#elUrl").value);
-$("#elSnap").onclick = () => { if (!EL || !EL.updated) return toast("Сначала обновите варианты", "bad"); preview((EL.dir || "Элективы") + (EL.pdf ? "/страница.pdf" : "/страница.html")); };
+$("#elPassGo").onclick = () => elRefresh();
+$("#elSite").onclick = () => openUrl(ELSITE + "/electives");
+$("#elSnapGo").onclick = async () => { const r = await elCall("/api/electives/snapshot", {}, $("#elSnapGo")); if (r) { renderElectives(); toast(r.new ? `Новых вариантов: ${r.new}` : "Снимок обновлён", "ok"); } };
 const elSave = () => api("/api/electives/refresh", {settings_only: true, electives_watch: $("#elWatch").checked, electives_watch_hours: +$("#elHours").value, electives_url: $("#elUrl").value.trim()});
 $("#elWatch").onchange = elSave; $("#elHours").onchange = elSave; $("#elUrl").onchange = elSave;
-$("#elCards").addEventListener("click", async e => {
-  const b = e.target.closest("[data-act]"); if (!b) return;
-  const a = (EL.actions || []).find(x => x.id === b.dataset.act); if (!a) return;
-  if (!confirm(`${a.label}?\n\n${a.context}`)) return;
-  b.disabled = true; b.textContent = "Отправляю…";
-  const r = await api("/api/electives/act", {id: a.id, password: $("#elPass").value || ""});
-  if (!r.ok) { toast("Не получилось: " + (r.error || "ошибка"), "bad"); b.disabled = false; b.textContent = a.label; return; }
-  EL = r.state; renderElectives(); toast((r.messages || []).join(" ") || "Готово — проверьте статус на карточке", "ok");
+$("#electivesView").addEventListener("change", e => {
+  const sel = e.target.closest("select[data-blk]"); if (!sel) return;
+  const st = ELP[sel.dataset.blk]; if (!st) return;
+  for (const k of Object.keys(st.pick)) if (String(st.pick[k]) === sel.dataset.opt) delete st.pick[k];
+  if (sel.value) st.pick[sel.value] = +sel.dataset.opt;
+  renderElectives();
+});
+$("#electivesView").addEventListener("click", async e => {
+  const u = e.target.closest("a[data-url]"); if (u) { e.preventDefault(); return; }      // открывает общий обработчик [data-url]
+  const blocks = ((EL && EL.api && EL.api.blocks) || []), bid = k => blocks.find(b => String(b.id) === String(k));
+  let t = e.target.closest("[data-ereview]");
+  if (t) { const b = bid(t.dataset.ereview); if (b && !elNeed(b, ELP[b.id]).length) { ELP[b.id].review = true; renderElectives(); } return; }
+  t = e.target.closest("[data-eback]"); if (t) { ELP[t.dataset.eback].review = false; renderElectives(); return; }
+  t = e.target.closest("[data-esave]");
+  if (t) {
+    const b = bid(t.dataset.esave), st = ELP[b.id], roles = elRoles(b);
+    const primary = roles.filter(r => r.k[0] === "p").map(r => st.pick[r.k]).filter(x => x != null), backup = roles.filter(r => r.k[0] === "b").map(r => st.pick[r.k]).filter(x => x != null);
+    const r = await elCall("/api/electives/choose", {block: b.id, primary, backup}, t); if (!r) return;
+    delete ELP[b.id]; renderElectives(); toast(r.message || "Выбор сохранён", "ok"); return;
+  }
+  t = e.target.closest("[data-ereg-on],[data-ereg-off]");
+  if (t) {
+    const on = t.dataset.eregOn != null, id = on ? t.dataset.eregOn : t.dataset.eregOff, key = (on ? "on" : "off") + id;
+    if (elArmed !== key) { elArmed = key; renderElectives(); setTimeout(() => { if (elArmed === key) { elArmed = ""; renderElectives(); } }, 5000); return; }
+    elArmed = "";
+    const r = await elCall(on ? "/api/electives/register" : "/api/electives/retract", on ? {event: +id} : {reg: +id}, t); if (!r) return;
+    renderElectives(); toast(r.message || "Готово", "ok"); return;
+  }
+  t = e.target.closest("[data-act]");
+  if (t) {
+    const a = ((EL.snapshot || {}).actions || []).find(x => x.id === t.dataset.act); if (!a) return;
+    if (!confirm(`${a.label}?\n\n${a.context}`)) return;
+    t.disabled = true; t.textContent = "Отправляю…";
+    const r = await api("/api/electives/act", {id: a.id, password: $("#elPass").value || "", username: $("#elUser").value.trim()});
+    if (!r.ok) { toast("Не получилось: " + (r.error || "ошибка"), "bad"); t.disabled = false; t.textContent = a.label; return; }
+    EL = r.state; renderElectives(); toast((r.messages || []).join(" ") || "Готово — проверьте статус на карточке", "ok");
+  }
 });
 
 /* ── опрос сервера ── */

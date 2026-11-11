@@ -11,9 +11,11 @@ Moodle Offline — графический интерфейс.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import mimetypes
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -24,7 +26,7 @@ from collections import deque
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import android
 import dl_rules
@@ -35,7 +37,9 @@ import news
 import search
 import watch
 import electives as el
+import iotapi
 import qr
+import reader
 import schedule as sched
 import transfer
 
@@ -180,6 +184,7 @@ class App:
         self.token = secrets.token_urlsafe(18)
         self.shutdown = threading.Event()
         self.el_lock = threading.Lock()
+        self.reader_lock = threading.Lock()     # читалка: по одному запросу к Moodle за раз
         self.electives_checked = 0.0
         self.offline = {"reason": "", "since": "", "cached": ""}   # офлайн-режим: работаем с сохранённым
         self.relogin_tried = 0.0
@@ -658,6 +663,7 @@ class App:
         self.settings.pop("remember", None)
         self.save_settings()
         self.client, self.courses, self.login_state, self.user_name = None, [], "idle", ""
+        self._iot_tok = None
         try:
             self.OFFLINE_FILE.unlink()
         except OSError:
@@ -749,6 +755,107 @@ class App:
         d["downloaded"] = False
         return d
 
+    # ── читалка: открыть страницу/файл элемента курса внутри программы ──
+    READER_TTL = 600           # свежая копия страницы (сек): внутри этого срока повторно не ходим на сайт
+    READER_INLINE = ("image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp", "application/pdf", "text/plain")
+
+    def _reader_host(self) -> str:
+        base = self.client.base if self.client else (self.settings.get("base_url") or "https://do.sevsu.ru")
+        return mo.urlparse(mo.normalize_base(base)).netloc.lower()
+
+    def _reader_online(self) -> bool:
+        return bool(self.client) and self.job_state == "idle" and self.login_state != "offline"
+
+    def reader_page(self, url, live=False):
+        host = self._reader_host()
+        url = reader.norm_url(url or "")
+        if not reader.same_site(url, host):
+            return {"ok": False, "error": "это адрес не с сайта Moodle — откройте его в браузере"}
+        cached = reader.load(mo.DATA_DIR, url)
+
+        def from_cache(note):
+            d = dict(cached, ok=True, cached=True, note=note)
+            d["saved"] = datetime.fromtimestamp(cached["ts"]).strftime("%d.%m.%Y %H:%M")
+            return d
+        online = self._reader_online()
+        if cached and not live and (not online or time.time() - cached["ts"] < self.READER_TTL):
+            return from_cache("" if online else "нет связи с Moodle — показана сохранённая копия")
+        if not online:
+            why = "идёт загрузка" if self.job_state != "idle" else "Moodle сейчас недоступен"
+            return {"ok": False, "error": f"{why}, а эта страница здесь ещё не открывалась. Откройте её, когда будет связь, — "
+                                           "копия сохранится и потом будет читаться без интернета."}
+        with self.reader_lock, self._no_wait():
+            try:
+                for attempt in (1, 2):
+                    r, final = self.client.fetch_internal(url, kind="page", stream=True)
+                    ct = (r.headers.get("Content-Type") or "").lower()
+                    if ct and "html" not in ct:                  # по адресу лежит файл, а не страница
+                        name = self._reader_name(r, final)
+                        r.close()
+                        return {"ok": True, "file": final, "name": name, "ct": ct.split(";")[0]}
+                    text = mo.MoodleClient._text(r)
+                    r.close()
+                    if 'id="page-login-index"' in text and attempt == 1 and self.client.relogin():
+                        continue
+                    break
+                if 'id="page-login-index"' in text:
+                    raise mo.SessionExpired("сессия истекла, требуется вход")
+            except mo.ExternalLink as e:
+                return {"ok": True, "external": e.url}
+            except Exception as e:
+                msg = mo.describe_error(e)
+                if cached:
+                    return from_cache(f"не удалось обновить ({msg}) — показана сохранённая копия")
+                return {"ok": False, "error": msg}
+        rec = reader.render(text, final, host)
+        reader.save(mo.DATA_DIR, url, rec)
+        rec = dict(rec, ok=True, cached=False, url=url, note="")
+        rec["saved"] = datetime.now().strftime("%d.%m.%Y %H:%M")
+        return rec
+
+    @contextlib.contextmanager
+    def _no_wait(self):
+        """Читалка не ждёт «оживания» сайта часами, как загрузка: сайт не отвечает — сразу говорим и показываем копию."""
+        c = self.client
+        old = c.no_wait if c else False
+        if c:
+            c.no_wait = True
+        try:
+            yield
+        finally:
+            if c:
+                c.no_wait = old
+
+    @staticmethod
+    def _reader_name(r, url) -> str:
+        cd = r.headers.get("Content-Disposition") or ""
+        m = re.search(r"filename\*=UTF-8''([^;]+)", cd, re.I) or re.search(r'filename="?([^";]+)"?', cd, re.I)
+        name = unquote(m.group(1)) if m else unquote(mo.urlparse(url).path.rsplit("/", 1)[-1])
+        return mo.safe_name(name) or "файл"
+
+    def reader_file_open(self, url):
+        """Файл/картинка этого Moodle для показа. → {"error"} | {"path", "ct"} (из кэша) | {"resp", "ct", "name", "cache"}."""
+        host = self._reader_host()
+        url = reader.norm_url(url or "")
+        if not reader.same_site(url, host):
+            return {"error": "адрес не с сайта Moodle", "code": 400}
+        ip = reader.image_path(mo.DATA_DIR, url)
+        if ip.is_file():
+            try:
+                return {"path": ip, "ct": ip.with_name(ip.name + ".ct").read_text(encoding="utf-8").strip() or "image/png", "name": ip.name}
+            except OSError:
+                pass
+        if not self._reader_online():
+            return {"error": "файл не сохранён, а Moodle сейчас недоступен", "code": 503}
+        return {"url": url}
+
+    def reader_file_fetch(self, url):
+        """Запрашивает файл у Moodle (под замком читалки). → (ответ, тип, имя) или бросает исключение."""
+        r, final = self.client.fetch_internal(url, kind="image" if url.lower().split("?")[0].endswith(
+            (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")) else "file", stream=True)
+        ct = (r.headers.get("Content-Type") or "application/octet-stream").split(";")[0].strip().lower()
+        return r, ct, self._reader_name(r, final)
+
     # ── расписание ──
     def schedule_status(self):
         out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
@@ -801,9 +908,9 @@ class App:
                 "groups": cache["groups"].get(dept, []), "selected": self.settings.get("schedule_group") or sched.DEFAULT_GROUP}
 
     # ── элективы ──
-    def _el_creds(self, password=None):
+    def _el_creds(self, password=None, username=None):
         if password:
-            return (self.settings.get("username") or "", password)
+            return ((username or "").strip() or self.settings.get("username") or "", password)
         if self.client and self.client.creds:
             return self.client.creds
         sec = self.vault.load_secret()
@@ -839,30 +946,93 @@ class App:
         except Exception:
             pass
 
-    def _electives(self, password=None):
+    # ── элективы: основной путь — программный интерфейс сайта (iotapi); снимок страницы через браузер — запасной ──
+    def _iot(self, password=None, username=None):
+        e = iotapi.Iot(Path(self.settings.get("out_dir") or mo.DEFAULT_OUT), mo.DATA_DIR, self.rep, mo.Control(),
+                       creds=self._el_creds(password, username), cookies=self._sso_cookies(),
+                       use_system_proxy=bool(self.settings.get("use_system_proxy")),
+                       page_delay=mo.parse_delay(self.settings.get("page_delay"), mo.PAGE_DELAY),
+                       file_delay=mo.parse_delay(self.settings.get("file_delay"), mo.FILE_DELAY))
+        tok = getattr(self, "_iot_tok", None)            # ключ доступа живёт только в памяти, пока он действует
+        if tok and tok[1] > time.monotonic() and not password:
+            e.token, e.token_until = tok
+        return e
+
+    def _iot_done(self, e):
+        self._keep_portal_cookies(e)
+        if e.token:
+            self._iot_tok = (e.token, e.token_until)
+
+    def _electives(self, password=None, username=None):
         url = self.settings.get("electives_url") or el.ELECTIVES_URL
         host = mo.urlparse(url).hostname
         return el.Electives(Path(self.settings.get("out_dir") or mo.DEFAULT_OUT), mo.DATA_DIR, self.rep, mo.Control(),
-                            url=url, creds=self._el_creds(password), cookies=self._sso_cookies(),
+                            url=url, creds=self._el_creds(password, username), cookies=self._sso_cookies(),
                             use_system_proxy=bool(self.settings.get("use_system_proxy")),
                             page_delay=mo.parse_delay(self.settings.get("page_delay"), mo.PAGE_DELAY)), host
 
-    def _keep_portal_cookies(self, e, host):
-        self._save_sso(e.cookies_out or e.portal.cookies())
+    def _keep_portal_cookies(self, e, host=None):
+        self._save_sso(e.cookies_out or (e.portal.cookies() if hasattr(e, "portal") else None))
 
     def electives_state(self):
-        e, _ = self._electives()
-        d = e.load()
+        d = {"api": self._iot().load() or None}
+        snap, _ = self._electives()
+        s = snap.load()
+        d["snapshot"] = s or None
         d["url"] = self.settings.get("electives_url") or el.ELECTIVES_URL
         d["watch"] = bool(self.settings.get("electives_watch"))
         d["watch_hours"] = int(self.settings.get("electives_watch_hours", 6))
         d["has_creds"] = self._el_creds() is not None
+        d["username"] = self.settings.get("username") or ""
         d["dir"] = el.ELECTIVES_DIR
+        d["android"] = ANDROID
+        d["browser"] = bool(mo.find_browser()) if not d["android"] else False
         return d
 
-    def electives_refresh(self, password=None):
+    def _iot_fail(self, ex, what="Элективы"):
+        need = isinstance(ex, iotapi.IotNeedLogin)
+        msg = str(ex) if isinstance(ex, iotapi.IotError) else mo.describe_error(ex)
+        self.rep.log(f"{what}: {msg}", "warn")
+        return {"ok": False, "error": msg, "need_password": need or "вход не удался" in msg,
+                "debug": str(mo.DATA_DIR / "iot_debug.txt")}
+
+    def electives_refresh(self, password=None, username=None):
         with self.el_lock:
-            e, host = self._electives(password)
+            e = self._iot(password, username)
+            try:
+                st = e.refresh()
+            except Exception as ex:
+                return self._iot_fail(ex)
+            self._iot_done(e)
+            self.electives_checked = time.monotonic()
+            if st.get("changes"):
+                mo.notify(mo.APP_NAME, "Элективы: " + "; ".join(mo.short(c, 70) for c in st["changes"][:3]))
+            return {"ok": True, "state": self.electives_state(), "changes": st.get("changes", [])}
+
+    def _iot_action(self, fn_name, args, password=None, what="Элективы", username=None):
+        with self.el_lock:
+            e = self._iot(password, username)
+            try:
+                res = getattr(e, fn_name)(*args)
+            except Exception as ex:
+                return self._iot_fail(ex, what)
+            self._iot_done(e)
+            self.electives_checked = time.monotonic()
+            return {"ok": True, "message": res.get("message", ""), "state": self.electives_state()}
+
+    def electives_choose(self, block_id, primary, backup, password=None, username=None):
+        return self._iot_action("save_choice", (block_id, list(primary or []), list(backup or [])), password, "Выбор электива", username)
+
+    def electives_register(self, event_id, password=None, username=None):
+        return self._iot_action("register", (event_id,), password, "Запись на занятие", username)
+
+    def electives_retract(self, reg_id, password=None, username=None):
+        return self._iot_action("retract", (reg_id,), password, "Отмена записи на занятие", username)
+
+    # ── запасной путь: снимок страницы через фоновый браузер (Windows) ──
+    def electives_snapshot(self, password=None, username=None):
+        with self.el_lock:
+            e, host = self._electives(password, username)
             try:
                 st = e.refresh()
             except Exception as ex:
@@ -870,14 +1040,11 @@ class App:
                         "need_password": "логин и пароль" in str(ex) or "вход не удался" in str(ex),
                         "debug": str(mo.DATA_DIR / "electives_debug.txt")}
             self._keep_portal_cookies(e, host)
-            self.electives_checked = time.monotonic()
-            if st.get("new"):
-                mo.notify(mo.APP_NAME, "Новые элективы: " + "; ".join(mo.short(a["context"], 60) for a in st["new"][:3]))
             return {"ok": True, "state": self.electives_state(), "new": len(st.get("new", []))}
 
-    def electives_act(self, action_id, password=None):
+    def electives_act(self, action_id, password=None, username=None):
         with self.el_lock:
-            e, host = self._electives(password)
+            e, host = self._electives(password, username)
             try:
                 res = e.act(action_id)
             except Exception as ex:
@@ -1575,6 +1742,65 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_reader_file(self, url):
+        """Отдаёт файл или картинку Moodle окну программы. Картинки запоминаем (читаются и без интернета). Опасные типы
+        (html, svg — в них бывают скрипты) отдаём только как скачивание и под «песочницей»."""
+        res = APP.reader_file_open(url)
+        if res.get("error"):
+            return self._send(res.get("code", 404), {"error": res["error"]})
+        safe_hdr = {"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"}
+        if res.get("path"):
+            data = res["path"].read_bytes()
+            return self._send(200, data, res["ct"], {"Cache-Control": "max-age=3600"})
+        with APP.reader_lock, APP._no_wait():
+            try:
+                r, ct, name = APP.reader_file_fetch(res["url"])
+            except mo.ExternalLink as e:
+                return self._send(502, {"error": "файл лежит на другом сайте: " + e.url})
+            except Exception as e:
+                return self._send(502, {"error": mo.describe_error(e)})
+            try:
+                if ct == "text/html" or ct == "application/xhtml+xml":
+                    return self._send(502, {"error": "по этому адресу не файл, а страница"})
+                inline = ct in APP.READER_INLINE or ct.startswith(("audio/", "video/"))
+                size = int(r.headers.get("Content-Length") or 0)
+                self.send_response(200)
+                self.send_header("Content-Type", ct if not ct.startswith("text/") else ct + "; charset=utf-8")
+                if size:
+                    self.send_header("Content-Length", str(size))
+                disp = "inline" if inline else "attachment"
+                self.send_header("Content-Disposition", f"{disp}; filename*=UTF-8''{quote(name)}")
+                for k, v in safe_hdr.items():
+                    self.send_header(k, v)
+                if not inline:
+                    self.send_header("Content-Security-Policy", "sandbox")
+                self.end_headers()
+                keep = ct.startswith("image/") and ct != "image/svg+xml" and (not size or size <= 5 * 1024 * 1024)
+                buf, total = [], 0
+                for chunk in r.iter_content(65536):
+                    if not chunk:
+                        continue
+                    self.wfile.write(chunk)
+                    if keep:
+                        total += len(chunk)
+                        if total > 5 * 1024 * 1024:
+                            keep, buf = False, []
+                        else:
+                            buf.append(chunk)
+                if keep and buf:
+                    ip = reader.image_path(mo.DATA_DIR, res["url"])
+                    try:
+                        ip.parent.mkdir(parents=True, exist_ok=True)
+                        ip.with_name(ip.name + ".ct").write_text(ct, encoding="utf-8")
+                        ip.write_bytes(b"".join(buf))
+                        reader.prune_files(mo.DATA_DIR)
+                    except OSError:
+                        pass
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                r.close()
+
     def _authorized(self, q) -> bool:
         host = (self.headers.get("Host") or "").split(":")[0]
         if host not in ("127.0.0.1", "localhost"):
@@ -1644,6 +1870,8 @@ class Handler(BaseHTTPRequestHandler):
             if not r:
                 return self._send(404, {"error": "no cover"})
             return self._send(200, r[0], r[1], {"Cache-Control": "max-age=86400"})
+        if u.path == "/api/reader/file":
+            return self._send_reader_file(q.get("url", ""))
         if u.path.startswith("/files/"):
             out = Path(APP.settings.get("out_dir") or mo.DEFAULT_OUT)
             target = out / unquote(u.path[len("/files/"):])
@@ -1763,9 +1991,20 @@ class Handler(BaseHTTPRequestHandler):
             APP.save_settings()
             if b.get("settings_only"):
                 return self._send(200, {"ok": True, "state": APP.electives_state()})
-            return self._send(200, APP.electives_refresh(b.get("password") or None))
+            return self._send(200, APP.electives_refresh(b.get("password") or None, b.get("username") or None))
+        if p == "/api/reader":
+            return self._send(200, APP.reader_page(b.get("url", ""), bool(b.get("live"))))
+        if p == "/api/electives/choose":
+            return self._send(200, APP.electives_choose(b.get("block"), b.get("primary") or [], b.get("backup") or [],
+                                                        b.get("password") or None, b.get("username") or None))
+        if p == "/api/electives/register":
+            return self._send(200, APP.electives_register(b.get("event"), b.get("password") or None, b.get("username") or None))
+        if p == "/api/electives/retract":
+            return self._send(200, APP.electives_retract(b.get("reg"), b.get("password") or None, b.get("username") or None))
+        if p == "/api/electives/snapshot":
+            return self._send(200, APP.electives_snapshot(b.get("password") or None, b.get("username") or None))
         if p == "/api/electives/act":
-            return self._send(200, APP.electives_act(b.get("id", ""), b.get("password") or None))
+            return self._send(200, APP.electives_act(b.get("id", ""), b.get("password") or None, b.get("username") or None))
         if p == "/api/android/action":
             return self._send(200, APP.android_action(str(b.get("name", ""))))
         if p == "/api/open_url":

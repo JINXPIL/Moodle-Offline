@@ -86,7 +86,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.11.0"
+VERSION = "1.12.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -227,6 +227,14 @@ class LoginError(MoodleError):
 
 class SessionExpired(MoodleError):
     pass
+
+
+class ExternalLink(MoodleError):
+    """Адрес внутри Moodle перенаправил на другой сайт (так делает «Гиперссылка»): туда программа сама не ходит."""
+
+    def __init__(self, url):
+        super().__init__(f"переход на другой сайт: {url}")
+        self.url = url
 
 
 class NetworkDown(MoodleError):
@@ -1234,6 +1242,39 @@ class MoodleClient:
                 if msg:
                     raise MoodleError(f"Moodle: {short(msg, 200)}")
             return soup, r
+
+    def fetch_internal(self, url, *, kind="page", stream=True, referer=None, max_hops=6):
+        """GET страницы или файла этого же Moodle для просмотра внутри программы → (ответ, итоговый адрес).
+        Переходы разбираем сами и идём только по адресам этого сайта; ушло на чужой сайт — ExternalLink.
+        Сам перезаходит, если сессия истекла. Ответ при stream=True не прочитан — вызывающий закрывает его."""
+        relogged = False
+        while True:
+            cur = url
+            for _ in range(max_hops + 1):
+                r = self.request("GET", cur, kind=kind, referer=referer, stream=stream, allow_redirects=False)
+                loc = r.headers.get("Location") if 300 <= r.status_code < 400 else None
+                if not loc:
+                    break
+                r.close()
+                nxt = urljoin(cur, loc)
+                p = urlparse(nxt)
+                if p.scheme not in ("http", "https") or p.netloc.lower() != self.host:
+                    raise ExternalLink(nxt)
+                cur = nxt
+            else:
+                raise MoodleError("слишком много перенаправлений")
+            if self._is_login_url(cur) and not self._is_login_url(url):
+                r.close()
+                if not relogged and self.relogin():
+                    relogged = True
+                    continue
+                raise SessionExpired("сессия истекла, требуется вход")
+            if r.status_code >= 400:
+                code = r.status_code
+                r.close()
+                raise MoodleError(f"сайт ответил ошибкой {code}")
+            self.last_page = cur
+            return r, cur
 
     # ── вход ────────────────────────────────────────────────────────────────
     def _has_session_cookie(self) -> bool:
