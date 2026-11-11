@@ -40,6 +40,7 @@ import electives as el
 import iotapi
 import qr
 import reader
+import reserve
 import schedule as sched
 import xlsx_schedule as xs
 import transfer
@@ -805,6 +806,12 @@ class App:
                 with mo.fopen(out / sc["dir"] / ".course.json", "r", encoding="utf-8") as f:
                     d = json.load(f)
                 d["downloaded"] = True
+                try:
+                    res = reserve.versions(out / sc["dir"])
+                    if res:
+                        d["reserve"] = res
+                except OSError:
+                    pass
                 return d
             except (OSError, ValueError):
                 pass
@@ -1351,7 +1358,7 @@ class App:
             opts = mo.JobOptions(out_dir=Path(st.get("out_dir") or mo.DEFAULT_OUT), mode=int(st.get("mode", 1)),
                                  sync=bool(params.get("sync")), pdf=bool(st.get("pdf")), zip=bool(st.get("zip")),
                                  original_names=bool(st.get("original_names")), index_in_mode2=bool(st.get("index_in_mode2")),
-                                 rules=st.get("rules"), dir_template=st.get("layout_dir") or "",
+                                 keep_versions=bool(st.get("keep_versions", True)), rules=st.get("rules"), dir_template=st.get("layout_dir") or "",
                                  file_template=st.get("layout_file") or "", news=st.get("news"),
                                  calendar=st.get("calendar"), calendar_on=deadlines.normalize(st.get("calendar"))["auto"])
             auto = bool(params.get("auto"))
@@ -2239,7 +2246,7 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/settings":
             allowed = {"mode", "out_dir", "pdf", "zip", "course_ids", "quiet_hours", "quiet_hours_on",
                        "page_delay", "file_delay", "wait_minutes", "use_system_proxy", "original_names",
-                       "index_in_mode2", "wait_for_server", "no_geo_check", "base_url", "android_wakelock"}
+                       "index_in_mode2", "wait_for_server", "no_geo_check", "base_url", "android_wakelock", "keep_versions"}
             with APP.lock:
                 for k, v in b.items():
                     if k in allowed:
@@ -2419,9 +2426,10 @@ class Handler(BaseHTTPRequestHandler):
             "net": APP.net, "geo": APP.geo,
             "job": {"state": APP.job_status(), "kind": APP.job_kind, "armed": bool(APP.armed),
                     "started": APP.job_started, "result": APP.last_result, **snap},
-            "settings": {k: st.get(k) for k in ("mode", "out_dir", "pdf", "zip", "course_ids", "quiet_hours",
-                                                "quiet_hours_on", "schedule_on", "schedule_time", "wait_for_server",
-                                                "use_system_proxy", "original_names", "index_in_mode2", "no_geo_check", "android_wakelock")},
+            "settings": {**{k: st.get(k) for k in ("mode", "out_dir", "pdf", "zip", "course_ids", "quiet_hours",
+                                                   "quiet_hours_on", "schedule_on", "schedule_time", "wait_for_server",
+                                                   "use_system_proxy", "original_names", "index_in_mode2", "no_geo_check", "android_wakelock")},
+                         "keep_versions": bool(st.get("keep_versions", True))},
             "platform": os.name, "android": ANDROID, "android_info": APP.android_info() if ANDROID else None, "browser_pdf": bool(mo.find_browser()),
             "news_unread": APP.news_unread(),
             "update": APP.update_brief(),

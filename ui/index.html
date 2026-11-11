@@ -244,6 +244,11 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .mf button,.mi .side-b button{height:26px;padding:0 9px;border-radius:7px;border:1px solid var(--line);background:var(--raised);cursor:pointer;font-size:12px}
 .mf button:hover,.mi .side-b button:hover{border-color:var(--accent);color:var(--accent)}
 .mmeta{font-size:12px;color:var(--faint)}
+.mres{font-size:12px;color:var(--muted);line-height:1.5;margin:-1px 0 3px;padding-left:2px}
+.mres .rvw{color:var(--bad);font-weight:600;display:block;margin-bottom:2px}
+.mres .rv{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 10px 2px 0}
+.mres button{height:24px;padding:0 8px;border-radius:7px;border:1px solid var(--line);background:var(--raised);cursor:pointer;font-size:12px}
+.mres button:hover{border-color:var(--accent);color:var(--accent)}
 .schedframe{width:100%;height:100%;flex:1;min-height:420px;border:0;border-radius:var(--r);background:var(--surface)}
 .schhead,.schback{display:none}
 .xl-list{margin-top:8px;border:1px solid var(--line);border-radius:10px;max-height:260px;overflow:auto}
@@ -576,6 +581,7 @@ body.android .no-android{display:none!important}
             </div>
             <div class="row"><div class="lbl">PDF-копии страниц<small id="pdfNote">задания, тесты, страницы — ещё и в PDF</small></div><label class="sw-t"><input type="checkbox" data-s="pdf"><span></span></label></div>
             <div class="row"><div class="lbl">ZIP-бэкап курса<small>архив с датой в папке _бэкапы</small></div><label class="sw-t"><input type="checkbox" data-s="zip"><span></span></label></div>
+            <div class="row"><div class="lbl">Резерв файлов<small>если преподаватель заменит файл (или поставит «заглушку»), прежняя версия останется в папке «_Резерв» курса</small></div><label class="sw-t"><input type="checkbox" data-s="keep_versions"><span></span></label></div>
             <button class="btn big ghost" id="rulesBtn" style="margin-top:10px">Правила скачивания…</button>
             <p class="hint" id="rulesInfo">Какие файлы брать, что пропускать, свои правила для каждого курса.</p>
           </div>
@@ -1499,7 +1505,7 @@ const openUrl = url => ANDROID ? (window.open(url, "_blank"), Promise.resolve({o
 
 /* ── что нового ── */
 const NW_KIND = {item_new:["Новый материал","#2f6fde"], file_new:["Новый файл","#0f9d8a"], announcement:["Объявление","#7c4dff"],
-                 grade:["Оценка","#e8710a"], item_gone:["Убрано с сайта","#8a93a3"], item_renamed:["Переименовано","#8a93a3"],
+                 grade:["Оценка","#e8710a"], file_replaced:["Файл заменён","#d93025"], item_gone:["Убрано с сайта","#8a93a3"], item_renamed:["Переименовано","#8a93a3"],
                  deadline_new:["Новый срок","#d93025"], deadline_moved:["Срок перенесён","#e8710a"], deadline_soon:["Срок горит","#d93025"],
                  moodle_down:["Moodle не отвечает","#d93025"], moodle_up:["Moodle снова работает","#1a9e5c"]};
 let NW = null, nwUnreadOnly = false, lastNews = null;
@@ -1518,7 +1524,7 @@ function nwCard(e){
     <div class="nt"><span class="nk" style="background:${col}">${esc(lbl)}</span>${esc(e.title)}</div>
     <div class="nm">${esc(e.course)} · ${nwWhen(e.ts)}</div>
     ${e.detail ? `<div class="nd">${esc(e.detail)}</div>` : ""}${files}
-    <div class="na">${e.path ? `<button class="btn" data-a="open">Открыть копию</button>` : ""}${e.url ? `<button class="btn" data-a="site">На сайте</button>` : ""}${e.read ? "" : `<button class="btn ghost" data-a="read">Прочитано</button>`}</div>
+    <div class="na">${e.path ? `<button class="btn" data-a="open">${e.old_path ? "Открыть новый" : "Открыть копию"}</button>` : ""}${e.old_path ? `<button class="btn" data-a="old">Открыть прежний</button>` : ""}${e.url ? `<button class="btn" data-a="site">На сайте</button>` : ""}${e.read ? "" : `<button class="btn ghost" data-a="read">Прочитано</button>`}</div>
   </div></div>`;
 }
 async function loadNews(){
@@ -1544,6 +1550,7 @@ $("#nwList").onclick = async ev => {
   const a = b.dataset.a;
   if (a === "site") openUrl(e.url);
   else if (a === "open") { PREVIEWABLE.test(e.path) ? preview(e.path) : api("/api/open", {path: e.path}).then(r => r.ok || toast(r.error || "Файл не найден", "bad")); }
+  else if (a === "old") { PREVIEWABLE.test(e.old_path) ? preview(e.old_path) : api("/api/open", {path: e.old_path}).then(r => r.ok || toast(r.error || "Файл не найден", "bad")); }
   if (a !== "read" && e.read) return;
   await api("/api/news/read", {ids: [e.id]}); loadNews();
 };
@@ -1974,6 +1981,15 @@ async function openCourse(id, live = false){
   CV = {c, d}; cvQ = ""; cvK = ""; renderCourse();
 }
 function closeCourse(){ CV = null; $("#courseView").classList.add("hidden"); $("#grid").classList.remove("hidden"); $(".content .toolbar").classList.remove("hidden"); }
+/* резерв: прежние версии файла, который преподаватель заменил на сайте */
+const rvWhen = s => { const m = /^(\d{4})-(\d\d)-(\d\d) (\d\d)-(\d\d)/.exec(s || ""); return m ? `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}` : (s || ""); };
+function reserveHtml(d, f){
+  const rv = (d.reserve || {})[f.path]; if (!rv || !rv.length) return "";
+  const pre = d.dir ? d.dir + "/" : "", last = rv[0];
+  return `<div class="mres">${last.stub ? `<span class="rvw">⚠ Похоже, файл заменили «заглушкой»: ${esc(last.stub)}</span>` : ""}Заменён на сайте. Прежние версии: `
+    + rv.map(v => { const vp = pre + v.path, e = extOf(vp);
+        return `<span class="rv">заменена ${esc(rvWhen(v.saved))} · ${hsize(v.size)}${PREVIEW.has(e) ? `<button data-prev="${esc(vp)}">Просмотр</button>` : ""}<button data-ext="${esc(vp)}">Открыть</button></span>`; }).join("") + `</div>`;
+}
 function renderCourse(){
   const {c, d} = CV, el = $("#courseView");
   const img = c.image ? (c.image.startsWith("data:") ? c.image : c.image + "&t=" + encodeURIComponent(T)) : "";
@@ -1994,7 +2010,7 @@ function renderCourse(){
     html += `<section class="msec" id="msec-${s.number}"><h3>${esc(s.name)}</h3>`;
     for (const it of s.items) {
       const files = (it.files || []).map(f => { const p = (d.dir ? d.dir + "/" : "") + f.path, e = extOf(p);
-        return `<div class="mf"><span class="fn" title="${esc(f.title)}">${esc(f.title)}</span><span class="mmeta">${hsize(f.size)}</span>${PREVIEW.has(e) ? `<button data-prev="${esc(p)}">Просмотр</button>` : ""}<button data-ext="${esc(p)}">Открыть</button><button data-rev="${esc(p)}">В папке</button></div>`; }).join("");
+        return `<div class="mf"><span class="fn" title="${esc(f.title)}">${esc(f.title)}</span><span class="mmeta">${hsize(f.size)}</span>${PREVIEW.has(e) ? `<button data-prev="${esc(p)}">Просмотр</button>` : ""}<button data-ext="${esc(p)}">Открыть</button><button data-rev="${esc(p)}">В папке</button></div>` + reserveHtml(d, f); }).join("");
       const site = (it.url ? `<button data-rd="${esc(it.url)}" data-rdn="${esc(it.name)}" class="rdb">Открыть здесь</button>` : "") + (it.url ? `<button data-url="${esc(it.url)}">На сайте</button>` : "");
       const extl = it.external ? `<button data-url="${esc(it.external)}">Ссылка</button>` : "";
       const note = it.online_only ? `<div class="mmeta">только онлайн${it.url ? "" : " · недоступно"}</div>` : it.error ? `<div class="mmeta" style="color:var(--bad)">${esc(it.error)}</div>` : (!d.downloaded ? `<div class="mmeta">не скачано</div>` : "");
