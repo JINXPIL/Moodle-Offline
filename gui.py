@@ -37,7 +37,7 @@ import watch
 import electives as el
 import schedule as sched
 
-UI_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "ui"
+UI_DIR = Path(os.environ.get("MOODLE_OFFLINE_UI") or (Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "ui"))
 TASK_NAME = "MoodleOffline - ночная синхронизация"
 SSO_DOMAIN = "sevsu.ru"      # единый вход вуза: auth.sevsu.ru, iot.sevsu.ru, timetable.sevsu.ru
 HEARTBEAT_IDLE = 30
@@ -186,6 +186,7 @@ class App:
         self.wlock_at = -99.0
         self.auto_why = ""                      # почему автообновление пока не запущено (для подписи в окне)
         self.keep_running = ANDROID             # не выходить, когда страницу закрыли (на телефоне браузер часто в фоне)
+        self.window_seen = False                # приложение .apk: окно уже запрашивало состояние (для проверки в эмуляторе)
         self.probe_kick = False                 # настройки таймера сменили — проверить сайт сразу, не ждать старого интервала
         self._news = None             # (путь, NewsLog)
         self._cal = None              # (путь, deadlines.Store)
@@ -402,11 +403,27 @@ class App:
         """Для окна на телефоне: где лежат материалы и видны ли они приложению «Файлы»."""
         out, home = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT), Path.home()
         sh = android.shared_storage(home)
-        return {"out": str(out), "shared": bool(sh), "private_out": android.in_private_storage(out, home),
-                "suggest": str(android.default_materials(home, datadir.LEGACY_OUT)) if sh else ""}
+        info = {"out": str(out), "shared": bool(sh), "private_out": android.in_private_storage(out, home),
+                "suggest": str(android.default_materials(home, datadir.LEGACY_OUT)) if sh else "",
+                "kind": "apk" if android.is_apk() else "termux"}
+        if android.is_apk():
+            info["battery_ok"] = android.battery_exempt()
+        return info
+
+    def android_action(self, name: str) -> dict:
+        """Системные экраны Android, которые может открыть только приложение (.apk): доступ к файлам, батарея."""
+        if not android.is_apk():
+            return {"ok": False, "error": "это действие есть только в приложении для Android"}
+        if name == "allfiles":
+            return {"ok": android.request_all_files()}
+        if name == "battery":
+            return {"ok": android.request_battery()}
+        return {"ok": False, "error": "неизвестное действие"}
 
     # ── слежение в фоне без окна (автозапуск Windows) ──
     def autostart_info(self) -> dict:
+        if android.is_apk():      # приложение само запускает службу при включении телефона
+            return {"supported": True, "kind": "apk-boot", "on": android.apk_autostart_get(), "path": "", "app_ready": True}
         if ANDROID:               # Termux:Boot запускает скрипты из ~/.termux/boot при включении телефона
             home = Path.home()
             p = android.boot_path(home)
@@ -416,6 +433,10 @@ class App:
         return {"supported": os.name == "nt", "kind": "windows", "on": bool(p and p.exists()), "path": str(p or "")}
 
     def autostart_set(self, enabled: bool) -> dict:
+        if android.is_apk():
+            if not android.apk_autostart_set(enabled):
+                return {"ok": False, "error": "не получилось сохранить настройку автозапуска"}
+            return {"ok": True, **self.autostart_info()}
         if ANDROID:
             p = android.boot_path(Path.home())
             try:
@@ -1423,6 +1444,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized(q):
             return self._send(403, {"error": "forbidden"})
         if u.path == "/api/state":
+            if not APP.window_seen and android.is_apk():
+                APP.window_seen = True
+                print("Окно приложения подключилось к программе", flush=True)
             return self._send(200, self.state(int(q.get("since", 0) or 0)))
         if u.path == "/api/courses":
             return self._send(200, APP.course_list())
@@ -1570,6 +1594,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.electives_refresh(b.get("password") or None))
         if p == "/api/electives/act":
             return self._send(200, APP.electives_act(b.get("id", ""), b.get("password") or None))
+        if p == "/api/android/action":
+            return self._send(200, APP.android_action(str(b.get("name", ""))))
         if p == "/api/open_url":
             url = b.get("url", "")
             if not url.startswith(("http://", "https://")):
@@ -1703,7 +1729,7 @@ def existing_instance():
     return None
 
 
-def gui_main(no_window=False, port=0, keep_running=False):
+def gui_main(no_window=False, port=0, keep_running=False, on_ready=None):
     global APP
     mo.ensure_console_utf8()
     mo.load_env()
@@ -1730,7 +1756,13 @@ def gui_main(no_window=False, port=0, keep_running=False):
     threading.Thread(target=APP.repair_schedule, daemon=True).start()
     if keep_running:
         APP.keep_running = True
-    if ANDROID:
+    if on_ready:
+        on_ready(url)         # приложение .apk получает адрес окна (ключ доступа в журнал не пишем)
+    if android.is_apk():
+        print(f"{mo.APP_NAME} {mo.VERSION}: сервер приложения запущен.")
+        if APP.settings.get("android_wakelock"):
+            android.wake_lock(True)
+    elif ANDROID:
         print(f"{mo.APP_NAME} {mo.VERSION}: программа запущена в Termux.")
         print(f"Откройте в браузере телефона: {url}")
         print("Закрыть вкладку можно — программа продолжит работать. Остановить: Ctrl+C здесь или кнопка «Остановить программу» в окне.")

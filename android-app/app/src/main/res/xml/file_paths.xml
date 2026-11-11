@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Какие файлы можно отдать другому приложению (просмотрщику PDF и т. п.): кэш открытия и папка материалов. Провайдер не экспортируется. -->
+<paths>
+    <cache-path name="open" path="open/" />
+    <files-path name="files" path="." />
+    <external-files-path name="ext_files" path="." />
+    <external-path name="shared" path="." />
+</paths>
