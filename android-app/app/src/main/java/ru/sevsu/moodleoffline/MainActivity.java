@@ -9,10 +9,14 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
+import android.net.Uri;
 import android.view.ViewGroup;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 /** Окно программы: страница локального сервера (тот же интерфейс, что и на компьютере) в WebView. */
 public class MainActivity extends Activity {
@@ -21,6 +25,8 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String loaded;
     private long startedAt;
+    private static final int REQ_FILE = 61;
+    private ValueCallback<Uri[]> chooser;   // ответ странице на «Выберите файл»
 
     private final Runnable poll = new Runnable() {
         @Override
@@ -76,6 +82,34 @@ public class MainActivity extends Activity {
         if (selftest) i.putExtra("selftest", true);
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
         else startService(i);
+    }
+
+    /** Системный выбор файла для поля «Выберите файл» на странице (архив переноса данных). */
+    boolean chooseFile(ValueCallback<Uri[]> cb) {
+        if (chooser != null) chooser.onReceiveValue(null);
+        chooser = cb;
+        try {
+            Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");   // архивы у разных «Файлов» называются по-разному — не сужаем
+            startActivityForResult(Intent.createChooser(i, "Выберите файл"), REQ_FILE);
+        } catch (Throwable t) {
+            chooser = null;
+            cb.onReceiveValue(null);
+            Toast.makeText(this, "Не нашёл приложение «Файлы»", Toast.LENGTH_SHORT).show();
+        }
+        return true;
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        if (req == REQ_FILE) {
+            ValueCallback<Uri[]> cb = chooser;
+            chooser = null;
+            if (cb != null) cb.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(res, data));
+            return;
+        }
+        super.onActivityResult(req, res, data);
     }
 
     @Override

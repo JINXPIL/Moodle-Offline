@@ -60,7 +60,7 @@ def _selftest() -> None:
     def imports():
         import importlib
         for m in ("moodle_offline", "gui", "schedule", "electives", "news", "search", "deadlines", "watch", "datadir",
-                  "dl_rules", "cdp", "android"):
+                  "dl_rules", "cdp", "android", "transfer", "qr"):
             importlib.import_module(m)
         return "все модули программы"
 
@@ -101,6 +101,37 @@ def _selftest() -> None:
             assert r.get("ok") and r.get("total", 0) >= 1, f"поиск ничего не нашёл: {r}"
         return "индекс собран, слово найдено"
 
+    def transfer_loop():
+        # перенос данных: раздача и приём по локальному сокету, QR, список адресов (на телефоне сети устроены по-своему)
+        import transfer
+        import qr
+
+        class Rep:
+            def __getattr__(self, n):
+                return lambda *a, **k: None
+
+        class Ctl:
+            def checkpoint(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as d:
+            src, dst = Path(d) / "src", Path(d) / "dst"
+            for r in (src / "out" / "Курс", src / "data", dst / "out", dst / "data"):
+                r.mkdir(parents=True)
+            (src / "out" / "Курс" / "лекция.txt").write_text("перенос", encoding="utf-8")
+            snd = transfer.Sender(src / "out", src / "data", ["materials"], {}, Rep(), ttl=60, bind="127.0.0.1")
+            info = snd.start()
+            try:
+                base, code = transfer.parse_address(f"http://127.0.0.1:{info['port']}/{info['code']}/")
+                res = transfer.pull(base, ["materials"], dst / "out", dst / "data", Rep(), Ctl())
+            finally:
+                snd.stop()
+            assert res["failed"] == 0 and res["copied"] == 1, res
+            assert (dst / "out" / "Курс" / "лекция.txt").read_text(encoding="utf-8") == "перенос"
+        svg = qr.to_svg(qr.make("http://192.168.1.5:8812/ABCDEFGH/"))
+        assert svg.startswith("<svg"), "QR не нарисовался"
+        return f"файл передан по сокету, QR есть, адреса в сети: {transfer.local_ips() or 'не найдены'}"
+
     def https():
         import requests
         r = requests.get("https://github.com", timeout=30)
@@ -123,6 +154,6 @@ def _selftest() -> None:
                 f"автозапуск {android.apk_autostart_set(True) and android.apk_autostart_get()}")
 
     for name, fn in (("imports", imports), ("platform", platform), ("ui", ui), ("libs", libs), ("sqlite", sqlite),
-                     ("search", search_index), ("https", https), ("bridge", bridge)):
+                     ("search", search_index), ("transfer", transfer_loop), ("https", https), ("bridge", bridge)):
         check(name, fn)
     print(f"SELFTEST DONE ok={sum(results)} fail={len(results) - sum(results)}", flush=True)

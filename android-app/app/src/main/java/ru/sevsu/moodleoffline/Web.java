@@ -15,6 +15,7 @@ import android.webkit.DownloadListener;
 import android.webkit.JsPromptResult;
 import android.webkit.JsResult;
 import android.webkit.URLUtil;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -103,6 +104,14 @@ final class Web {
                 if (m.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
                     Log.w("MoodleOffline", "js error: " + m.message() + " (" + m.lineNumber() + ")");
                 }
+                return true;
+            }
+
+            // «Выберите файл» (например, архив переноса данных): без этого WebView молча ничего не открывает
+            @Override
+            public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb, FileChooserParams p) {
+                if (a instanceof MainActivity) return ((MainActivity) a).chooseFile(cb);
+                cb.onReceiveValue(null);
                 return true;
             }
 
