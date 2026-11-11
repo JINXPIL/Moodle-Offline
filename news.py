@@ -28,6 +28,7 @@ KINDS = {
     "file_new": ("Новый файл", "в уже известный элемент (например, папку) положили новый файл", True, True),
     "announcement": ("Объявление", "новая тема в форуме «Объявления» (или «Новости»)", True, True),
     "grade": ("Оценка", "новая оценка или комментарий преподавателя в журнале оценок", True, True),
+    "file_replaced": ("Файл заменён", "преподаватель загрузил новую версию файла (в том числе «заглушку»); прежняя версия остаётся в папке «_Резерв» курса", True, True),
     "item_gone": ("Убрано с сайта", "преподаватель скрыл или удалил элемент (у вас копия останется)", True, False),
     "item_renamed": ("Переименовано", "у элемента сменилось название", False, False),
     # сроки из календаря Moodle (deadlines.py)
@@ -143,13 +144,16 @@ def _short(s: str, n: int) -> str:
 
 
 def make_event(kind: str, course_id, course: str, title: str, *, detail="", url="", path="", section="",
-               files=None, key="", secret=False) -> dict:
+               files=None, key="", secret=False, old_path="") -> dict:
     """secret=True — в detail личные данные (оценка): во внешние каналы их по умолчанию не отправляем."""
     eid = hashlib.sha1(f"{kind}|{course_id}|{key or title}|{detail}".encode("utf-8")).hexdigest()[:16]
-    return {"id": eid, "ts": int(time.time()), "kind": kind, "course_id": course_id, "course": course,
-            "title": _short(title, 200), "detail": _short(detail, 400), "url": url or "", "path": path or "",
-            "section": _short(section, 120), "files": [_short(f, 120) for f in (files or [])][:8],
-            "secret": bool(secret), "read": False}
+    ev = {"id": eid, "ts": int(time.time()), "kind": kind, "course_id": course_id, "course": course,
+          "title": _short(title, 200), "detail": _short(detail, 400), "url": url or "", "path": path or "",
+          "section": _short(section, 120), "files": [_short(f, 120) for f in (files or [])][:8],
+          "secret": bool(secret), "read": False}
+    if old_path:       # «Файл заменён»: где лежит прежняя версия
+        ev["old_path"] = old_path
+    return ev
 
 
 class NewsLog:

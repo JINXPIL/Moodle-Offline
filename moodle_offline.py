@@ -43,6 +43,7 @@ import datadir    # где лежат данные программы и пер�
 import deadlines  # календарь и дедлайны: сроки из Moodle, повестка, общий .ics
 import dl_rules   # правила скачивания (что брать, что пропускать, шаблоны имён)
 import news       # что нового: события, лента, уведомления
+import reserve    # резерв файлов: прежние версии, которые преподаватель заменил на сайте
 import search     # поиск по скачанным материалам (офлайн-индекс)
 import watch      # таймер проверки «жив ли Moodle» и автообновление по таймеру
 
@@ -86,7 +87,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.14.3"
+VERSION = "1.15.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -171,6 +172,8 @@ HANDLERS = {
 }
 IGNORED_MODS = {"subsection", "qbank"}
 RECHECK_IN_SYNC = {"folder"}  # в быстрой синхронизации папки перепроверяем всегда (в них часто докладывают файлы)
+RESOURCE_RECHECK = 24 * 3600  # при включённом «Резерве файлов» файловые ресурсы быстрая синхронизация перепроверяет раз в сутки:
+                              # так замену лекции «заглушкой» видно и при автообновлении, а к серверу — по запросу на ресурс в день
 
 MOD_TITLES = {
     "resource": "файл", "folder": "папка", "url": "ссылка", "page": "страница", "book": "книга",
@@ -630,6 +633,7 @@ class JobOptions:
     pdf: bool = False
     zip: bool = False
     original_names: bool = False
+    keep_versions: bool = True     # резерв: заменённый на сайте файл не затирать, а убирать в «_Резерв»
     index_in_mode2: bool = False
     rules: dict | None = None      # правила скачивания (см. dl_rules)
     dir_template: str = ""         # режим 3: шаблон папок, например {section_no}. {section}/{kind}
@@ -1796,7 +1800,7 @@ class MoodleClient:
         return course
 
     # ── скачивание файла: .tmp → переименование, докачка Range, проверка SHA-1 ─
-    def download(self, url, dest: Path, *, title="", referer=None, quiet=False, max_bytes=0) -> dict:
+    def download(self, url, dest: Path, *, title="", referer=None, quiet=False, max_bytes=0, before_replace=None) -> dict:
         tmp = dest.with_name(dest.name + ".tmp")
         fmkdir(dest.parent)
         attempts = 0
@@ -1873,6 +1877,8 @@ class MoodleClient:
                         self.rep.log("  контрольная сумма не совпала — скачиваю файл заново", "warn")
                         continue
                     self.rep.log("  ETag не совпал с SHA-1 (сервер, видимо, считает его иначе)", "debug")
+                if before_replace is not None and fexists(dest):
+                    before_replace(tmp)      # новый файл уже целиком скачан; прежний ещё на месте — можно убрать в резерв
                 freplace(tmp, dest)
                 self.rep.file_end("new")
                 return {"size": size, "final_url": final_url, "content_type": ctype}
@@ -2440,9 +2446,11 @@ class Processor:
         self.failures = []
         self.new_files = []
         self.stats = {"new": 0, "skipped": 0, "copied": 0, "failed": 0, "bytes": 0, "cached_items": 0, "items": 0,
-                      "rule_skipped": 0}
+                      "rule_skipped": 0, "replaced": 0}
         self.rule_skips = []
         self.events = []        # события «Что нового» за запуск
+        self.ncfg = None        # настройки «Что нового» (run_job ставит, если слежение включено) — для события «Файл заменён»
+        self.replaced = []      # файлы, заменённые на сайте за запуск (для отчёта)
         self.cr = dl_rules.CourseRules()
         self.sig = ""
         self.pdf_on = bool(opts.pdf)
@@ -2504,7 +2512,9 @@ class Processor:
         if self.opts.sync:
             for s, it in items:
                 rec = self.state.get_item(self._ikey(it))
-                if (rec and rec.get("complete") and it.modtype not in RECHECK_IN_SYNC
+                stale = (self.opts.keep_versions and it.modtype == "resource" and bool(rec)
+                         and time.time() - rec.get("ts", 0) > RESOURCE_RECHECK)
+                if (rec and rec.get("complete") and it.modtype not in RECHECK_IN_SYNC and not stale
                         and rec.get("rules", "") == self.sig):
                     it.cached = True
                     it.files = rec.get("files", [])
@@ -2736,7 +2746,8 @@ class Processor:
             try:
                 info = self.client.download(url, dest, title=title or rel.name, quiet=quiet,
                                             referer=referer or (it.url if it.url else self.course.url),
-                                            max_bytes=self.cr.max_bytes if check else 0)
+                                            max_bytes=self.cr.max_bytes if check else 0,
+                                            before_replace=lambda tmp: self._on_replace(dest, rel, rel_out, tmp, title or rel.name, it))
             except RuleSkip as e:
                 it.rule_notes.append(f"{title or rel.name}: {e}")
                 self._rule_note(it, title or rel.name, str(e))
@@ -2754,6 +2765,39 @@ class Processor:
         if listed:
             it.files.append(rec)
         return rec
+
+    def _on_replace(self, dest, rel, rel_out, tmp, title, it):
+        """Файл на сайте заменили (адрес другой, а место на диске то же). Прежнюю версию убираем в «_Резерв»
+        (если не выключено), а новую потом кладёт на её место сама загрузка. Сбой резерва загрузку не останавливает."""
+        try:
+            old_size, new_size = fsize(dest), fsize(tmp)
+            if old_size == new_size and sha1_file(dest) == sha1_file(tmp):
+                return          # преподаватель просто загрузил тот же файл ещё раз — ничего не потеряно и не изменилось
+        except OSError:
+            return
+        rec = None
+        if self.opts.keep_versions:
+            try:
+                rec = reserve.archive(self.layout.course_dir, rel.as_posix(), new_size)
+            except OSError as e:
+                self.rep.log(f"  Резерв: не удалось сохранить прежнюю версию «{short(rel.name, 60)}» ({e}) — новая ляжет поверх.", "warn")
+        why = reserve.stub_reason(old_size, new_size)
+        txt = f"файл заменён на сайте: {short(rel.name, 70)} ({hsize(old_size)} → {hsize(new_size)})"
+        txt += (f"; прежняя версия сохранена в «{reserve.RESERVE_DIR}»" if rec else "; прежняя версия не сохранена (резерв выключен)")
+        self.rep.log("  ↻ " + txt + (f" · ⚠ похоже на заглушку: {why}" if why else ""), "warn" if why else "info")
+        old_rel = (self.layout.course_rel / reserve.RESERVE_DIR / rec["file"]).as_posix() if rec else ""
+        self.stats["replaced"] += 1
+        self.replaced.append({"course": self.course.fullname, "path": rel_out, "old": old_rel, "old_size": old_size,
+                              "new_size": new_size, "stub": why, "item": it.name})
+        if self.ncfg and self.ncfg["track"].get("file_replaced"):
+            detail = (f"было {hsize(old_size)}, стало {hsize(new_size)}. "
+                      + (f"Прежняя версия лежит в папке «{reserve.RESERVE_DIR}» курса." if rec else "Прежняя версия не сохранена (резерв выключен)."))
+            if why:
+                detail = "⚠ Похоже на заглушку: " + why + ". " + detail
+            self.events.append(news.make_event("file_replaced", self.course.id, self.course.fullname, title or rel.name,
+                                               detail=detail, url=it.url or "", path=rel_out, old_path=old_rel,
+                                               section=(self._cur[0].name if self._cur else ""),
+                                               key=f"{rel_out}|{new_size}|{int(time.time())}"))
 
     def _fetch_soft(self, s, it, url, rel, title, **kw):
         """Как fetch, но ошибка одного файла не прерывает весь элемент."""
@@ -3576,6 +3620,7 @@ def auto_job_options(settings: dict, out: Path) -> "JobOptions":
     """Параметры автообновления: как у быстрой синхронизации, с сохранёнными настройками."""
     return JobOptions(out_dir=out, mode=int(settings.get("mode", 1)), sync=True, pdf=bool(settings.get("pdf")),
                       zip=bool(settings.get("zip")), original_names=bool(settings.get("original_names")),
+                      keep_versions=bool(settings.get("keep_versions", True)),
                       index_in_mode2=bool(settings.get("index_in_mode2")), rules=settings.get("rules"),
                       dir_template=settings.get("layout_dir") or "", file_template=settings.get("layout_file") or "",
                       news=settings.get("news"), calendar=settings.get("calendar"),
@@ -3993,6 +4038,13 @@ def write_reports(out: Path, proc: Processor | None, res: JobResult):
             lines.append("")
     else:
         lines.append("Новых файлов нет.")
+    repl = proc.replaced if proc else []
+    if repl:
+        lines += ["", "Заменено на сайте (преподаватель загрузил новую версию):"]
+        for f in repl:
+            lines.append(f"  [{f['course']}] {f['path']}  ({hsize(f['old_size'])} → {hsize(f['new_size'])})"
+                         + (f"  ⚠ похоже на заглушку: {f['stub']}" if f.get("stub") else ""))
+            lines.append(f"    прежняя версия: {f['old']}" if f.get("old") else "    прежняя версия не сохранена (резерв выключен)")
     write_text_atomic(out / NEW_FILE, "\n".join(lines) + "\n")
     skips = proc.rule_skips if proc else []
     if skips:
@@ -4034,6 +4086,7 @@ def run_job(client: MoodleClient, courses: list[Course], opts: JobOptions, rep: 
         rep.open_log(out / LOG_FILE)
         state = State(out / STATE_FILE)
         proc = Processor(client, state, out, opts, rep, control)
+        proc.ncfg = ncfg if watch_news else None
     control.reporter = rep
     rep.plan(courses)
     try:
@@ -4126,6 +4179,8 @@ def summary_text(res: JobResult, opts: JobOptions) -> str:
     st = res.stats or {}
     parts = [f"Новых файлов: {st.get('new', 0)} ({hsize(st.get('bytes', 0))})",
              f"уже было: {st.get('skipped', 0) + st.get('copied', 0)}"]
+    if st.get("replaced"):
+        parts.append(f"заменено на сайте: {st['replaced']}" + (f" (прежние версии — в папке «{reserve.RESERVE_DIR}» курса)" if opts.keep_versions else ""))
     if st.get("rule_skipped"):
         parts.append(f"пропущено правилами: {st['rule_skipped']} (список в {RULES_FILE})")
     if res.failures:
@@ -4347,6 +4402,7 @@ def cli_main(argv=None) -> int:
     p.add_argument("--zip", action=argparse.BooleanOptionalAction, default=None, help="упаковать каждый курс в ZIP")
     p.add_argument("--index", action="store_true", help="в режиме 2 тоже создавать оглавление")
     p.add_argument("--original-names", action="store_true", help="называть файлы как на сервере, а не как элементы курса")
+    p.add_argument("--no-reserve", action="store_true", help="не хранить прежние версии файлов, которые преподаватель заменил (по умолчанию хранятся в папке «_Резерв» курса)")
     p.add_argument("--page-delay", help="пауза между страницами, сек (по умолчанию 2-5)")
     p.add_argument("--file-delay", help="пауза между файлами, сек (по умолчанию 0.5-1.5)")
     p.add_argument("--hours", help="тихие часы: работать только в это время, например 01:00-07:00")
@@ -4634,6 +4690,7 @@ def cli_main(argv=None) -> int:
 
     opts = JobOptions(out_dir=out, mode=mode, sync=(action == "sync"), dry_run=(action == "dry"), pdf=bool(pdf),
                       zip=bool(zp), original_names=args.original_names, index_in_mode2=args.index,
+                      keep_versions=(not args.no_reserve) and bool(settings.get("keep_versions", True)),
                       rules=settings.get("rules"), dir_template=settings.get("layout_dir") or "",
                       file_template=settings.get("layout_file") or "",
                       news={**news.normalize(settings.get("news")), "enabled": False} if args.no_news else settings.get("news"),
