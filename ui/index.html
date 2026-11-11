@@ -181,6 +181,24 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .ctrl{display:flex;gap:6px;margin-top:auto;flex-wrap:wrap}
 .ctrl .btn{height:32px;padding:0 10px;font-size:13px}
 .list{overflow:auto;min-height:0}
+.ovp{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;flex:1 1 100%;order:9;min-width:0}
+.ovp .bar{flex:1;min-width:60px;height:10px}
+.ovp .pct{font:600 13px var(--font-display);min-width:3.4em;text-align:right;font-variant-numeric:tabular-nums}
+.ovp .inf{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:60%}
+.dgt{display:flex;align-items:center;gap:6px;padding:6px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface-solid);z-index:2;font-size:12px;color:var(--muted)}
+.dgt button{height:26px;padding:0 9px;border-radius:8px;border:1px solid var(--line);background:var(--raised);cursor:pointer;font-size:12px;color:var(--text)}
+.dg{border-bottom:1px solid var(--line)}
+.dg-h{display:flex;align-items:center;gap:9px;padding:9px 18px;cursor:pointer;user-select:none}
+.dg-h:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.dg-h .chev{flex:none;color:var(--faint);transition:transform .15s}.dg.open .dg-h .chev{transform:rotate(90deg)}
+.dg-dot{width:9px;height:9px;border-radius:50%;background:var(--faint);flex:none}
+.dg-dot.s-now{background:var(--accent);animation:dgp 1.3s ease-in-out infinite}.dg-dot.s-done{background:var(--ok)}.dg-dot.s-fail{background:var(--bad)}
+@keyframes dgp{50%{opacity:.35}}
+.dg-n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:13.5px}
+.dg-m{font-size:12px;color:var(--muted);white-space:nowrap;flex:none}
+.dg-b{display:none}.dg.open .dg-b{display:block}
+.dg-b .dl{padding-left:36px}
+.dg-more{padding:8px 36px;font-size:12px;color:var(--muted)}
 .dl{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;padding:8px 18px;border-bottom:1px solid var(--line)}
 .dl:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
 .ext{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font:700 9.5px var(--font);color:#fff;letter-spacing:.02em}
@@ -227,6 +245,12 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .mmeta{font-size:12px;color:var(--faint)}
 .schedframe{width:100%;height:100%;flex:1;min-height:420px;border:0;border-radius:var(--r);background:var(--surface)}
 .schhead,.schback{display:none}
+.xl-list{margin-top:8px;border:1px solid var(--line);border-radius:10px;max-height:260px;overflow:auto}
+.xl-row{display:block;width:100%;text-align:left;padding:8px 10px;border:0;border-top:1px solid var(--line);background:transparent;cursor:pointer;color:var(--text);font:inherit}
+.xl-row:first-child{border-top:0}.xl-row:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.xl-row.cur{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.xl-row b{font-weight:600}.xl-row small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.xl-tag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:11px;background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
 .srclist label{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);cursor:pointer;font-size:13px}
 .srclist label:first-child{border-top:0}
 .ranges{display:flex;flex-wrap:wrap;gap:6px}
@@ -428,6 +452,13 @@ body.android .no-android{display:none!important}
   .dock.collapsed .tabs{margin-left:auto}
   .dock .tabs{width:auto}
   .dock-body{height:auto;max-height:38vh;grid-template-columns:1fr;overflow:auto}
+  /* курс: кнопки «Открыть здесь / На сайте» — под текстом, а не справа (справа они съедали ширину, и текст шёл по слову в строке) */
+  .mi{grid-template-columns:36px minmax(0,1fr);gap:4px 10px;padding:10px 12px}
+  .mi .side-b{grid-column:2;flex-wrap:wrap;gap:6px!important}
+  .mi .side-b button{height:34px;padding:0 12px}
+  .mname,.mdesc,.mmeta{overflow-wrap:anywhere}
+  .mf .fn{max-width:100%;flex:1 1 100%}
+  .dg-h{padding:9px 12px;flex-wrap:wrap}.dg-m{flex:1 1 100%;padding-left:34px;white-space:normal}.dg-b .dl{padding-left:24px}.dgt{padding:6px 12px}.ovp .inf{max-width:none;flex:1 1 100%;order:3;white-space:normal}
   .now{border-right:0;border-bottom:1px solid var(--line)}
   .btn,.chip,select.txt,input.txt,.seg button,.tab{min-height:40px}
   .icon-btn{width:40px;height:40px}
@@ -597,6 +628,18 @@ body.android .no-android{display:none!important}
             <details class="adv"><summary>Адреса источников</summary><div id="schUrls"></div>
               <p class="hint">В адресе можно использовать {group}, {week} (номер недели) и {date} (понедельник недели, ГГГГ-ММ-ДД).</p></details>
           </div>
+          <div class="panel" id="schXl">
+            <h3>Excel-таблица университета</h3>
+            <p class="hint" id="schXlInfo" style="margin-top:0"></p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn" id="schXlFind">Найти файл на сайте</button>
+              <button class="btn" id="schXlFile">Выбрать файл…</button>
+              <button class="btn hidden" id="schXlAuto">Подобрать сама</button>
+            </div>
+            <input type="file" id="schXlInput" accept=".xlsx" class="hidden">
+            <div class="xl-list hidden" id="schXlList"></div>
+            <p class="hint">Университет выкладывает на sevsu.ru/univers/shedule таблицы на весь семестр. Если включить источник «Excel» выше, пары из таблицы подставятся на даты, которых ещё нет на schedule.sevsu.ru; там, где сайт уже ответил, главнее сайт (отмены и переносы есть только на нём).</p>
+          </div>
           <div class="panel">
             <h3>Период для офлайна</h3>
             <div class="ranges" id="schRanges">
@@ -717,6 +760,7 @@ body.android .no-android{display:none!important}
       <h3>Загрузки</h3><span class="state" id="jobState">Ожидание</span><span class="counts" id="counts"></span>
       <div class="tabs"><button class="tab on" data-tab="files">Файлы</button><button class="tab" data-tab="errors">Ошибки</button><button class="tab" data-tab="log">Журнал</button>
         <button class="icon-btn" id="collapse" title="Свернуть"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg></button></div>
+      <div class="ovp hidden" id="ovp" title="Процент считается по курсам и их элементам: чем больше курсов и разделов обработано, тем ближе к 100%"><div class="bar" id="ovBar"><i></i></div><span class="pct" id="ovPct"></span><span class="inf" id="ovInf"></span></div>
     </div>
     <div class="dock-body">
       <div class="now">
@@ -926,7 +970,7 @@ async function api(path, body) {
   if (r.status === 403) throw new Error("forbidden");
   return r.json();
 }
-const fileUrl = p => "/files/" + p.split("/").map(encodeURIComponent).join("/") + "?t=" + encodeURIComponent(T);
+const fileUrl = p => "/f/" + encodeURIComponent(T) + "/" + p.split("/").map(encodeURIComponent).join("/");   // ключ в адресе — чтобы у страницы грузились и её скрипты/стили
 function hsize(n){ if(n==null) return ""; const u=["Б","КБ","МБ","ГБ"]; let i=0; while(n>=1024&&i<3){n/=1024;i++} return (i?n.toFixed(1):n.toFixed(0))+" "+u[i]; }
 function dur(s){ if(s==null||!isFinite(s)) return ""; s=Math.round(s); if(s<60) return s+" с"; const m=Math.floor(s/60); return m+" мин "+(s%60)+" с"; }
 function toast(msg, kind=""){ const d=document.createElement("div"); d.className="toast "+kind; d.textContent=msg; $("#toasts").appendChild(d); setTimeout(()=>d.remove(), 6000); }
@@ -950,6 +994,7 @@ applyTheme();
 /* ── состояние ── */
 let S = null, seq = 0, courses = [], selected = new Set(), filter = "current", query = "", lastLogin = null, lastJob = "idle",
     lastDl = -1, lastErr = -1, settingsLoaded = false, tab = "files";
+let lastRk = null, DL = [], dseqSeen = -1, PLAN = [], DG = {}, dlSig = "";   // скачанное накапливаем в окне; DG — что человек раскрыл/свернул сам
 
 /* ── вход ── */
 $("#cookieToggle").onclick = () => { const c = $("#cookieBox").classList.toggle("hidden"); $("#credBox").classList.toggle("hidden", !c);
@@ -1263,14 +1308,63 @@ const EXT = {pdf:["#d93a3a","PDF"],doc:["#2b6cd6","DOC"],docx:["#2b6cd6","DOC"],
   html:["#7c4dff","HTML"],htm:["#7c4dff","HTML"],png:["#0f9d8a","IMG"],jpg:["#0f9d8a","IMG"],jpeg:["#0f9d8a","IMG"],zip:["#5f6b7a","ZIP"],url:["#5f6b7a","URL"],txt:["#5f6b7a","TXT"]};
 const PREVIEW = new Set(["pdf","html","htm","png","jpg","jpeg","gif","svg","txt","webp"]);
 const extOf = p => (p.split(".").pop() || "").toLowerCase();
-function dlRow(d){
+function dlRow(d, grouped = false){
   if (d.status === "fail") return `<div class="dl"><div class="ext" style="background:var(--bad)">!</div><div style="min-width:0"><div class="t">${esc(d.title)}<span class="badge b-fail">не скачано</span></div>
     <div class="s">${esc(d.error)} · ${esc(d.course)} · ${d.t}</div></div><div class="acts">${d.url ? `<button data-url="${esc(d.url)}">На сайте</button>` : ""}</div></div>`;
   const e = extOf(d.path), [col, lab] = EXT[e] || ["#8a93a3", e.slice(0,4).toUpperCase() || "FILE"];
   const badge = d.status === "new" ? '<span class="badge b-new">новый</span>' : d.status === "page" ? '<span class="badge b-new">страница</span>' : '<span class="badge b-copy">скопирован</span>';
   return `<div class="dl"><div class="ext" style="background:${col}">${lab}</div><div style="min-width:0"><div class="t" title="${esc(d.path)}">${esc(d.path.split("/").pop())}${badge}</div>
-    <div class="s">${esc(d.course)} · ${hsize(d.size)} · ${d.t}</div></div>
+    <div class="s">${grouped ? "" : esc(d.course) + " · "}${hsize(d.size)} · ${d.t}</div></div>
     <div class="acts">${PREVIEW.has(e) ? `<button data-prev="${esc(d.path)}">Просмотр</button>` : ""}<button data-ext="${esc(d.path)}">Открыть</button><button data-rev="${esc(d.path)}">В папке</button></div></div>`;
+}
+const DG_MAX = 300;      // строк в одной раскрытой группе; остальное — в папке курса
+function dlGroups(){
+  const by = new Map(), order = [], keyOf = d => d.cid != null ? "c" + d.cid : "n" + (d.course || "");
+  PLAN.forEach(p => { by.set("c" + p.id, {key: "c" + p.id, name: p.name, state: p.state, rows: [], plan: p}); order.push("c" + p.id); });
+  DL.forEach(d => { if (d.status === "fail") return; const k = keyOf(d); let g = by.get(k);
+    if (!g) { g = {key: k, name: d.course || "Без курса", state: "old", rows: [], plan: null}; by.set(k, g); order.push(k); }
+    g.rows.push(d); });
+  return order.map(k => by.get(k));
+}
+function dgMeta(g){
+  const p = g.plan; if (!p) return `${g.rows.length} файл.`;
+  const parts = [];
+  if (g.state === "wait") return "в очереди";
+  if (p.new) parts.push(`новых ${p.new} · ${hsize(p.bytes)}`);
+  if (p.skip) parts.push(`уже было ${p.skip}`);
+  if (p.fail) parts.push(`ошибок ${p.fail}`);
+  if (!parts.length) parts.push(g.state === "now" ? "смотрю курс…" : "без новых файлов");
+  return (g.state === "now" ? "идёт сейчас · " : "") + parts.join(" · ");
+}
+function renderDl(){
+  const list = $("#dlist"), top = list.scrollTop, gs = dlGroups();
+  if (!gs.length) { list.innerHTML = '<div class="empty">Здесь появятся скачанные файлы.</div>'; return; }
+  const open = g => DG[g.key] !== undefined ? DG[g.key] : g.state === "now";
+  list.innerHTML = `<div class="dgt"><span>Курсов: ${gs.length}</span><span style="flex:1"></span><button data-dgall="1">Развернуть все</button><button data-dgall="0">Свернуть все</button></div>` +
+    gs.map(g => { const o = open(g), dot = "s-" + (g.plan && g.plan.fail ? "fail" : g.state === "old" ? "done" : g.state);
+      return `<div class="dg ${o ? "open" : ""}" data-k="${esc(g.key)}"><div class="dg-h"><svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+        <span class="dg-dot ${dot}"></span><span class="dg-n" title="${esc(g.name)}">${esc(g.name)}</span><span class="dg-m">${esc(dgMeta(g))}</span></div>` +
+        (o ? `<div class="dg-b">${g.rows.length ? g.rows.slice(0, DG_MAX).map(d => dlRow(d, true)).join("") + (g.rows.length > DG_MAX ? `<div class="dg-more">…и ещё ${g.rows.length - DG_MAX} — они в папке курса</div>` : "") : '<div class="dg-more">Новых файлов в этом курсе пока нет.</div>'}</div>` : "") + "</div>"; }).join("");
+  list.scrollTop = top;
+}
+$("#dlist").addEventListener("click", e => {
+  const all = e.target.closest("[data-dgall]");
+  if (all) { const o = all.dataset.dgall === "1"; dlGroups().forEach(g => DG[g.key] = o); dlSig = ""; return renderDl(); }
+  const h = e.target.closest(".dg-h"); if (!h) return;
+  const g = h.parentElement; DG[g.dataset.k] = !g.classList.contains("open"); renderDl();
+});
+function renderOverall(j){
+  const o = j.overall, ov = $("#ovp"), busy = j.state !== "idle", fin = !busy && j.result && j.result.ok;
+  if (!o || (!busy && !j.result)) return ov.classList.add("hidden");
+  ov.classList.remove("hidden");
+  const pct = fin ? 100 : Math.min(99.9, o.pct);
+  $("#ovBar i").style.width = pct.toFixed(1) + "%"; $("#ovPct").textContent = (pct >= 99.95 ? 100 : pct.toFixed(pct < 10 ? 1 : 0)) + "%";
+  const el = j.started ? Math.max(0, Date.now() / 1000 - j.started) : 0, bits = [`курс ${o.ci} из ${o.cn}`];
+  if (o.bytes) bits.push(hsize(o.bytes));
+  if (busy && o.speed > 1) bits.push(`${hsize(o.speed)}/с`);
+  if (busy && j.state === "running" && el >= 30 && o.pct >= 3) bits.push(`осталось ≈ ${dur(el * (100 - o.pct) / o.pct)}`);
+  if (el) bits.push(fin ? `за ${dur(el)}` : `прошло ${dur(el)}`);
+  $("#ovInf").textContent = bits.join(" · ");
 }
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-prev],[data-ext],[data-rev],[data-url]"); if (!b) return;
@@ -1309,12 +1403,22 @@ function renderJob(j){
     $("#nowFile").textContent = busy ? (j.state === "waiting_network" ? "сервер недоступен, проверяю каждые 30–60 с" : "открываю страницы курса…") : "—";
     bar.classList.toggle("indet", busy && j.state === "running"); $("#nowBar i").style.width = busy ? "" : "0"; $("#nowBytes").textContent = ""; $("#nowSpeed").textContent = "";
   }
-  const top = j.downloads.length ? j.downloads[0].id : 0;
-  if (top !== lastDl) {
-    lastDl = top;
-    const ok = j.downloads.filter(d => d.status !== "fail"), bad = j.downloads.filter(d => d.status === "fail");
-    $("#dlist").innerHTML = ok.length ? ok.map(dlRow).join("") : '<div class="empty">Здесь появятся скачанные файлы.</div>';
-    $("#elist").innerHTML = bad.length ? bad.map(dlRow).join("") : '<div class="empty">Ошибок нет.</div>';
+  if (typeof j.dseq === "number") {
+    if (j.dseq < dseqSeen) { DL = []; dseqSeen = -1; dlSig = ""; }       // программа перезапускалась — просим список заново
+    else {
+      if (dseqSeen < 0) DL = j.downloads; else if (j.downloads.length) DL = j.downloads.concat(DL);
+      if (DL.length > 3000) DL = DL.slice(0, 3000);
+      dseqSeen = j.dseq;
+    }
+  } else DL = j.downloads;
+  PLAN = j.plan || [];
+  renderOverall(j);
+  const sig = (DL.length ? DL[0].id : 0) + "|" + DL.length + "|" + PLAN.map(p => p.state[0] + p.new + "." + p.skip + "." + p.fail).join(",");
+  if (sig !== dlSig) {
+    dlSig = sig;
+    renderDl();
+    const bad = DL.filter(d => d.status === "fail");
+    $("#elist").innerHTML = bad.length ? bad.map(d => dlRow(d)).join("") : '<div class="empty">Ошибок нет.</div>';
     $$('.tab[data-tab="errors"]')[0].textContent = bad.length ? `Ошибки (${bad.length})` : "Ошибки";
   }
   if (j.lines.length) {
@@ -1323,7 +1427,13 @@ function renderJob(j){
     while (log.childElementCount > 1500) log.firstElementChild.remove();
     if (atEnd) log.scrollTop = 1e9;
   }
-  if (lastJob !== "idle" && j.state === "idle") { if (j.result) toast(j.result.text, j.result.ok ? "ok" : "bad"); loadCourses();
+  let fin = false;       // задача закончилась. Короткая (расписание из Excel за секунду) может не успеть показаться «идущей» между опросами — ловим и по новому итогу
+  if (j.state === "idle") {
+    const rk = j.result ? (j.started || 0) + "|" + j.result.text : "";
+    fin = lastJob !== "idle" || (lastRk !== null && rk !== "" && rk !== lastRk);
+    lastRk = rk;
+  }
+  if (fin) { if (j.result) toast(j.result.text, j.result.ok ? "ok" : "bad"); loadCourses();
     if (view === "schedule") loadSchedule(); if (CV) openCourse(CV.c.id);
     if (j.result && j.result.kind === "transfer") { if (!$("#trModal").classList.contains("hidden")) trLoad(); loadSchedule(); } }
   lastJob = j.state; updateSelInfo();
@@ -1950,6 +2060,7 @@ async function loadSchedule(reloadFrame = true){
   $("#schGroupHint").textContent = SCH.group_name ? `Код в адресе сайта: ${SCH.group}. Можно писать и по-русски, и латиницей.` : "Пишите как на сайте (ИБ/б-25-2-о) или как в адресе (ib-b-25-2-o) — подойдёт любой вариант.";
   if (!GRP) loadGroups();
   $("#schSources").innerHTML = (SCH.order || Object.keys(SCH.titles)).map(k => [k, SCH.titles[k]]).map(([k, t]) => `<label><span class="sw-t"><input type="checkbox" data-src="${k}" ${SCH.sources.includes(k) ? "checked" : ""}><span></span></span><span>${esc(t)}${SCH.auth && SCH.auth[k] && !SCH.has_creds ? '<br><small class="muted">войдите в программе с «Запомнить меня» — логин и пароль те же, что в Moodle</small>' : ""}</span></label>`).join("");
+  schXlRender();
   $("#schUrls").innerHTML = Object.entries(SCH.urls).map(([k, u]) => `<div class="field"><label>${esc(k)}</label><input class="txt" data-url="${k}" value="${esc(u)}"></div>`).join("");
   $("#schPdf").checked = SCH.pdf; $("#schAuto").checked = SCH.auto; $("#schAutoRange").value = SCH.auto_range || "2weeks";
   const ru = d => d.split("-").reverse().join(".");
@@ -1959,8 +2070,36 @@ async function loadSchedule(reloadFrame = true){
   lim.classList.toggle("hidden", !pub);
   if (pub) lim.textContent = `На сайте СевГУ расписание этой группы выложено до ${ru(pub)}. Всё, что позже, программа сохранит, когда сайт его покажет (нажмите «Сохранить для офлайна» позже или оставьте автообновление включённым).`;
   $("#schEmpty").classList.toggle("hidden", SCH.saved); $("#schFrame").classList.toggle("hidden", !SCH.saved);
-  if (SCH.saved && reloadFrame) $("#schFrame").src = fileUrl(SCH.dir + "/index.html") + "&v=" + Date.now() + themeHash();
+  if (SCH.saved && reloadFrame) $("#schFrame").src = fileUrl(SCH.dir + "/index.html") + "?v=" + Date.now() + themeHash();
 }
+function schXlRender(){
+  const x = (SCH && SCH.excel) || {}; const ru = d => d ? d.split("-").reverse().join(".") : "";
+  let t = x.mode === "local" ? `Файл с устройства: ${x.name || "xlsx"}.` : x.mode === "site" ? `Выбран файл: «${x.text || x.name}»${x.ctx ? " (" + x.ctx + ")" : ""}.`
+        : "Файл не выбран — при сохранении программа сама подберёт таблицу для вашей группы по курсу и проверит, есть ли в ней группа.";
+  if (x.last) t += ` Последний раз: ${x.last.updated} · пар: ${x.last.count} · ${ru(x.last.first)} — ${ru(x.last.last)}.`;
+  if (!x.on) t += " Источник «Excel» сейчас выключен — включите его в списке выше.";
+  $("#schXlInfo").textContent = t; $("#schXlAuto").classList.toggle("hidden", x.mode !== "site" && x.mode !== "local");
+}
+$("#schXlFind").onclick = async () => {
+  const box = $("#schXlList"); box.classList.remove("hidden"); box.innerHTML = '<div class="xl-row"><small>Открываю страницу университета…</small></div>';
+  let r; try { r = await api("/api/schedule/excel/links"); } catch (e) { r = {ok: false, error: "нет связи с программой"}; }
+  if (!r.ok) { box.innerHTML = `<div class="xl-row"><small>Не получилось: ${esc(r.error || "")}. Выберите файл вручную («Выбрать файл…») или вставьте ссылку на него в «Адреса источников».</small></div>`; return; }
+  if (!r.links.length) { box.innerHTML = '<div class="xl-row"><small>На странице не нашлось ссылок на Excel. Скачайте файл в браузере и выберите его кнопкой «Выбрать файл…».</small></div>'; return; }
+  box.innerHTML = (r.hint ? `<div class="xl-row" style="cursor:default"><small>Для вашей группы подходит: ${esc(r.hint)}. Подходящие отмечены.</small></div>` : "") +
+    r.links.map((l, i) => `<button class="xl-row ${l.url === r.current ? "cur" : ""}" data-i="${i}"><b>${esc(l.text || l.file)}</b>${l.best ? '<span class="xl-tag">подходит</span>' : ""}${l.url === r.current ? '<span class="xl-tag">выбран</span>' : ""}<small>${esc([...(l.ctx || []), l.col].filter(Boolean).join(" › "))}${l.ctx && l.ctx.length || l.col ? " · " : ""}${esc(l.file)}</small></button>`).join("");
+  box.onclick = async e => { const b = e.target.closest(".xl-row[data-i]"); if (!b) return; const l = r.links[+b.dataset.i];
+    const c = await api("/api/schedule/excel/choose", {url: l.url, file: l.file, text: l.text, col: l.col, ctx: l.ctx});
+    if (!c.ok) return toast(c.error || "Не удалось выбрать", "bad"); toast("Выбрано: " + (l.text || l.file), "ok"); box.classList.add("hidden"); loadSchedule(false); };
+};
+$("#schXlFile").onclick = () => $("#schXlInput").click();
+$("#schXlInput").onchange = async () => {
+  const f = $("#schXlInput").files[0]; if (!f) return; $("#schXlInput").value = "";
+  toast("Проверяю файл…");
+  let r; try { r = await (await fetch(`/api/schedule/excel/upload?name=${encodeURIComponent(f.name)}&t=${encodeURIComponent(T)}`, {method: "POST", body: f})).json(); } catch (e) { r = {ok: false, error: "файл не передался"}; }
+  if (!r.ok) return toast(r.error || "Не удалось прочитать файл", "bad");
+  toast("Файл принят — нажмите «Сохранить для офлайна»", "ok"); loadSchedule(false);
+};
+$("#schXlAuto").onclick = async () => { await api("/api/schedule/excel/auto", {}); toast("Программа подберёт файл сама", "ok"); loadSchedule(false); };
 function schPayload(start){
   const urls = {}; $$("#schUrls [data-url]").forEach(i => urls[i.dataset.url] = i.value.trim());
   return {schedule_group: $("#schGroup").value.trim(), schedule_sources: $$("#schSources [data-src]").filter(i => i.checked).map(i => i.dataset.src),
@@ -2255,7 +2394,7 @@ loadUpd();
 async function poll(){
   let delay = 1200;
   try {
-    const st = await api("/api/state?since=" + seq); S = st; seq = st.job.seq;
+    const st = await api("/api/state?since=" + seq + (dseqSeen >= 0 ? "&dsince=" + dseqSeen : "")); S = st; seq = st.job.seq;
     const L = st.login;
     if (L.state !== lastLogin) {
       const ok = L.state === "ok" || L.state === "offline";

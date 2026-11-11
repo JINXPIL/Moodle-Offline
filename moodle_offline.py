@@ -86,7 +86,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.13.0"
+VERSION = "1.14.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -130,6 +130,7 @@ SERVER_PING_EVERY = (30, 60)    # в режиме ожидания пингуе�
 BACKOFF_BASE = 5                # обрывы: 5, 10, 20, 40… с
 SLEEP_BASE = 60                 # 429/503: 1, 2, 4, 8, 10 мин
 CHUNK = 256 * 1024
+FSYNC_FILES = not android.is_android()     # на телефоне fsync после каждого файла тормозит общую память; целостность проверяет размер, а недокачанное докачивается
 RESUME_BACKOFF = 256 * 1024     # при докачке перекачиваем последние 256 КБ (защита от «хвоста» после отключения света)
 PACKAGE_FILE_LIMIT = 3000       # максимум файлов из одного пакета IMS/SCORM
 LABEL_MIN_TEXT = 300            # текстовые блоки длиннее этого сохраняются отдельной HTML-страницей
@@ -752,6 +753,10 @@ class Reporter:
 
     # переопределяются
     def emit(self, msg, level):
+        pass
+
+    def plan(self, courses):
+        """Весь список курсов этого запуска — до начала загрузки (окно показывает очередь по предметам)."""
         pass
 
     def course(self, i, n, course):
@@ -1854,7 +1859,8 @@ class MoodleClient:
                                 raise SkipFile()
                             self.control.checkpoint()
                         f.flush()
-                        os.fsync(f.fileno())
+                        if FSYNC_FILES:
+                            os.fsync(f.fileno())
                     final_url = r.url
                 size = fsize(tmp)
                 if total is not None and size != total:
@@ -3636,7 +3642,7 @@ def update_tick(settings: dict, vault: "Vault", rep: Reporter, toast_on: bool = 
     if not updater.due(cfg):
         return
     k = updater.kind(frozen=bool(getattr(sys, "frozen", False)), apk=android.is_apk(), android=android.is_android())
-    updater.run_check(cfg, VERSION, k, fetch=lambda cur: updater.fetch_latest(cur, bool(settings.get("use_system_proxy"))))
+    updater.run_check(cfg, VERSION, k, fetch=updater.fetch_latest)
     st = updater.status(cfg, VERSION, k)
     if updater.should_notify(cfg, st):
         cfg["notified"] = st["latest"]["tag"]
@@ -3975,6 +3981,7 @@ def run_job(client: MoodleClient, courses: list[Course], opts: JobOptions, rep: 
         state = State(out / STATE_FILE)
         proc = Processor(client, state, out, opts, rep, control)
     control.reporter = rep
+    rep.plan(courses)
     try:
         for ci, c in enumerate(courses, 1):
             control.checkpoint()
@@ -4188,11 +4195,14 @@ def extra_sync(settings, vault, client, out, rep, control, notify_on=True):
                                     rep, control, urls=settings.get("schedule_urls"), pdf=bool(settings.get("schedule_pdf", True)),
                                     use_system_proxy=bool(settings.get("use_system_proxy")),
                                     page_delay=parse_delay(settings.get("page_delay"), PAGE_DELAY),
-                                    creds=creds, cookies=sec.get("sso_cookies"))
+                                    creds=creds, cookies=sec.get("sso_cookies"), excel=settings.get("schedule_excel"))
             rng = settings.get("schedule_auto_range")
             job.run(rng if rng in sched.AUTO_RANGES else "2weeks")
             if job.cookies_out and settings.get("remember"):
                 vault.save_secret({**vault.load_secret(), "sso_cookies": job.cookies_out[-60:]})
+            if job.excel_out:                  # Excel-файл нашли сами — запоминаем выбор
+                settings["schedule_excel"] = job.excel_out
+                vault.save_settings({**vault.load_settings(), "schedule_excel": job.excel_out})
         except (Stopped, KeyboardInterrupt):
             raise
         except Exception as e:
@@ -4368,7 +4378,7 @@ def cli_main(argv=None) -> int:
                           creds=(sec["username"], sec["password"]) if sec.get("username") and sec.get("password") else None,
                           cookies=sec.get("sso_cookies"),
                           pdf=bool(settings.get("schedule_pdf", True)), rep=rep, use_proxy=bool(settings.get("use_system_proxy")),
-                          urls=settings.get("schedule_urls"),
+                          urls=settings.get("schedule_urls"), excel=settings.get("schedule_excel"),
                           page_delay=parse_delay(args.page_delay or settings.get("page_delay"), PAGE_DELAY))
         except (NetworkDown, Stopped, KeyboardInterrupt) as e:
             rep.log(f"Остановлено: {e}", "error")
