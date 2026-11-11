@@ -76,6 +76,13 @@ def open_file(path) -> bool:
     return _run(["termux-open", str(path)])
 
 
+def share_file(path) -> bool:
+    """«Поделиться» файлом (например, расписанием .zip): окно выбора приложения — мессенджер, почта и т. д."""
+    if is_apk():
+        return bool(_call("shareFile", str(path)))
+    return _run(["termux-share", "-a", "send", str(path)])
+
+
 def notify(title: str, text: str) -> bool:
     """Уведомление Android (в .apk — своё; в Termux нужны приложение Termux:API и пакет termux-api)."""
     if is_apk():

@@ -42,6 +42,7 @@ import qr
 import reader
 import reserve
 import schedule as sched
+import sch_book as book
 import xlsx_schedule as xs
 import transfer
 import updater
@@ -1017,6 +1018,8 @@ class App:
                 "excel": self.excel_status()}
         try:
             sched.refresh_viewer(out / sched.SCHEDULE_DIR)      # после обновления программы страница сама получает новый вид
+            for pr in book.list_profiles(out, slug)[1:]:        # …и у чужих расписаний тоже
+                sched.refresh_viewer(out / Path(*pr["dir"].split("/")))
         except Exception:
             pass
         try:
@@ -1030,7 +1033,91 @@ class App:
                 info["published_until"] = pub
         except (OSError, ValueError, KeyError, IndexError):
             pass
+        try:
+            info["profiles"] = book.list_profiles(out, slug, info["group_name"])    # своё + чужие (история), для переключателя
+        except Exception:
+            info["profiles"] = []
+        info["android_share"] = bool(ANDROID)
         return info
+
+    # ── чужие расписания, история, файл для друзей ──
+    def _out(self) -> Path:
+        return Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
+
+    def other_save(self, b):
+        """Добавить чужую группу (или обновить уже добавленную) и сразу скачать её расписание."""
+        text = (b.get("group") or "").strip()
+        if not text:
+            return {"ok": False, "error": "укажите группу"}
+        slug = sched.resolve_group(text)
+        own = self.settings.get("schedule_group") or sched.DEFAULT_GROUP
+        if not book.valid_slug(slug):
+            return {"ok": False, "error": "не понял код группы — выберите её из списка СевГУ или напишите как на сайте (ИБ/б-25-1-о)"}
+        if slug == own:
+            return {"ok": False, "error": "это ваша группа — её расписание настраивается выше, в блоке «Группа и источники»"}
+        sources = [x for x in (b.get("sources") or ["schedule"]) if x in ("schedule", "excel")] or ["schedule"]
+        out = self._out()
+        book.ensure_profile(out, slug, sched.group_name(slug) or text)
+        book.write_profile(book.profile_dir(out, slug), sources=sources)
+        book.touch(out, slug)
+        r = self.start_job({"kind": "schedule", "profile": slug, "sources": sources, "range": b.get("range", "semester"),
+                            "from": b.get("from"), "to": b.get("to")})
+        return {**r, "slug": slug} if isinstance(r, dict) else r
+
+    def other_refresh(self, b):
+        slug = b.get("slug") or ""
+        if not book.valid_slug(slug) or not (book.profile_dir(self._out(), slug)).is_dir():
+            return {"ok": False, "error": "такого расписания нет"}
+        book.touch(self._out(), slug)
+        return self.start_job({"kind": "schedule", "profile": slug, "range": b.get("range", "semester")})
+
+    def other_flags(self, b):
+        slug = b.get("slug") or ""
+        if not book.valid_slug(slug) or not (book.profile_dir(self._out(), slug)).is_dir():
+            return {"ok": False, "error": "такого расписания нет"}
+        kw = {}
+        if "auto" in b:
+            kw["auto"] = bool(b["auto"])
+        if "sources" in b:
+            kw["sources"] = [x for x in (b["sources"] or []) if x in ("schedule", "excel")] or ["schedule"]
+        book.write_profile(book.profile_dir(self._out(), slug), **kw)
+        return {"ok": True}
+
+    def other_delete(self, b):
+        try:
+            ok = book.delete_profile(self._out(), b.get("slug") or "")
+        except book.BookError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": ok, "error": "" if ok else "не удалось удалить — закройте файлы расписания и повторите"}
+
+    def profile_use(self, b):
+        slug = b.get("slug") or ""
+        if book.valid_slug(slug):
+            book.touch(self._out(), slug)
+        return {"ok": True}
+
+    def schedule_share(self, b):
+        """Собрать .zip из выбранных расписаний (для друга: откроется и без программы, а в программу добавляется кнопкой «Загрузить из файла»)."""
+        out = self._out()
+        slug = self.settings.get("schedule_group") or sched.DEFAULT_GROUP
+        try:
+            z, notes = book.export_zip(out, [str(i) for i in (b.get("ids") or [])], slug, sched.group_name(slug), mo.VERSION)
+        except book.BookError as e:
+            return {"ok": False, "error": str(e)}
+        shared = bool(ANDROID and b.get("send") and android.share_file(z))
+        return {"ok": True, "path": z.relative_to(out).as_posix(), "name": z.name, "notes": notes, "shared": shared}
+
+    def schedule_import(self, rfile, length, name):
+        if length <= 0 or length > book.MAX_UNPACKED:
+            return {"ok": False, "error": "файл пустой или слишком большой для расписания"}
+        data = rfile.read(length)
+        if len(data) != length:
+            return {"ok": False, "error": "файл передался не до конца — попробуйте ещё раз"}
+        try:
+            added = book.import_zip(self._out(), data)
+        except book.BookError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "added": added}
 
     def schedule_groups(self, dept=None, refresh=False):
         """Отделы и группы schedule.sevsu.ru для выпадающего списка; кэш на неделю — работает и офлайн."""
@@ -1403,6 +1490,8 @@ class App:
     def _schedule_job(self, params):
         t0 = time.monotonic()
         st = self.settings
+        if params.get("profile"):
+            return self._schedule_job_other(params, t0)
         try:
             job = sched.ScheduleJob(Path(st.get("out_dir") or mo.DEFAULT_OUT), st.get("schedule_group") or sched.DEFAULT_GROUP,
                                     st.get("schedule_sources") or sched.DEFAULT_SOURCES, self.rep, self.control,
@@ -1437,6 +1526,43 @@ class App:
                 self.job_state = "idle"
                 self.control = None
 
+
+    def _schedule_job_other(self, params, t0):
+        """Расписание чужой группы: официальный сайт и (по желанию) Excel университета. Личные источники не используются,
+        свои данные не трогаются — всё в Расписание/Другие группы/<код>/."""
+        st, out, slug = self.settings, self._out(), params["profile"]
+        try:
+            root = book.profile_dir(out, slug)
+            pr = book.read_profile(root)
+            sources = [x for x in (params.get("sources") or pr.get("sources") or ["schedule"]) if x in ("schedule", "excel")] or ["schedule"]
+            job = sched.ScheduleJob(out, slug, sources, self.rep, self.control, urls=st.get("schedule_urls"), pdf=False,
+                                    use_system_proxy=bool(st.get("use_system_proxy")),
+                                    page_delay=mo.parse_delay(st.get("page_delay"), mo.PAGE_DELAY), excel=pr.get("excel"), profile=slug)
+            try:
+                res = job.run(params.get("range", "semester"), params.get("from"), params.get("to"))
+            finally:
+                if job.excel_out:
+                    book.write_profile(root, excel=job.excel_out)
+            title = book.pick_title(job.site_info.get("group_name") or "", slug, pr.get("title") or "")
+            book.write_profile(root, title=title, sources=sources, last_used=int(time.time()), refreshed=int(time.time()))
+            if res["total"] == 0:
+                text = f"Расписание группы «{title}»: пар не нашлось. Проверьте код группы и период; сайт мог ещё не выложить расписание."
+                self.last_result = {"ok": False, "text": text, "aborted": "error", "kind": "schedule"}
+            else:
+                text = f"Расписание группы «{title}» сохранено за {mo.fmt_dur(time.monotonic() - t0)}: {res['total']} пар"
+                if res.get("note"):
+                    text += ". " + res["note"]
+                self.last_result = {"ok": True, "text": text, "aborted": None, "kind": "schedule"}
+            self.rep.log(text)
+        except (mo.Stopped, KeyboardInterrupt):
+            self.last_result = {"ok": False, "text": "Сохранение расписания остановлено", "aborted": "stopped", "kind": "schedule"}
+        except Exception as e:
+            self.last_result = {"ok": False, "text": f"Расписание группы: {mo.describe_error(e)}", "aborted": "error", "kind": "schedule"}
+            self.rep.log(self.last_result["text"], "error")
+        finally:
+            with self.lock:
+                self.job_state = "idle"
+                self.control = None
 
     # ── перенос данных на другое устройство (архив / Wi-Fi) ──
     def _tr_roots(self):
@@ -2222,6 +2348,8 @@ class Handler(BaseHTTPRequestHandler):
                                                        q.get("force") == "1"))
         if p == "/api/schedule/excel/upload":
             return self._send(200, APP.excel_upload(self.rfile, int(self.headers.get("Content-Length") or 0), q.get("name", "")))
+        if p == "/api/schedule/import":
+            return self._send(200, APP.schedule_import(self.rfile, int(self.headers.get("Content-Length") or 0), q.get("name", "")))
         b = self._body()
         if p == "/api/login":
             return self._send(200, APP.login(b.get("url", ""), b.get("username", ""), b.get("password", ""),
@@ -2308,6 +2436,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, APP.start_job({"kind": "schedule", "range": b.get("range", "2weeks"),
                                                       "from": b.get("from"), "to": b.get("to")}))
             return self._send(200, {"ok": True})
+        if p == "/api/schedule/other/save":
+            return self._send(200, APP.other_save(b))
+        if p == "/api/schedule/other/refresh":
+            return self._send(200, APP.other_refresh(b))
+        if p == "/api/schedule/other/flags":
+            return self._send(200, APP.other_flags(b))
+        if p == "/api/schedule/other/delete":
+            return self._send(200, APP.other_delete(b))
+        if p == "/api/schedule/profile/use":
+            return self._send(200, APP.profile_use(b))
+        if p == "/api/schedule/share":
+            return self._send(200, APP.schedule_share(b))
         if p == "/api/schedule/excel/choose":
             return self._send(200, APP.excel_choose(b))
         if p == "/api/schedule/excel/auto":

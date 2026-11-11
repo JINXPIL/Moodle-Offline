@@ -87,7 +87,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.15.0"
+VERSION = "1.16.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -4293,6 +4293,41 @@ def cli_login(client: MoodleClient, vault: Vault, settings: dict, args, interact
                            "cookies": client.export_cookies()})
 
 
+def other_schedules_sync(settings, out, rep, control):
+    """Чужие группы, у которых человек включил «обновлять вместе с моим» (по умолчанию выключено): по очереди, только официальный
+    сайт и Excel университета — без входа. Свои данные не трогаются; ошибка одной группы не мешает остальным."""
+    try:
+        import schedule as sched
+        import sch_book as book
+        profs = book.auto_profiles(out)
+    except Exception:
+        return
+    own = settings.get("schedule_group") or ""
+    rng = settings.get("schedule_auto_range")
+    for pr in profs[:book.MAX_SCHEDULES]:
+        if pr["slug"] == own:
+            continue
+        try:
+            job = sched.ScheduleJob(out, pr["slug"], [x for x in pr.get("sources") or ["schedule"] if x in ("schedule", "excel")] or ["schedule"],
+                                    rep, control, urls=settings.get("schedule_urls"), pdf=False,
+                                    use_system_proxy=bool(settings.get("use_system_proxy")),
+                                    page_delay=parse_delay(settings.get("page_delay"), PAGE_DELAY),
+                                    excel=book.read_profile(book.profile_dir(out, pr["slug"])).get("excel"), profile=pr["slug"])
+            res = job.run(rng if rng in sched.AUTO_RANGES else "2weeks")
+            root = book.profile_dir(out, pr["slug"])
+            if job.excel_out:
+                book.write_profile(root, excel=job.excel_out)
+            book.write_profile(root, refreshed=int(time.time()))
+            rep.log(f"Расписание группы «{pr['title']}» обновлено: {res['total']} пар")
+        except (Stopped, KeyboardInterrupt):
+            raise
+        except NetworkDown as e:           # сайт расписания недоступен — остальные группы тоже не ответят, не ждём каждую по 15 минут
+            rep.log(f"Расписание группы «{pr['title']}» не обновилось: {describe_error(e)}. Остальные чужие группы пропускаю до следующего раза.", "warn")
+            return
+        except Exception as e:
+            rep.log(f"Расписание группы «{pr['title']}» не обновилось: {describe_error(e)}", "warn")
+
+
 def extra_sync(settings, vault, client, out, rep, control, notify_on=True):
     """При быстрой синхронизации: обновить расписание на 2 недели и проверить новые элективы (если включено)."""
     if settings.get("schedule_auto", True) and settings.get("schedule_group"):
@@ -4316,6 +4351,8 @@ def extra_sync(settings, vault, client, out, rep, control, notify_on=True):
             raise
         except Exception as e:
             rep.log(f"Расписание не обновилось: {describe_error(e)}", "warn")
+    if settings.get("schedule_auto", True):
+        other_schedules_sync(settings, out, rep, control)
     if settings.get("electives_watch"):
         try:
             import iotapi
@@ -4446,6 +4483,8 @@ def cli_main(argv=None) -> int:
     p.add_argument("--from", dest="date_from", help="начало периода для --schedule custom, ГГГГ-ММ-ДД")
     p.add_argument("--to", dest="date_to", help="конец периода для --schedule custom, ГГГГ-ММ-ДД")
     p.add_argument("--group", help="группа для расписания, например ib-b-25-2-o")
+    p.add_argument("--other", action="store_true",
+                   help="с --schedule и --group: это чужая группа — сохранить в «Расписание/Другие группы/», свои данные не трогать")
     p.add_argument("-y", "--yes", action="store_true", help="не задавать вопросов")
     p.add_argument("-v", "--verbose", action="store_true", help="подробный вывод")
     args = p.parse_args(argv)
@@ -4477,6 +4516,35 @@ def cli_main(argv=None) -> int:
 
     interactive = bool(sys.stdin and sys.stdin.isatty()) and not args.yes
     rep = ConsoleReporter(verbose=args.verbose, notify_on_recover=not args.no_notify)
+    if args.schedule and args.other:   # расписание чужой группы: официальный сайт (+ Excel), без входа
+        import schedule as sched
+        import sch_book as book
+        out = Path(args.out or settings.get("out_dir") or DEFAULT_OUT)
+        rep.open_log(out / LOG_FILE)
+        slug = sched.resolve_group(args.group or "")
+        if not args.group or not book.valid_slug(slug):
+            print("Укажите чужую группу: --group ib-b-25-1-o")
+            return 2
+        if slug == (settings.get("schedule_group") or sched.DEFAULT_GROUP):
+            print("Это ваша группа — запустите без --other.")
+            return 2
+        try:
+            book.ensure_profile(out, slug, sched.group_name(slug) or args.group)
+            pr = book.read_profile(book.profile_dir(out, slug))
+            srcs = [x for x in pr.get("sources") or ["schedule"] if x in ("schedule", "excel")] or ["schedule"]
+            job = sched.ScheduleJob(out, slug, srcs, rep, Control(), urls=settings.get("schedule_urls"), pdf=False,
+                                    use_system_proxy=bool(settings.get("use_system_proxy")),
+                                    page_delay=parse_delay(args.page_delay or settings.get("page_delay"), PAGE_DELAY),
+                                    excel=pr.get("excel"), profile=slug)
+            res = job.run(args.schedule, args.date_from, args.date_to)
+            book.write_profile(book.profile_dir(out, slug), sources=srcs, last_used=int(time.time()), refreshed=int(time.time()),
+                               **({"excel": job.excel_out} if job.excel_out else {}),
+                               title=book.pick_title(job.site_info.get("group_name") or "", slug, pr.get("title") or ""))
+            rep.log(f"Расписание группы {slug} сохранено: {res['total']} пар → {book.profile_dir(out, slug) / 'index.html'}")
+        except (NetworkDown, Stopped, KeyboardInterrupt) as e:
+            rep.log(f"Остановлено: {e}", "error")
+            return 3
+        return 0
     if args.schedule:   # только расписание — вход в Moodle не нужен
         import schedule as sched
         out = Path(args.out or settings.get("out_dir") or DEFAULT_OUT)
