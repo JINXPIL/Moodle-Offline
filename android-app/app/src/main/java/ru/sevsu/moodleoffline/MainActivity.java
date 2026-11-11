@@ -136,7 +136,17 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        moveTaskToBack(true);   // служба продолжает работать
+        // Сначала пусть страница закроет то, что открыто поверх (просмотр файла, читалку, окно настроек, курс); если закрывать нечего — сворачиваем.
+        if (web == null || ServerState.url == null) {
+            moveTaskToBack(true);
+            return;
+        }
+        web.evaluateJavascript("(function(){try{return !!(window.moBack && window.moBack());}catch(e){return false;}})()", new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+                if (!"true".equals(value)) moveTaskToBack(true);   // служба продолжает работать
+            }
+        });
     }
 
     @Override

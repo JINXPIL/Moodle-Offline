@@ -439,6 +439,11 @@ body.android .no-android{display:none!important}
   .toolbar .chips{overflow-x:auto;max-width:100%}
   .chips .chip{flex:none}
   .modal-box,.rules-box{width:100vw;height:100dvh;max-width:none;border-radius:0;border:0}
+  /* Шапка просмотра файла: на узком экране название и «закрыть» — в первой строке, кнопки действий — во второй и по ширине экрана (раньше «закрыть» уезжала за край) */
+  #modal .modal-box header{flex-wrap:wrap;gap:8px;padding:8px 10px}
+  #modal .modal-box header b{order:1;flex:1 1 calc(100% - 52px);min-width:0}
+  #modal .modal-box header #mClose{order:2;flex:none}
+  #modal .modal-box header #mOpen,#modal .modal-box header #mReveal{order:3;flex:1 1 calc(50% - 4px);min-width:0;white-space:normal;text-align:center;line-height:1.2;padding:8px 6px}
   .rules-body{padding:12px}
   .rules-foot{flex-wrap:wrap}
   .modgrid{grid-template-columns:1fr}
@@ -1375,6 +1380,13 @@ document.addEventListener("click", e => {
 let mPath = "";
 function preview(p, hash = ""){ mPath = p; $("#mTitle").textContent = p.split("/").pop(); $("#mFrame").src = fileUrl(p) + hash; $("#modal").classList.remove("hidden"); }
 $("#mClose").onclick = () => { $("#modal").classList.add("hidden"); $("#mFrame").src = "about:blank"; };
+// Системная кнопка «Назад» на Android (MainActivity.onBackPressed): закрывает верхнее открытое окно, затем курс. true — что-то закрыто, false — закрывать нечего (тогда приложение сворачивается).
+window.moBack = () => {
+  const open = [...document.querySelectorAll(".modal:not(.hidden)")].pop();
+  if (open) { const b = open.querySelector('[id$="Close"]') || open.querySelector('[id$="Cancel"]'); if (b) { b.click(); return true; } open.classList.add("hidden"); return true; }
+  if (CV) { closeCourse(); return true; }
+  return false;
+};
 $("#mOpen").onclick = () => api("/api/open", {path: mPath});
 $("#mReveal").onclick = () => api("/api/open", {path: mPath, reveal: true});
 document.addEventListener("keydown", e => { if (e.key === "Escape") $("#mClose").click(); });
