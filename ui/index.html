@@ -256,6 +256,18 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .xl-row:first-child{border-top:0}.xl-row:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .xl-row.cur{background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .xl-row b{font-weight:600}.xl-row small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.schsel{min-width:0;max-width:100%}
+.toolbar select.schsel{width:auto;min-width:220px;max-width:min(100%,420px)}
+.schhead .schsel{flex:1 1 0}
+.bk-row{display:flex;align-items:stretch;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;overflow:hidden}
+.bk-row.cur{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.bk-pick{display:flex;align-items:center;padding:0 2px 0 10px}
+.bk-main{flex:1 1 0;min-width:0;text-align:left;border:0;background:transparent;padding:8px 8px;cursor:pointer;color:var(--text);font:inherit}
+.bk-main b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bk-main small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.bk-x{border:0;border-radius:0;height:auto;min-height:0;padding:0 12px;flex:none}
+.bk-res{margin-top:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+#scheduleView.viewother .own-only{display:none}
 .xl-tag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:11px;background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
 .srclist label{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);cursor:pointer;font-size:13px}
 .srclist label:first-child{border-top:0}
@@ -626,14 +638,31 @@ body.android .no-android{display:none!important}
     <section class="view hidden" id="scheduleView">
       <div class="layout">
         <div class="content" style="display:flex;flex-direction:column">
-          <div class="toolbar"><h2>Расписание</h2><span class="hint" id="schInfo" style="margin:0"></span></div>
+          <div class="toolbar"><h2>Расписание</h2><select class="txt schsel" id="schSelD" aria-label="Какое расписание показать"></select><span class="hint" id="schInfo" style="margin:0"></span></div>
           <div id="schEmpty" class="empty hidden">Расписание ещё не сохранено. Выберите период в блоке «Период для офлайна» и нажмите «Сохранить для офлайна».</div>
-          <div class="schhead"><b>Расписание</b><button class="btn" id="schToSettings">Настройки ↓</button></div>
+          <div class="schhead"><select class="txt schsel" id="schSelM" aria-label="Какое расписание показать"></select><button class="btn" id="schToSettings">Настройки ↓</button></div>
           <iframe class="schedframe hidden" id="schFrame"></iframe>
         </div>
         <aside class="side">
           <button class="btn schback" id="schToView">↑ К расписанию</button>
-          <div class="panel">
+          <div class="panel" id="schBook">
+            <h3>Другие группы</h3>
+            <p class="hint" style="margin-top:0">Расписание друга или другой группы: скачайте с сайта или загрузите файл, который вам прислали. Переключаться между ними можно над расписанием. Галочкой отметьте, чем поделиться.</p>
+            <div id="schBookList"></div>
+            <div id="schBookCur" class="hidden">
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px">
+                <button class="btn" id="schCurUpd">Обновить с сайта</button><button class="btn" id="schCurOpen">Открыть в браузере</button><button class="btn" id="schCurIcs">В календарь (.ics)</button></div>
+              <div class="row"><div class="lbl">Обновлять вместе с моим<small>при синхронизации, только официальный сайт</small></div><label class="sw-t"><input type="checkbox" id="schCurAuto"><span></span></label></div>
+            </div>
+            <div class="field" style="margin-top:10px"><label>Добавить группу</label><input class="txt" id="schOtherGroup" list="schGroupList" placeholder="ИБ/б-25-1-о" autocomplete="off"></div>
+            <div class="row"><div class="lbl">Ещё и Excel университета<small>подставит даты, которых нет на сайте</small></div><label class="sw-t"><input type="checkbox" id="schOtherXl"><span></span></label></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+              <button class="btn primary" id="schOtherAdd">Скачать расписание</button><button class="btn" id="schImportBtn">Загрузить из файла…</button><button class="btn" id="schShare">Поделиться выбранными</button></div>
+            <input type="file" id="schImportInput" accept=".zip,application/zip" class="hidden">
+            <div class="bk-res hidden" id="schShareRes"></div>
+            <p class="hint">Файл с расписанием — это .zip: его можно отправить другу, он добавит его кнопкой «Загрузить из файла…» (и на телефоне, и на компьютере). Внутри есть и обычная страница расписания — она откроется и без программы.</p>
+          </div>
+          <div class="panel own-only">
             <h3>Группа и источники</h3>
             <div class="field"><label>Группа</label><input class="txt" id="schGroup" list="schGroupList" placeholder="ИБ/б-25-2-о" autocomplete="off">
               <datalist id="schGroupList"></datalist>
@@ -646,7 +675,7 @@ body.android .no-android{display:none!important}
             <details class="adv"><summary>Адреса источников</summary><div id="schUrls"></div>
               <p class="hint">В адресе можно использовать {group}, {week} (номер недели) и {date} (понедельник недели, ГГГГ-ММ-ДД).</p></details>
           </div>
-          <div class="panel" id="schXl">
+          <div class="panel own-only" id="schXl">
             <h3>Excel-таблица университета</h3>
             <p class="hint" id="schXlInfo" style="margin-top:0"></p>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -658,7 +687,7 @@ body.android .no-android{display:none!important}
             <div class="xl-list hidden" id="schXlList"></div>
             <p class="hint">Университет выкладывает на sevsu.ru/univers/shedule таблицы на весь семестр. Если включить источник «Excel» выше, пары из таблицы подставятся на даты, которых ещё нет на schedule.sevsu.ru; там, где сайт уже ответил, главнее сайт (отмены и переносы есть только на нём).</p>
           </div>
-          <div class="panel">
+          <div class="panel own-only">
             <h3>Период для офлайна</h3>
             <div class="ranges" id="schRanges">
               <button data-r="week">Эта неделя</button><button data-r="next">Следующая</button><button data-r="2weeks" class="on">2 недели</button>
@@ -2075,7 +2104,12 @@ $("#rdBody").addEventListener("click", e => {
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#rdModal").classList.contains("hidden")) $("#rdClose").click(); });
 
 /* ── расписание ── */
-let SCH = null, schRange = "2weeks", GRP = null;
+let SCH = null, schRange = "2weeks", GRP = null, schPending = "";
+let SCH_VIEW = (() => { try { return localStorage.getItem("mo_sch_view") || "own"; } catch (e) { return "own"; } })();   // какое расписание показано: own — своё, иначе код чужой группы
+const schProfs = () => (SCH && SCH.profiles) || [];
+const schProf = () => schProfs().find(p => p.id === SCH_VIEW) || schProfs()[0] || null;
+const schDirNow = () => (schProf() || {dir: "Расписание"}).dir;
+function schSetView(id){ SCH_VIEW = id; try { localStorage.setItem("mo_sch_view", id); } catch (e) {} }
 async function loadGroups(dept){
   const r = await api("/api/schedule/groups" + (dept ? "?dept=" + encodeURIComponent(dept) : "")); GRP = r;
   if (!r.ok) { $("#schPickHint").textContent = "Список групп пока недоступен: " + (r.error || "нет связи с schedule.sevsu.ru"); return; }
@@ -2091,6 +2125,10 @@ const themeHash = () => { const t = localStorage.getItem("mo_theme") || "auto"; 
   return "#" + (t !== "auto" ? "theme=" + t + "&" : "") + "accent=" + encodeURIComponent(a); };
 async function loadSchedule(reloadFrame = true){
   SCH = await api("/api/schedule");
+  if (schPending && schProfs().some(p => p.id === schPending && p.saved)) { schSetView(schPending); schPending = ""; reloadFrame = true; }
+  if (!schProfs().some(p => p.id === SCH_VIEW)) schSetView("own");
+  const cur = schProf() || SCH, other = !!cur && cur.own === false;
+  $("#scheduleView").classList.toggle("viewother", other);
   if (document.activeElement !== $("#schGroup")) $("#schGroup").value = SCH.group_name || SCH.group;
   $("#schGroupHint").textContent = SCH.group_name ? `Код в адресе сайта: ${SCH.group}. Можно писать и по-русски, и латиницей.` : "Пишите как на сайте (ИБ/б-25-2-о) или как в адресе (ib-b-25-2-o) — подойдёт любой вариант.";
   if (!GRP) loadGroups();
@@ -2099,14 +2137,80 @@ async function loadSchedule(reloadFrame = true){
   $("#schUrls").innerHTML = Object.entries(SCH.urls).map(([k, u]) => `<div class="field"><label>${esc(k)}</label><input class="txt" data-url="${k}" value="${esc(u)}"></div>`).join("");
   $("#schPdf").checked = SCH.pdf; $("#schAuto").checked = SCH.auto; $("#schAutoRange").value = SCH.auto_range || "2weeks";
   const ru = d => d.split("-").reverse().join(".");
-  $("#schInfo").textContent = SCH.saved ? `сохранено ${SCH.updated} · пар: ${SCH.count} · ${ru(SCH.first)} — ${ru(SCH.last)}` : "";
+  $("#schInfo").textContent = cur.saved ? `сохранено ${cur.updated} · пар: ${cur.count} · ${ru(cur.first)} — ${ru(cur.last)}` : "";
+  schBookRender();
   const lim = $("#schLimit");   // сайт выложил расписание не до конца семестра — говорим об этом прямо
-  const pub = SCH.published_until || "";
+  const pub = other ? "" : (SCH.published_until || "");
   lim.classList.toggle("hidden", !pub);
   if (pub) lim.textContent = `На сайте СевГУ расписание этой группы выложено до ${ru(pub)}. Всё, что позже, программа сохранит, когда сайт его покажет (нажмите «Сохранить для офлайна» позже или оставьте автообновление включённым).`;
-  $("#schEmpty").classList.toggle("hidden", SCH.saved); $("#schFrame").classList.toggle("hidden", !SCH.saved);
-  if (SCH.saved && reloadFrame) $("#schFrame").src = fileUrl(SCH.dir + "/index.html") + "?v=" + Date.now() + themeHash();
+  $("#schEmpty").textContent = other ? "Расписание этой группы не сохранено. Нажмите «Обновить с сайта» в блоке «Другие группы» ниже."
+    : "Расписание ещё не сохранено. Выберите период в блоке «Период для офлайна» и нажмите «Сохранить для офлайна».";
+  $("#schEmpty").classList.toggle("hidden", cur.saved); $("#schFrame").classList.toggle("hidden", !cur.saved);
+  if (cur.saved && (reloadFrame || $("#schFrame").dataset.dir !== cur.dir)) { $("#schFrame").dataset.dir = cur.dir; $("#schFrame").src = fileUrl(cur.dir + "/index.html") + "?v=" + Date.now() + themeHash(); }
 }
+/* ── чужие расписания: переключатель, список, «поделиться», загрузка из файла ── */
+const schLabel = p => (p.own ? "Моё · " : "") + (p.title || p.slug) + (p.origin === "file" ? " (из файла)" : "");
+function schBookRender(){
+  const ps = schProfs(), ru = d => d ? d.split("-").reverse().join(".") : "";
+  const opts = ps.map(p => `<option value="${esc(p.id)}" ${p.id === SCH_VIEW ? "selected" : ""}>${esc(schLabel(p))}</option>`).join("") + '<option value="__add">＋ Добавить другую группу…</option>';
+  ["#schSelD", "#schSelM"].forEach(id => { $(id).innerHTML = opts; });
+  const keep = new Set($$("#schBookList [data-share]").filter(i => i.checked).map(i => i.dataset.share));
+  $("#schBookList").innerHTML = ps.map(p => `<div class="bk-row ${p.id === SCH_VIEW ? "cur" : ""}">
+    <label class="bk-pick" title="Отметьте, чтобы поделиться"><input type="checkbox" data-share="${esc(p.id)}" ${keep.has(p.id) ? "checked" : ""} ${p.saved ? "" : "disabled"}></label>
+    <button class="bk-main" data-use="${esc(p.id)}"><b>${esc((p.own ? "Моё · " : "") + (p.title || p.slug))}</b>
+      <small>${p.saved ? `пар: ${p.count} · ${ru(p.first)} — ${ru(p.last)}` : "не сохранено"}${p.updated ? " · " + esc(p.updated) : ""}${p.origin === "file" ? " · из файла" : ""}${p.auto ? " · обновляется само" : ""}</small></button>
+    ${p.own ? "" : `<button class="btn ghost danger bk-x" data-del="${esc(p.id)}" title="Удалить это расписание" aria-label="Удалить">✕</button>`}</div>`).join("");
+  const cur = schProf(), other = !!cur && !cur.own;
+  $("#schBookCur").classList.toggle("hidden", !other);
+  if (other) $("#schCurAuto").checked = !!cur.auto;
+}
+async function schUse(id){
+  if (id === "__add") { schBookRender(); $("#scheduleView .side").scrollIntoView({behavior: "smooth", block: "start"}); setTimeout(() => $("#schOtherGroup").focus(), 350); return; }
+  schSetView(id); if (id !== "own") api("/api/schedule/profile/use", {slug: id}); loadSchedule(true);
+}
+["#schSelD", "#schSelM"].forEach(id => $(id).onchange = () => schUse($(id).value));
+$("#schBookList").onclick = async e => {
+  const d = e.target.closest("[data-del]"), u = e.target.closest("[data-use]");
+  if (d) { const p = schProfs().find(x => x.id === d.dataset.del); if (!p || !confirm(`Удалить расписание «${p.title}» с этого устройства? Свои данные это не затронет.`)) return;
+    const r = await api("/api/schedule/other/delete", {slug: p.id}); if (!r.ok) return toast(r.error || "Не удалось удалить", "bad");
+    if (SCH_VIEW === p.id) schSetView("own"); toast("Удалено: " + p.title, "ok"); loadSchedule(true); }
+  else if (u) { schUse(u.dataset.use); if (matchMedia("(max-width:700px)").matches) window.scrollTo({top: 0, behavior: "smooth"}); }
+};
+$("#schOtherAdd").onclick = async () => {
+  const g = $("#schOtherGroup").value.trim(); if (!g) return toast("Напишите группу, например ИБ/б-25-1-о", "bad");
+  const r = await api("/api/schedule/other/save", {group: g, sources: $("#schOtherXl").checked ? ["schedule", "excel"] : ["schedule"], range: "semester"});
+  if (!r.ok) return toast(r.error || "Не удалось начать", "bad");
+  schPending = r.slug || ""; $("#schOtherGroup").value = ""; $("#dock").classList.remove("collapsed"); toast("Скачиваю расписание группы…");
+};
+$("#schCurUpd").onclick = async () => { const p = schProf(); if (!p || p.own) return;
+  const r = await api("/api/schedule/other/refresh", {slug: p.id, range: "semester"}); if (!r.ok) return toast(r.error || "Не удалось начать", "bad");
+  $("#dock").classList.remove("collapsed"); toast("Обновляю расписание группы…"); };
+$("#schCurAuto").onchange = async () => { const p = schProf(); if (!p || p.own) return; await api("/api/schedule/other/flags", {slug: p.id, auto: $("#schCurAuto").checked}); loadSchedule(false); };
+$("#schCurOpen").onclick = () => $("#schOpen").onclick();
+$("#schCurIcs").onclick = () => $("#schIcs").onclick();
+$("#schShare").onclick = async () => {
+  const ids = $$("#schBookList [data-share]").filter(i => i.checked).map(i => i.dataset.share);
+  if (!ids.length) return toast("Отметьте галочками, чьё расписание отправить", "bad");
+  const r = await api("/api/schedule/share", {ids, send: !!(SCH && SCH.android_share)});
+  if (!r.ok) return toast(r.error || "Не получилось собрать файл", "bad");
+  const box = $("#schShareRes"); box.classList.remove("hidden");
+  box.innerHTML = `Готово: <b>${esc(r.name)}</b><br><small class="muted">лежит в папке «${esc(r.path.split("/").slice(0, -1).join("/"))}»</small>` +
+    (r.notes && r.notes.length ? `<br><small class="muted">${r.notes.map(esc).join("<br>")}</small>` : "") +
+    `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">` +
+    (SCH && SCH.android_share ? `<button class="btn" id="schShareAgain">Отправить…</button>` : `<a class="btn" href="${fileUrl(r.path)}" download="${esc(r.name)}">Скачать</a><button class="btn" id="schShareShow">Показать в папке</button>`) + `</div>`;
+  const again = $("#schShareAgain"); if (again) again.onclick = () => api("/api/schedule/share", {ids, send: true}).then(x => { if (!x.shared) toast("Не удалось открыть «Поделиться» — файл лежит в папке расписания", "bad"); });
+  const show = $("#schShareShow"); if (show) show.onclick = () => api("/api/open", {path: r.path, reveal: true});
+  if (r.shared) toast("Выберите, куда отправить файл", "ok");
+};
+$("#schImportBtn").onclick = () => $("#schImportInput").click();
+$("#schImportInput").onchange = async () => {
+  const f = $("#schImportInput").files[0]; if (!f) return; $("#schImportInput").value = "";
+  toast("Читаю файл…");
+  let r; try { r = await (await fetch(`/api/schedule/import?name=${encodeURIComponent(f.name)}&t=${encodeURIComponent(T)}`, {method: "POST", body: f})).json(); } catch (e) { r = {ok: false, error: "файл не передался"}; }
+  if (!r.ok) return toast(r.error || "Не удалось прочитать файл", "bad");
+  const first = r.added && r.added[0]; toast(`Добавлено расписаний: ${r.added.length}` + (first ? ` — ${first.title}` : ""), "ok");
+  if (first) schPending = first.slug; loadSchedule(true);
+};
 function schXlRender(){
   const x = (SCH && SCH.excel) || {}; const ru = d => d ? d.split("-").reverse().join(".") : "";
   let t = x.mode === "local" ? `Файл с устройства: ${x.name || "xlsx"}.` : x.mode === "site" ? `Выбран файл: «${x.text || x.name}»${x.ctx ? " (" + x.ctx + ")" : ""}.`
@@ -2147,9 +2251,9 @@ $("#schSave").onclick = async () => { const p = schPayload(true); if (!p.schedul
   const r = await api("/api/schedule/save", p); if (!r.ok) return toast(r.error || "Не удалось начать", "bad"); $("#dock").classList.remove("collapsed"); toast("Сохраняю расписание…"); };
 ["#schPdf", "#schAuto", "#schAutoRange"].forEach(id => $(id).onchange = () => api("/api/schedule/save", schPayload(false)));
 $("#schGroup").onchange = async () => { await api("/api/schedule/save", schPayload(false)); loadSchedule(false); };
-$("#schOpen").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/index.html"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); });
-$("#schIcs").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/raspisanie.ics"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); else toast("Откроется программа календаря — подтвердите импорт"); });
-$("#schSnaps").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/снимки"}).then(r => { if (!r.ok) toast("Снимков пока нет", "bad"); });
+$("#schOpen").onclick = () => api("/api/open", {path: schDirNow() + "/index.html"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); });
+$("#schIcs").onclick = () => api("/api/open", {path: schDirNow() + "/raspisanie.ics"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); else toast("Откроется программа календаря — подтвердите импорт"); });
+$("#schSnaps").onclick = () => api("/api/open", {path: schDirNow() + "/снимки"}).then(r => { if (!r.ok) toast("Снимков пока нет", "bad"); });
 
 /* ── перенос данных ── */
 let TR = null, trTimer = null, trMode = "give";

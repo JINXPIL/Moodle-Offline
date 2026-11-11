@@ -135,7 +135,7 @@ def iter_cat(cat: str, out: Path, data: Path):
             for rel, full in _walk(data / sub, sub + "/"):
                 yield "data", rel, full
     elif cat == "schedule":
-        for rel, full in _walk(out / "Расписание", "Расписание/"):
+        for rel, full in _walk(out / "Расписание", "Расписание/", skip_top=("Поделиться",)):   # готовые файлы «для друзей» не переносим
             yield "out", rel, full
         for rel, full in _single(data, "sevsu_groups.json"):
             yield "data", rel, full

@@ -33,6 +33,8 @@ import electives as el
 import xlsx_schedule as xs
 
 SCHEDULE_DIR = "Расписание"
+OTHER_DIR = "Другие группы"           # Расписание/Другие группы/<код группы>/ — чужие расписания (см. sch_book.py)
+IMPORT_SRC = "imported"               # «источник» для пар, пришедших из файла другого человека (data/imported.json)
 DEFAULT_GROUP = "ib-b-25-2-o"
 MSK = timezone(timedelta(hours=3))   # Севастополь/Москва: UTC+3 без перехода на летнее время
 
@@ -733,8 +735,11 @@ def resolve_range(kind: str, start: str | None = None, end: str | None = None, t
 class ScheduleJob:
     def __init__(self, out_dir: Path, group: str, sources: list[str], rep: mo.Reporter, control: mo.Control,
                  urls: dict | None = None, pdf=True, use_system_proxy=False, page_delay=mo.PAGE_DELAY,
-                 creds=None, cookies=None, excel=None):
-        self.root = Path(out_dir) / SCHEDULE_DIR
+                 creds=None, cookies=None, excel=None, profile: str | None = None):
+        """profile — код группы чужого расписания: всё складывается в Расписание/Другие группы/<код>/, свои данные не трогаем."""
+        self.profile = profile or None
+        self.own = not self.profile
+        self.root = Path(out_dir) / SCHEDULE_DIR / ((OTHER_DIR + "/" + self.profile) if self.profile else "")
         self.group = resolve_group((group or DEFAULT_GROUP).strip()) or DEFAULT_GROUP
         self.sources = [s for s in SOURCE_ORDER if s in sources]
         self.urls = {k: (urls or {}).get(k) or SOURCES[k]["url"] for k in SOURCES}
@@ -1263,30 +1268,36 @@ class ScheduleJob:
         mo.write_text_atomic(p, json.dumps(data, ensure_ascii=False, indent=1))
 
     def write_outputs(self) -> list:
-        merged = load_merged(self.root)
-        meta_p = self.root / "data" / "meta.json"
-        try:
-            with mo.fopen(meta_p, "r", encoding="utf-8") as f:
-                site = json.load(f)
-        except (OSError, ValueError):
-            site = {}
-        site.update(self.site_info)
-        mo.write_text_atomic(meta_p, json.dumps(site, ensure_ascii=False))
-        try:
-            with mo.fopen(self.root / "data" / "streams.json", "r", encoding="utf-8") as f:
-                streams = json.load(f)
-        except (OSError, ValueError):
-            streams = []
-        meta = {"group": site.get("group_name") or self.group, "generated": datetime.now().strftime("%d.%m.%Y %H:%M"),
-                "changed": site.get("changed", ""), "streams": streams,
-                "published_until": site.get("published_until", ""),
-                "sources": {k: SOURCES[k]["title"] for k in SOURCE_ORDER},
-                "short": {k: SOURCES[k]["short"] for k in SOURCE_ORDER},
-                "sites": {k: SOURCES[k]["site"].replace("{group}", group_slug(self.group)) for k in SOURCE_ORDER}}
-        mo.write_text_atomic(self.root / "index.html", render_viewer(merged, meta))
-        mo.write_text_atomic(self.root / "raspisanie.ics", render_ics(merged, self.group))
-        mo.write_text_atomic(self.root / "schedule.json", json.dumps({"meta": meta, "lessons": merged}, ensure_ascii=False))
-        return merged
+        return build_outputs(self.root, self.group, self.site_info, self.own)
+
+
+def build_outputs(root: Path, group: str, site_info: dict | None = None, own: bool = True) -> list:
+    """Из сохранённых по источникам данных (data/*.json) собирает итог: schedule.json, офлайн-страницу и .ics."""
+    root = Path(root)
+    merged = load_merged(root)
+    meta_p = root / "data" / "meta.json"
+    try:
+        with mo.fopen(meta_p, "r", encoding="utf-8") as f:
+            site = json.load(f)
+    except (OSError, ValueError):
+        site = {}
+    site.update(site_info or {})
+    mo.write_text_atomic(meta_p, json.dumps(site, ensure_ascii=False))
+    try:
+        with mo.fopen(root / "data" / "streams.json", "r", encoding="utf-8") as f:
+            streams = json.load(f)
+    except (OSError, ValueError):
+        streams = []
+    meta = {"group": site.get("group_name") or group, "generated": datetime.now().strftime("%d.%m.%Y %H:%M"),
+            "changed": site.get("changed", ""), "streams": streams,
+            "published_until": site.get("published_until", ""), "own": bool(own),
+            "sources": {**{k: SOURCES[k]["title"] for k in SOURCE_ORDER}, IMPORT_SRC: "файл расписания от другого человека"},
+            "short": {**{k: SOURCES[k]["short"] for k in SOURCE_ORDER}, IMPORT_SRC: "Из файла"},
+            "sites": {**{k: SOURCES[k]["site"].replace("{group}", group_slug(group)) for k in SOURCE_ORDER}, IMPORT_SRC: ""}}
+    mo.write_text_atomic(root / "index.html", render_viewer(merged, meta))
+    mo.write_text_atomic(root / "raspisanie.ics", render_ics(merged, group))
+    mo.write_text_atomic(root / "schedule.json", json.dumps({"meta": meta, "lessons": merged}, ensure_ascii=False))
+    return merged
 
 
 def _covered_of(d: dict) -> list[tuple[str, str]]:
@@ -1311,7 +1322,7 @@ def _merge_ranges(rs: list[tuple[str, str]]) -> list[tuple[str, str]]:
 def load_merged(root: Path) -> list:
     by_key = {}
     loaded = {}
-    for src in SOURCE_ORDER:
+    for src in SOURCE_ORDER + [IMPORT_SRC]:
         try:
             with mo.fopen(root / "data" / f"{src}.json", "r", encoding="utf-8") as f:
                 loaded[src] = json.load(f)
@@ -1319,12 +1330,12 @@ def load_merged(root: Path) -> list:
             continue
     # Excel — «план на семестр»: там, где другие источники уже отвечали (даже «пар нет»), главнее они
     # (отмены и переносы есть только на сайте), а Excel заполняет остальные даты.
-    covered = _merge_ranges([r for s_, d in loaded.items() if s_ != "excel" for r in _covered_of(d)])
+    covered = _merge_ranges([r for s_, d in loaded.items() if s_ not in ("excel", IMPORT_SRC) for r in _covered_of(d)])
 
     def in_covered(day: str) -> bool:
         return any(a <= day <= b for a, b in covered)
 
-    for src in SOURCE_ORDER:
+    for src in SOURCE_ORDER + [IMPORT_SRC]:
         for le in loaded.get(src, {}).get("lessons", []):
             k = lesson_key(le)
             if k in by_key:
@@ -1333,7 +1344,7 @@ def load_merged(root: Path) -> list:
                     if not ex.get(fld) and le.get(fld):
                         ex[fld] = le[fld]
                 ex["src"] = sorted(set(ex.get("src", [])) | set(le.get("src", [src])))
-            elif src == "excel" and in_covered(le["date"]):
+            elif src in ("excel", IMPORT_SRC) and in_covered(le["date"]):
                 continue
             else:
                 by_key[k] = dict(le, src=le.get("src", [src]))
@@ -1453,6 +1464,7 @@ button{-webkit-appearance:none;appearance:none}
 .bar{position:sticky;top:0;z-index:6;background:var(--bg);border-bottom:1px solid var(--line);padding:8px 12px 6px}
 .r{display:flex;align-items:center;gap:8px;min-width:0}.r+.r{margin-top:6px}
 h1{display:none;font-size:1.3rem;margin:0;white-space:nowrap}
+h1 .other{font-size:.7em;font-weight:500;color:var(--muted)}
 .seg{display:flex;flex:1;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:3px;gap:2px}
 .seg button{flex:1;min-width:0;border:0;background:transparent;padding:0 3px;min-height:36px;border-radius:9px;cursor:pointer;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg button.on{background:var(--accent);color:#fff}
@@ -1560,7 +1572,7 @@ html.wide main{padding:14px 16px 40px}
 @media print{.bar{position:static}.btn,.ib,.seg,.chips,input,.strip,.fpanel{display:none!important}.day{break-inside:avoid}}
 </style></head><body>
 <header class="bar" id="bar">
-  <div class="r r1"><h1>Расписание __GROUP__</h1>
+  <div class="r r1"><h1>Расписание __GROUP__<span id="other" class="other" hidden> · чужое</span></h1>
     <div class="seg" id="view"><button data-v="day">День</button><button data-v="week">Неделя</button><button data-v="month">Месяц</button><button data-v="list">Список</button></div>
     <button class="ib" id="fbtn" aria-label="Фильтры и настройки" aria-expanded="false" title="Фильтры и настройки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2.2"/><circle cx="9" cy="12" r="2.2"/><circle cx="17" cy="18" r="2.2"/></svg><span class="fdot" id="fdot" hidden></span></button>
   </div>
@@ -1588,10 +1600,13 @@ html.wide main{padding:14px 16px 40px}
 <script id="data" type="application/json">__DATA__</script>
 <script>
 "use strict";
-const LS = {get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
-            set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }};
 const $ = id => document.getElementById(id), root = document.documentElement;
 const D = JSON.parse($("data").textContent), L = D.lessons, M = D.meta;
+/* выбор подгруппы, потоков и т.п. запоминается отдельно для каждой группы (чужое расписание не должно получить ваши фильтры);
+   вид и размер текста — общие. Старые сохранённые значения подхватывает только своё расписание. */
+const NS = "rs:" + String(M.group || "") + ":", OWN = M.own !== false, SHARED = ["rs_view", "rs_scale"];
+const LS = {get(k, d) { try { const sh = SHARED.includes(k); let v = localStorage.getItem(sh ? k : NS + k); if (v === null && OWN && !sh) v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+            set(k, v) { try { localStorage.setItem(SHARED.includes(k) ? k : NS + k, v); } catch (e) {} }};
 L.sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
 const h = new URLSearchParams(location.hash.slice(1));
 if (h.get("theme")) root.dataset.theme = h.get("theme");
@@ -1780,8 +1795,9 @@ const kc = $("kinds");
 kc.innerHTML = Object.entries(KIND).map(([k, t]) => `<span class="chip ${kinds.has(k) ? "off" : ""}" data-k="${k}"><i style="background:var(--${k})"></i>${t}</span>`).join("");
 kc.onclick = e => { const c = e.target.closest(".chip"); if (!c) return; const k = c.dataset.k; kinds.has(k) ? kinds.delete(k) : kinds.add(k);
   c.classList.toggle("off"); LS.set("rs_kinds", JSON.stringify([...kinds])); render(); };
+if (!OWN) $("other").hidden = false;
 $("foot").innerHTML = `Расписание ${esc(M.group || "")} · сохранено ${esc(M.generated || "")}${M.changed ? " · на сайте изменено " + esc(M.changed) : ""} · пар: ${L.length}${L.length ? " · " + ru(L[0].date) + " — " + ru(L[L.length - 1].date) : ""}<br>` +
-  "Сохранено для офлайна — открывается и без интернета. Источники: " + Object.entries(M.sites || {}).map(([k, u]) => `<a href="${esc(u)}">${esc((M.sources || {})[k] || k)}</a>`).join(" · ");
+  "Сохранено для офлайна — открывается и без интернета. Источники: " + Object.entries(M.sites || {}).filter(([k, u]) => u).map(([k, u]) => `<a href="${esc(u)}">${esc((M.sources || {})[k] || k)}</a>`).join(" · ");
 
 /* свайп влево/вправо — следующий/прошлый день, неделя, месяц; стрелки на клавиатуре — то же самое */
 let tx = 0, ty = 0, tt = 0, tOk = false;
