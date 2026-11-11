@@ -65,23 +65,25 @@ adb logcat -d > "$OUT/logcat-final.txt"
 grep -E "MoodleOffline:|chromium.*(ERROR|Uncaught)" "$OUT/logcat-final.txt" | tail -20
 if grep -q "FATAL EXCEPTION" "$OUT/logcat-final.txt"; then echo "падений приложения: ЕСТЬ"; fail=1; else echo "падений приложения: нет"; fi
 
-say "автозапуск после включения телефона (самопроверка включила его)"
-adb shell am force-stop "$PKG"
-sleep 3
-if adb shell pidof "$PKG" | grep -q "[0-9]"; then echo "после остановки процесс ещё жив: ПРОВЕРКА НЕ ЧИСТАЯ"; fi
-# BOOT_COMPLETED — защищённая рассылка: обычному пользователю adb её слать нельзя, а в образе эмулятора google_apis есть root
-adb root > /dev/null 2>&1 || true
+say "автозапуск: перезагружаем телефон (самопроверка включила автозапуск)"
+# Настоящая перезагрузка: Android сам рассылает BOOT_COMPLETED и разрешает по нему запустить службу. Выдуманную рассылку через adb
+# система не считает загрузкой и запуск службы запрещает, поэтому проверить автозапуск иначе нельзя.
+adb reboot
+sleep 10
 adb wait-for-device
-sleep 3
-adb logcat -c
-# после force-stop приложение «остановлено» и рассылки не получает; при настоящей перезагрузке такого состояния нет, поэтому разрешаем доставку явно
-adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p "$PKG" --include-stopped-packages
-for i in $(seq 1 15); do
-  sleep 3
-  adb logcat -d > "$OUT/logcat-boot.txt"
+for i in $(seq 1 60); do
+  [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
+  sleep 5
+done
+echo "телефон загрузился"
+for i in $(seq 1 30); do
+  sleep 4
+  adb logcat -d > "$OUT/logcat-boot.txt" 2>&1
   grep -q "сервер приложения запущен" "$OUT/logcat-boot.txt" && break
 done
-if grep -q "сервер приложения запущен" "$OUT/logcat-boot.txt"; then echo "после BOOT_COMPLETED программа запустилась без окна: ДА"; else echo "после BOOT_COMPLETED программа запустилась без окна: НЕТ"; fail=1; grep -iE "moodleoffline" "$OUT/logcat-boot.txt" | tail -30; fi
+if grep -q "сервер приложения запущен" "$OUT/logcat-boot.txt"; then echo "после перезагрузки программа сама запустилась без окна: ДА"; else echo "после перезагрузки программа сама запустилась без окна: НЕТ"; fail=1; grep -iE "moodleoffline" "$OUT/logcat-boot.txt" | tail -30; fi
+adb shell dumpsys activity services "$PKG" > "$OUT/services-boot.txt" 2>&1
+if grep -q "ServerService" "$OUT/services-boot.txt"; then echo "служба после перезагрузки: ДА"; else echo "служба после перезагрузки: НЕТ"; fail=1; fi
 
 say "итог: $([ $fail -eq 0 ] && echo ОК || echo ПРОВАЛ)"
 exit $fail
