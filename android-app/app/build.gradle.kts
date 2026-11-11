@@ -23,6 +23,11 @@ val copyUi by tasks.registering(Sync::class) {
     into(assetsOut)
 }
 tasks.named("preBuild") { dependsOn(copyPython, copyUi) }
+// Gradle требует явной связи: задачи, читающие скопированные папки, должны ждать копирования
+tasks.configureEach {
+    if (name.contains("PythonSources")) dependsOn(copyPython)
+    if (name.contains("Assets")) dependsOn(copyUi)
+}
 
 // Подпись: ключ из переменных окружения (в GitHub Actions — из секретов репозитория). Без ключа берётся временный отладочный:
 // такое приложение ставится, но следующую версию поверх него поставить нельзя (Android увидит другую подпись).
