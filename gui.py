@@ -186,6 +186,7 @@ class App:
         self.wlock_at = -99.0
         self.auto_why = ""                      # почему автообновление пока не запущено (для подписи в окне)
         self.keep_running = ANDROID             # не выходить, когда страницу закрыли (на телефоне браузер часто в фоне)
+        self.window_seen = False                # приложение .apk: окно уже запрашивало состояние (для проверки в эмуляторе)
         self.probe_kick = False                 # настройки таймера сменили — проверить сайт сразу, не ждать старого интервала
         self._news = None             # (путь, NewsLog)
         self._cal = None              # (путь, deadlines.Store)
@@ -1443,6 +1444,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized(q):
             return self._send(403, {"error": "forbidden"})
         if u.path == "/api/state":
+            if not APP.window_seen and android.is_apk():
+                APP.window_seen = True
+                print("Окно приложения подключилось к программе", flush=True)
             return self._send(200, self.state(int(q.get("since", 0) or 0)))
         if u.path == "/api/courses":
             return self._send(200, APP.course_list())
