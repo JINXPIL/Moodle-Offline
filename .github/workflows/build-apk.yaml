@@ -37,13 +37,31 @@ jobs:
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
             echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+            echo "KEY_KIND=постоянный ключ из секретов репозитория" >> "$GITHUB_ENV"
             echo "Ключ подписи: из секретов репозитория"
           else
-            echo "::warning::Секрет ANDROID_KEYSTORE_BASE64 не задан: apk подписан временным ключом, обновить приложение поверх нельзя (см. android-app/make_keystore.py)"
+            # Секретов нет (например, pull request из чужого форка или ключ ещё не заведён): делаем одноразовый ключ тем же скриптом
+            # и тем же путём, что и настоящий — так подпись проверяется в каждой сборке. Значения не печатаем.
+            echo "::warning::Секрет ANDROID_KEYSTORE_BASE64 не задан: apk подписан одноразовым ключом, обновить приложение поверх нельзя (см. android-app/make_keystore.py)"
+            pip install --quiet cryptography
+            python android-app/make_keystore.py --dir "$RUNNER_TEMP/tmpkey" --secrets-file "$RUNNER_TEMP/tmpkey/s.txt" > /dev/null
+            pw=$(grep '^ANDROID_KEYSTORE_PASSWORD=' "$RUNNER_TEMP/tmpkey/s.txt" | cut -d= -f2-)
+            echo "::add-mask::$pw"
+            {
+              echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/tmpkey/moodle-offline.p12"
+              echo "ANDROID_KEYSTORE_PASSWORD=$pw"
+              echo "ANDROID_KEY_ALIAS=moodle-offline"
+              echo "KEY_KIND=одноразовый ключ (секреты не заданы)"
+            } >> "$GITHUB_ENV"
           fi
       - name: Сборка apk
         working-directory: android-app
         run: gradle --no-daemon --stacktrace assembleRelease
+      - name: Проверка подписи apk
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose --print-certs android-app/app/build/outputs/apk/release/app-release.apk | grep -E "Verifies|Verified using|certificate (DN|SHA-256)"
+          echo "Ключ: $KEY_KIND. Если ключ постоянный, отпечаток SHA-256 выше должен быть одним и тем же в каждой сборке — иначе обновление поверх не встанет."
       - name: Подготовить файлы
         run: |
           mkdir out
