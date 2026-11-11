@@ -82,11 +82,12 @@ chaquopy {
     defaultConfig {
         version = "3.13"
         pip {
-            // те же библиотеки, что в requirements.txt, кроме truststore (в Android свои сертификаты) и pypdfium2 (для Android нет сборки)
+            // те же библиотеки, что в requirements.txt, кроме truststore (в Android свои сертификаты) и pypdfium2 (для Android нет сборки; PDF читает чистый pypdf)
             install("requests")
             install("beautifulsoup4")
             install("tqdm")
             install("python-dotenv")
+            install("pypdf")
         }
     }
     sourceSets { getByName("main") { srcDir(pyOut) } }

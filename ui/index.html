@@ -49,6 +49,9 @@ svg{flex:none}
 .dot.down{background:var(--bad);box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 25%,transparent);animation:pulse 1.6s infinite}
 @keyframes pulse{50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--bad) 0%,transparent)}}
 .spacer{flex:1}
+#net{min-width:0;flex:0 1 auto}
+#net .txt{min-width:0;overflow:hidden;text-overflow:ellipsis}   /* длинная надпись о сервере не должна растягивать шапку шире окна */
+.brand,.mtabs,.user{flex:none}
 .icon-btn{width:34px;height:34px;border-radius:10px;border:1px solid transparent;background:transparent;display:grid;place-items:center;cursor:pointer;color:var(--muted)}
 .icon-btn:hover{background:var(--raised);border-color:var(--line);color:var(--text)}
 .user{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
@@ -165,6 +168,8 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .tab.on{background:var(--raised);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
 .dock-body{height:260px;display:grid;grid-template-columns:360px 1fr;border-top:1px solid var(--line);min-height:0}
 .dock.collapsed .dock-body{display:none}
+.dock:not(.collapsed) #collapse svg{transform:rotate(180deg)}
+#collapse svg{transition:transform .15s}
 .now{padding:14px 18px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:8px;min-width:0}
 .now .k{font-size:11.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
 .now .v{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -193,6 +198,8 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .log .ts{color:var(--faint);margin-right:8px}
 
 /* вкладки, экран курса, расписание, элективы */
+.mtabs .tic{display:none}
+.mtabs .tl{display:inline}
 .mtabs{margin-left:6px}.mtabs button{padding:6px 14px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center}
 .cv-head{border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);margin-bottom:14px}
 .cv-cover{height:120px;background-size:cover;background-position:center;position:relative}
@@ -328,9 +335,18 @@ body.android .no-android{display:none!important}
   .brand{order:1;white-space:nowrap;gap:8px}
   .spacer{order:2}
   .user{order:3}#themeBtn{order:4}
-  .mtabs{order:5;flex:1 1 100%;margin:0;overflow-x:auto;scrollbar-width:none}
+  /* вкладки — нижняя панель, как в обычных приложениях: пальцем дотянуться удобнее, и ничего не обрезается */
+  :root{--bnav-h:58px}
+  body{padding-bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom))}
+  .mtabs{position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;border-radius:0;border:0;border-top:1px solid var(--line);
+    background:var(--surface);backdrop-filter:blur(18px) saturate(1.4);padding:4px 4px calc(4px + env(safe-area-inset-bottom));gap:0;
+    overflow-x:auto;scrollbar-width:none}
   .mtabs::-webkit-scrollbar{display:none}
-  .mtabs button{flex:none;white-space:nowrap}
+  .mtabs button{position:relative;flex:1 0 56px;min-width:0;min-height:50px;padding:4px 2px;border-radius:10px;font-size:10.5px;line-height:1.15;
+    flex-direction:column;gap:3px;white-space:nowrap}
+  .mtabs .tic{display:block}
+  .mtabs button.on{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);box-shadow:none}
+  .mtabs .nbadge{position:absolute;top:1px;left:calc(50% + 4px);margin:0;min-width:16px;height:16px;line-height:16px;font-size:10px;padding:0 4px}
   #net{order:6}#ip{order:7}
   .pill{max-width:100%;min-width:0}
   .pill .txt{overflow:hidden;text-overflow:ellipsis}
@@ -352,8 +368,13 @@ body.android .no-android{display:none!important}
   .modgrid{grid-template-columns:1fr}
   .toasts{left:12px;right:12px;bottom:12px}
   .toast{max-width:none}
-  .dock{position:sticky;bottom:0;z-index:20}
-  .dock-body{height:auto;max-height:50vh;grid-template-columns:1fr;overflow:auto}
+  .dock{position:sticky;bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom));z-index:20}
+  .dock-head{padding:6px 12px;gap:4px 8px;flex-wrap:wrap;cursor:pointer}
+  .dock-head h3{font-size:13px}
+  .dock.collapsed .tab{display:none}
+  .dock.collapsed .tabs{margin-left:auto}
+  .dock .tabs{width:auto}
+  .dock-body{height:auto;max-height:38vh;grid-template-columns:1fr;overflow:auto}
   .now{border-right:0;border-bottom:1px solid var(--line)}
   .btn,.chip,select.txt,input.txt,.seg button,.tab{min-height:40px}
   .icon-btn{width:40px;height:40px}
@@ -367,7 +388,7 @@ body.android .no-android{display:none!important}
 <div id="app">
   <header class="top">
     <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>Moodle Offline</div>
-    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on">Курсы</button><button data-view="search">Поиск</button><button data-view="calendar">Календарь<span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule">Расписание</button><button data-view="electives">Элективы</button><button data-view="news">Что нового<span class="nbadge hidden" id="newsBadge"></span></button></div>
+    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/></svg><span class="tl">Курсы</span></button><button data-view="search"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg><span class="tl">Поиск</span></button><button data-view="calendar"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="tl">Календарь</span><span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="tl">Расписание</span></button><button data-view="electives"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="tl">Элективы</span></button><button data-view="news"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="tl">Что нового</span><span class="nbadge hidden" id="newsBadge"></span></button></div>
     <div class="pill" id="net" title="Проверка доступности Moodle (частоту можно изменить: «Таймер и автообновление»)"><span class="dot"></span><span class="txt">Проверяю сервер…</span></div>
     <div class="pill hidden" id="ip"></div>
     <div class="spacer"></div>
@@ -483,7 +504,7 @@ body.android .no-android{display:none!important}
       <div class="layout">
         <div class="content" style="display:flex;flex-direction:column">
           <div class="toolbar"><h2>Расписание</h2><span class="hint" id="schInfo" style="margin:0"></span></div>
-          <div id="schEmpty" class="empty hidden">Расписание ещё не сохранено. Выберите период справа и нажмите «Сохранить для офлайна».</div>
+          <div id="schEmpty" class="empty hidden">Расписание ещё не сохранено. Выберите период в блоке «Период для офлайна» и нажмите «Сохранить для офлайна».</div>
           <iframe class="schedframe hidden" id="schFrame" style="flex:1;min-height:420px"></iframe>
         </div>
         <aside class="side">
@@ -507,7 +528,10 @@ body.android .no-android{display:none!important}
               <button data-r="month">Месяц</button><button data-r="semester">До конца семестра</button><button data-r="custom">Свой период</button></div>
             <div class="times hidden" id="schCustom"><span class="hint" style="margin:0">с</span><input type="date" id="schFrom"><span class="hint" style="margin:0">по</span><input type="date" id="schTo"></div>
             <div class="row" style="margin-top:8px"><div class="lbl">Снимки страниц в PDF<small>каждая неделя — «как на сайте»</small></div><label class="sw-t"><input type="checkbox" id="schPdf"><span></span></label></div>
-            <div class="row"><div class="lbl">Обновлять при синхронизации<small>на 2 недели вперёд, и ночью тоже</small></div><label class="sw-t"><input type="checkbox" id="schAuto"><span></span></label></div>
+            <div class="row"><div class="lbl">Обновлять при синхронизации<small id="schAutoSmall">и ночью тоже</small></div><label class="sw-t"><input type="checkbox" id="schAuto"><span></span></label></div>
+            <div class="row"><div class="lbl">Насколько вперёд обновлять<small>«до конца семестра» — больше запросов к сайту, зато новые недели подтянутся сами</small></div>
+              <select id="schAutoRange" class="txt" style="max-width:190px"><option value="2weeks">2 недели</option><option value="month">Месяц</option><option value="semester">До конца семестра</option></select></div>
+            <div class="hint hidden" id="schLimit" style="margin:6px 0 0"></div>
             <button class="btn primary big" id="schSave" style="margin-top:10px">Сохранить для офлайна</button>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
               <button class="btn" id="schOpen">Открыть в браузере</button><button class="btn" id="schIcs">В календарь (.ics)</button><button class="btn" id="schSnaps">Снимки страниц</button></div>
@@ -1097,6 +1121,11 @@ $("#pauseBtn").onclick = () => api(S.job.state === "paused" ? "/api/resume" : "/
 $("#skipBtn").onclick = () => api("/api/skip", {});
 $("#stopBtn").onclick = () => { if (confirm("Остановить загрузку? Прогресс сохранится, при следующем запуске продолжу с этого места.")) api(S.job.armed ? "/api/disarm" : "/api/stop", {}); };
 $("#collapse").onclick = () => $("#dock").classList.toggle("collapsed");
+$(".dock-head").addEventListener("click", e => { if (matchMedia("(max-width:700px)").matches && !e.target.closest("button")) $("#dock").classList.toggle("collapsed"); });
+/* на узком экране (телефон) вкладки уезжают в нижнюю панель, на широком возвращаются в шапку */
+const NARROW = matchMedia("(max-width:700px)");
+function placeTabs(){ const t = $("#mainTabs"); if (NARROW.matches) { if (t.parentElement !== document.body) document.body.appendChild(t); } else if (t.parentElement !== $(".top")) $(".brand").after(t); }
+NARROW.addEventListener("change", placeTabs); placeTabs();
 $$(".tab").forEach(t => t.onclick = () => { tab = t.dataset.tab; $$(".tab").forEach(x => x.classList.toggle("on", x === t));
   $("#dlist").classList.toggle("hidden", tab !== "files"); $("#elist").classList.toggle("hidden", tab !== "errors"); $("#log").classList.toggle("hidden", tab !== "log");
   $("#dock").classList.remove("collapsed"); if (tab === "log") $("#log").scrollTop = 1e9; });
@@ -1333,8 +1362,9 @@ function renderSearchSide(){
     if (bs.legacy) bits.push(`старых .doc/.ppt/.xls: ${bs.legacy}`); if (bs.big) bits.push(`слишком больших: ${bs.big}`);
     h = `<div class="sqs"><b>${st.docs}</b> файлов · <b>${st.chunks}</b> фрагментов · ${hsize(st.bytes)}<br><span class="hint" style="margin:0">обновлён ${sWhen(st.updated)}</span></div>`
       + (bits.length ? `<div class="hint" style="margin-top:6px">${bits.join(" · ")}. <a href="#" class="link" id="sqWhy">Какие именно</a></div>` : "");
-    if (bs.nolib) h += `<div class="sqw">PDF сейчас ищутся только по названию: не найдена библиотека pypdfium2 (в готовой программе она есть; при запуске из исходников: <code>pip install pypdfium2</code>).</div>`;
-    if (!st.fts) h += `<div class="sqw">В этом Python нет SQLite FTS5 — поиск работает, но на больших папках медленнее.</div>`;
+    if (bs.nolib) h += ANDROID ? `<div class="sqw">PDF пока ищутся только по названию: на этом телефоне не нашлась библиотека чтения PDF.</div>`
+      : `<div class="sqw">PDF сейчас ищутся только по названию: не найдена библиотека pypdfium2 (в готовой программе она есть; при запуске из исходников: <code>pip install pypdfium2</code>).</div>`;
+    if (!st.fts && !ANDROID) h += `<div class="sqw">В этом Python нет SQLite FTS5 — поиск работает, но на больших папках медленнее.</div>`;
     if (SI.last && !SI.last.ok) h += `<div class="sqw">${esc(SI.last.text)}</div>`;
   }
   $("#sqStatus").innerHTML = h;
@@ -1368,7 +1398,7 @@ function renderSearchEmpty(){
     • несколько слов — найдутся места, где есть <b>все</b> сразу<br>
     • <b>"точная фраза"</b> — слова подряд, в таком порядке<br>
     • <b>-слово</b> — исключить то, где оно встречается<br>
-    • окончания не важны: «лекция» найдёт «лекции» и «лекций»; е и ё — одно и то же` : "Справа нажмите «Обновить индекс»: программа прочитает всё, что уже скачано. Это работает без интернета."}</div>`;
+    • окончания не важны: «лекция» найдёт «лекции» и «лекций»; е и ё — одно и то же` : "Нажмите «Обновить индекс» (кнопка на этой же странице): программа прочитает всё, что уже скачано. Это работает без интернета."}</div>`;
 }
 async function doSearch(){
   const q = $("#sqIn").value.trim(); if (!q) { renderSearchEmpty(); return; }
@@ -1751,22 +1781,27 @@ async function loadSchedule(reloadFrame = true){
   if (!GRP) loadGroups();
   $("#schSources").innerHTML = (SCH.order || Object.keys(SCH.titles)).map(k => [k, SCH.titles[k]]).map(([k, t]) => `<label><span class="sw-t"><input type="checkbox" data-src="${k}" ${SCH.sources.includes(k) ? "checked" : ""}><span></span></span><span>${esc(t)}${SCH.auth && SCH.auth[k] && !SCH.has_creds ? '<br><small class="muted">войдите в программе с «Запомнить меня» — логин и пароль те же, что в Moodle</small>' : ""}</span></label>`).join("");
   $("#schUrls").innerHTML = Object.entries(SCH.urls).map(([k, u]) => `<div class="field"><label>${esc(k)}</label><input class="txt" data-url="${k}" value="${esc(u)}"></div>`).join("");
-  $("#schPdf").checked = SCH.pdf; $("#schAuto").checked = SCH.auto;
-  $("#schInfo").textContent = SCH.saved ? `сохранено ${SCH.updated} · пар: ${SCH.count} · ${SCH.first.split("-").reverse().join(".")} — ${SCH.last.split("-").reverse().join(".")}` : "";
+  $("#schPdf").checked = SCH.pdf; $("#schAuto").checked = SCH.auto; $("#schAutoRange").value = SCH.auto_range || "2weeks";
+  const ru = d => d.split("-").reverse().join(".");
+  $("#schInfo").textContent = SCH.saved ? `сохранено ${SCH.updated} · пар: ${SCH.count} · ${ru(SCH.first)} — ${ru(SCH.last)}` : "";
+  const lim = $("#schLimit");   // сайт выложил расписание не до конца семестра — говорим об этом прямо
+  const pub = SCH.published_until || "";
+  lim.classList.toggle("hidden", !pub);
+  if (pub) lim.textContent = `На сайте СевГУ расписание этой группы выложено до ${ru(pub)}. Всё, что позже, программа сохранит, когда сайт его покажет (нажмите «Сохранить для офлайна» позже или оставьте автообновление включённым).`;
   $("#schEmpty").classList.toggle("hidden", SCH.saved); $("#schFrame").classList.toggle("hidden", !SCH.saved);
   if (SCH.saved && reloadFrame) $("#schFrame").src = fileUrl(SCH.dir + "/index.html") + "&v=" + Date.now() + themeHash();
 }
 function schPayload(start){
   const urls = {}; $$("#schUrls [data-url]").forEach(i => urls[i.dataset.url] = i.value.trim());
   return {schedule_group: $("#schGroup").value.trim(), schedule_sources: $$("#schSources [data-src]").filter(i => i.checked).map(i => i.dataset.src),
-          schedule_urls: urls, schedule_pdf: $("#schPdf").checked, schedule_auto: $("#schAuto").checked, start,
+          schedule_urls: urls, schedule_pdf: $("#schPdf").checked, schedule_auto: $("#schAuto").checked, schedule_auto_range: $("#schAutoRange").value, start,
           range: schRange, from: $("#schFrom").value, to: $("#schTo").value};
 }
 $$("#schRanges button").forEach(b => b.onclick = () => { schRange = b.dataset.r; $$("#schRanges button").forEach(x => x.classList.toggle("on", x === b)); $("#schCustom").classList.toggle("hidden", schRange !== "custom"); });
 $("#schSave").onclick = async () => { const p = schPayload(true); if (!p.schedule_sources.length) return toast("Выберите хотя бы один источник", "bad");
   if (schRange === "custom" && !(p.from && p.to)) return toast("Укажите даты «с» и «по»", "bad");
   const r = await api("/api/schedule/save", p); if (!r.ok) return toast(r.error || "Не удалось начать", "bad"); $("#dock").classList.remove("collapsed"); toast("Сохраняю расписание…"); };
-["#schPdf", "#schAuto"].forEach(id => $(id).onchange = () => api("/api/schedule/save", schPayload(false)));
+["#schPdf", "#schAuto", "#schAutoRange"].forEach(id => $(id).onchange = () => api("/api/schedule/save", schPayload(false)));
 $("#schGroup").onchange = async () => { await api("/api/schedule/save", schPayload(false)); loadSchedule(false); };
 $("#schOpen").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/index.html"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); });
 $("#schIcs").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/raspisanie.ics"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); else toast("Откроется программа календаря — подтвердите импорт"); });

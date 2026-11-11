@@ -11,7 +11,8 @@
   • запрос: слова через пробел (все сразу), "точная фраза", -слово (исключить).
     Словоформы ловятся простым совпадением по началу слова («лекция» найдёт «лекции», «лекций»),
     это не полноценная морфология.
-Сторонняя библиотека нужна одна и только для PDF — pypdfium2 (движок PDF из Chrome). Без неё PDF ищутся по названию.
+Сторонняя библиотека нужна одна и только для PDF — pypdfium2 (движок PDF из Chrome). Там, где её нет (Android), берётся
+чисто питоновская pypdf — медленнее, но читает текст. Без обеих PDF ищутся по названию.
 """
 from __future__ import annotations
 
@@ -32,6 +33,12 @@ try:  # нужна только для PDF
 except Exception:  # noqa: BLE001 — любая проблема с импортом = «библиотеки нет»
     pdfium = None
 _PDFIUM_LOCK = threading.Lock()                 # PDFium не потокобезопасен
+try:  # запасной вариант для PDF там, где нет pypdfium2 (Android: для него нет сборки). Чистый Python, медленнее
+    import pypdf
+    import logging as _logging
+    _logging.getLogger("pypdf").setLevel(_logging.ERROR)   # про кривые файлы мы пишем сами, без шума в журнале
+except Exception:  # noqa: BLE001
+    pypdf = None
 
 INDEX_FILE = ".moodle_search.sqlite"
 SCHEMA = 1
@@ -103,7 +110,7 @@ def groups_meta() -> list[dict]:
 
 
 def have_pdf() -> bool:
-    return pdfium is not None
+    return pdfium is not None or pypdf is not None
 
 
 def fts_available() -> bool:
@@ -592,9 +599,67 @@ def read_odf(path, ctx: Ctx, ext: str) -> list[tuple[str, str]]:
     return out
 
 
+def _pdf_notes(ctx: Ctx, total: int, got: int, bad: int) -> None:
+    notes = []
+    if total > ctx.max_pages:
+        notes.append(f"прочитаны первые {ctx.max_pages} страниц из {total}")
+    if not got and total:
+        notes.append("текста нет — вероятно, скан (распознавания нет)" if not bad else "текст не извлекается (кодировка шрифтов)")
+    elif bad:
+        notes.append(f"{bad} стр. без читаемого текста")
+    ctx.note = "; ".join(notes)
+
+
+def _bad_text(t: str) -> bool:
+    """Шрифт без нормальной кодировки: вместо букв квадраты и значки."""
+    junk = sum(t.count(ch) for ch in "\ufffd\ufffe\u25a0\u25a1")
+    return junk * 4 > len(t.replace(" ", ""))
+
+
+def _read_pdf_pypdf(path, ctx: Ctx) -> list[tuple[str, str]]:
+    out, bad, got, total = [], 0, 0, 0
+    try:
+        with open(path, "rb") as f:
+            reader = pypdf.PdfReader(f, strict=False)
+            if reader.is_encrypted:
+                try:
+                    ok = reader.decrypt("")
+                except Exception:  # noqa: BLE001
+                    ok = 0
+                if not ok:
+                    raise Unreadable("PDF защищён паролем")
+            total = len(reader.pages)
+            for i in range(min(total, ctx.max_pages)):
+                ctx.check()
+                try:
+                    t = clean(reader.pages[i].extract_text() or "")
+                except Exception:  # noqa: BLE001 — одна кривая страница не должна ронять весь файл
+                    bad += 1
+                    continue
+                if _bad_text(t):
+                    bad += 1
+                    continue
+                if t.strip():
+                    got += 1
+                    for blk in split_blocks(t, BLOCK * 2, BLOCK_HARD * 2):
+                        out.append((f"стр. {i + 1}", blk))
+    except (Unreadable, Stopped):
+        raise
+    except RecursionError as e:
+        raise Unreadable("PDF слишком сложный для чтения") from e
+    except Exception as e:  # noqa: BLE001
+        if "password" in str(e).lower() or "encrypt" in str(e).lower():
+            raise Unreadable("PDF защищён паролем") from e
+        raise Unreadable(f"PDF повреждён или нестандартный ({str(e)[:60]})") from e
+    _pdf_notes(ctx, total, got, bad)
+    return out
+
+
 def read_pdf(path, ctx: Ctx) -> list[tuple[str, str]]:
     if pdfium is None:
-        raise Unreadable("нет библиотеки pypdfium2")
+        if pypdf is None:
+            raise Unreadable("нет библиотеки для PDF")
+        return _read_pdf_pypdf(path, ctx)
     out, bad, got, total = [], 0, 0, 0
     with _PDFIUM_LOCK, open(path, "rb") as f:
         try:
@@ -633,14 +698,7 @@ def read_pdf(path, ctx: Ctx) -> list[tuple[str, str]]:
                         out.append((f"стр. {i + 1}", blk))
         finally:
             doc.close()
-    notes = []
-    if total > ctx.max_pages:
-        notes.append(f"прочитаны первые {ctx.max_pages} страниц из {total}")
-    if not got and total:
-        notes.append("текста нет — вероятно, скан (распознавания нет)" if not bad else "текст не извлекается (кодировка шрифтов)")
-    elif bad:
-        notes.append(f"{bad} стр. без читаемого текста")
-    ctx.note = "; ".join(notes)
+    _pdf_notes(ctx, total, got, bad)
     return out
 
 
@@ -695,7 +753,7 @@ def plan_for(ext: str, size: int, cfg: dict) -> str:
         return "name"
     if size > cfg["max_mb"] * 2**20:
         return "big"
-    if ext == ".pdf" and pdfium is None:
+    if ext == ".pdf" and not have_pdf():
         return "nolib"
     return "read"
 
@@ -908,7 +966,7 @@ class Index:
                     elif plan == "big":
                         note = f"файл больше {cfg['max_mb']} МБ — ищу только по названию"
                     elif plan == "nolib":
-                        note = "для PDF нужна библиотека pypdfium2 (pip install pypdfium2) — пока ищу только по названию"
+                        note = "для PDF нужна библиотека pypdfium2 или pypdf — пока ищу только по названию"
                     total_chars, kept = 0, []
                     for loc, text in units:
                         total_chars += len(text)
@@ -1129,7 +1187,7 @@ def format_status(st: dict) -> str:
     bs = st.get("by_status", {})
     parts = [f"файлов в индексе: {st['docs']}", f"фрагментов: {st['chunks']}", f"размер индекса: {st['bytes'] / 1048576:.1f} МБ"]
     for k, t in (("empty", "без текста (сканы)"), ("err", "не прочитано"), ("legacy", "старые .doc/.ppt/.xls"),
-                 ("big", "слишком большие"), ("nolib", "PDF без pypdfium2")):
+                 ("big", "слишком большие"), ("nolib", "PDF без библиотеки чтения")):
         if bs.get(k):
             parts.append(f"{t}: {bs[k]}")
     return "; ".join(parts)

@@ -278,6 +278,7 @@ class Electives:
         self.cookies = cookies or []
         self.cookies_out = None
         self.browser = mo.find_browser() if browser else None
+        self.fallback_reason = ""   # почему фоновый браузер не открыл страницу (чтобы сказать об этом прямо)
         self.diag = []
         self.use_system_proxy = use_system_proxy
         self.portal = Portal(self.url, rep, control, creds=creds, cookies=cookies,
@@ -303,13 +304,22 @@ class Electives:
         except OSError:
             pass
 
+    def _why_empty(self, soup, actions, how) -> list[str]:
+        """Сообщения со страницы + прямая причина, если страница пуста из-за того, что её не открыл фоновый браузер."""
+        msgs = page_messages(soup)
+        if how == "http" and not actions:
+            why = self.fallback_reason or ("не найден Microsoft Edge или Google Chrome" if not self.browser else "")
+            if why:
+                msgs = [f"Страница элективов строится скриптом сайта, а фоновый браузер её не открыл: {why}."] + msgs
+        return msgs
+
     def _state(self, text, soup, final_url, actions, pdf_ok, how):
         title = mo.clean_text(soup.title.get_text()) if soup.title else "Элективы"
         old = self.load()
         old_sig = {signature(a["context"]) for a in old.get("actions", [])}
         new = [a for a in actions if signature(a["context"]) not in old_sig and not a["leave"]] if old else []
         state = {"url": self.url, "final_url": final_url, "title": title, "updated": datetime.now().strftime("%d.%m.%Y %H:%M"),
-                 "actions": actions, "messages": page_messages(soup), "pdf": pdf_ok, "how": how,
+                 "actions": actions, "messages": self._why_empty(soup, actions, how), "pdf": pdf_ok, "how": how,
                  "text": mo.short(" ".join(mo.clean_text(soup.get_text(" ")).split()), 6000)}
         mo.write_text_atomic(self.state_path, json.dumps(state, ensure_ascii=False, indent=1))
         if not actions:
@@ -376,6 +386,8 @@ class Electives:
             except PortalError:
                 raise
             except cdp.CDPError as e:
+                self.fallback_reason = str(e) or type(e).__name__
+                self.diag.append(f"фоновый браузер: {self.fallback_reason}")
                 self.rep.log(f"Фоновый браузер не справился ({e}) — пробую обычным запросом", "warn")
         return self._refresh_http()
 

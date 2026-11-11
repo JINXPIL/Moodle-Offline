@@ -21,7 +21,7 @@ import threading
 import time
 import webbrowser
 from collections import deque
-from datetime import datetime
+from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -756,13 +756,17 @@ class App:
                 "urls": {k: (st.get("schedule_urls") or {}).get(k) or v["url"] for k, v in sched.SOURCES.items()},
                 "titles": {k: v["title"] for k, v in sched.SOURCES.items()},
                 "pdf": bool(st.get("schedule_pdf", True)), "auto": bool(st.get("schedule_auto", True)),
-                "saved": False, "count": 0, "updated": "", "first": "", "last": "", "dir": sched.SCHEDULE_DIR}
+                "auto_range": st.get("schedule_auto_range") if st.get("schedule_auto_range") in sched.AUTO_RANGES else "2weeks",
+                "published_until": "", "saved": False, "count": 0, "updated": "", "first": "", "last": "", "dir": sched.SCHEDULE_DIR}
         try:
             with mo.fopen(out / sched.SCHEDULE_DIR / "schedule.json", "r", encoding="utf-8") as f:
                 d = json.load(f)
             ls = d.get("lessons", [])
             info.update(saved=True, count=len(ls), updated=d.get("meta", {}).get("generated", ""),
                         first=ls[0]["date"] if ls else "", last=ls[-1]["date"] if ls else "")
+            pub = d.get("meta", {}).get("published_until", "")
+            if pub and pub < sched.semester_end(date.today()).isoformat():   # показываем, только если сайт выложил не весь семестр
+                info["published_until"] = pub
         except (OSError, ValueError, KeyError, IndexError):
             pass
         return info
@@ -986,6 +990,8 @@ class App:
                 self._save_sso(job.cookies_out)
             text = (f"Расписание сохранено за {mo.fmt_dur(time.monotonic() - t0)}: {res['total']} пар "
                     f"({res['range'][0]} — {res['range'][1]})")
+            if res.get("note"):
+                text += ". " + res["note"]
             self.last_result = {"ok": True, "text": text, "aborted": None, "kind": "schedule"}
             self.rep.log(text)
             mo.notify(mo.APP_NAME, text)
@@ -1574,7 +1580,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.start_job({"sync": bool(b.get("sync")), "course_ids": b.get("course_ids"),
                                                   "wait_for_server": bool(b.get("wait_for_server"))}))
         if p == "/api/schedule/save":
-            for k in ("schedule_group", "schedule_sources", "schedule_urls", "schedule_pdf", "schedule_auto"):
+            for k in ("schedule_group", "schedule_sources", "schedule_urls", "schedule_pdf", "schedule_auto", "schedule_auto_range"):
                 if k in b:
                     APP.settings[k] = b[k]
             if b.get("schedule_group"):   # можно писать по-русски, как на сайте, — храним код из адреса
