@@ -57,6 +57,7 @@ SOURCES = {
         "site": "https://ysturasp.ru/schedule/sevsu?group={group}",
     },
 }
+AUTO_RANGES = ("2weeks", "month", "semester")        # на сколько вперёд обновлять при быстрой синхронизации
 SOURCE_ORDER = ["schedule", "timetable", "ysturasp"]      # порядок важен: при совпадении пар главнее первый
 DEFAULT_SOURCES = ["schedule", "timetable"]
 
@@ -597,6 +598,7 @@ class ScheduleJob:
         self.cookies = cookies or []        # сохранённые cookie единого входа (чтобы не вводить пароль каждый раз)
         self.cookies_out = None             # свежие cookie после входа — программа сохранит их в зашифрованное хранилище
         self.site_info = {}
+        self.limit_note = ""      # «сайт выложил не весь период» — показываем в окне, а не только в журнале
 
     def _browser_result(self, ok):
         """Если фоновый браузер дважды подряд не справился — отключаем его до конца, чтобы не ждать зря."""
@@ -682,8 +684,10 @@ class ScheduleJob:
                 self.rep.log(f"  ✗ {SOURCES[src]['title']}: {mo.describe_error(e)}", "error")
         merged = self.write_outputs()
         self.stats["lessons"] = len(merged)
+        if self.limit_note:
+            self.rep.log("  " + self.limit_note, "warn")
         return {"range": [a.isoformat(), b.isoformat()], "per_source": results, "total": len(merged),
-                "dir": SCHEDULE_DIR}
+                "dir": SCHEDULE_DIR, "note": self.limit_note}
 
     def _url(self, src, week=None, mon: date | None = None):
         u = self.urls[src]
@@ -778,6 +782,13 @@ class ScheduleJob:
                 me = next((g for g in gs if g["slug"] == self.group or g["name"] == name), None)
                 if me and me.get("weeks"):
                     weeks_on_site = set(me["weeks"])
+                    last_wk = max(weeks_on_site)
+                    until = w1 + timedelta(days=7 * last_wk - 1)
+                    self.site_info.update(published_week=last_wk, published_until=until.isoformat())
+                    if until < b:
+                        self.limit_note = (f"Сайт пока выложил расписание только до {until:%d.%m.%Y} ({last_wk}-я неделя), "
+                                           f"дальше на нём пусто — запрашивать там нечего. Остальное появится, когда СевГУ его "
+                                           f"выложит: нажмите «Сохранить» ещё раз позже (или включите автообновление «до конца семестра»).")
             except (mo.NetworkDown, mo.Stopped):
                 raise
             except Exception:
@@ -1014,6 +1025,7 @@ class ScheduleJob:
             streams = []
         meta = {"group": site.get("group_name") or self.group, "generated": datetime.now().strftime("%d.%m.%Y %H:%M"),
                 "changed": site.get("changed", ""), "streams": streams,
+                "published_until": site.get("published_until", ""),
                 "sources": {k: SOURCES[k]["title"] for k in SOURCE_ORDER},
                 "short": {k: SOURCES[k]["short"] for k in SOURCE_ORDER},
                 "sites": {k: SOURCES[k]["site"].replace("{group}", group_slug(self.group)) for k in SOURCE_ORDER}}

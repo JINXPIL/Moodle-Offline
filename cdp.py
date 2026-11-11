@@ -105,35 +105,68 @@ class _WS:
             pass
 
 
+# Способы запуска: если Edge/Chrome у кого-то не стартует с «полным» набором ключей, пробуем проще.
+LAUNCH_VARIANTS = [
+    ("обычный", "--headless=new"),
+    ("минимальный", "--headless=new"),
+    ("старый headless", "--headless"),
+]
+_GOOD_VARIANT = None      # номер способа, который уже сработал в этом запуске программы
+
+
+exit_info = mo.proc_exit_info
+
+
 class Browser:
     """Фоновый браузер: открыть страницу, подождать, выполнить JS, прочитать HTML, напечатать в PDF."""
 
     def __init__(self, exe, cookies=None, timeout=60, user_agent=None, direct=True):
+        global _GOOD_VARIANT
         self.timeout = timeout
         self._prof = tempfile.TemporaryDirectory(prefix="mo-cdp-")
-        args = [str(exe), "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-                "--disable-extensions", "--mute-audio", "--no-sandbox", "--remote-debugging-port=0",
-                f"--user-data-dir={self._prof.name}", f"--user-agent={user_agent or mo.USER_AGENT}", "--lang=ru-RU"]
-        if direct:          # как и остальная программа: напрямую, мимо системного прокси (если не включено иное)
-            args.append("--no-proxy-server")
-        if os.environ.get("MOODLE_BROWSER_ARGS"):
-            args += os.environ["MOODLE_BROWSER_ARGS"].split()
-        args.append("about:blank")
-        kw = {"creationflags": 0x08000000} if os.name == "nt" else {"start_new_session": True}
-        self.proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kw)
         port_file = Path(self._prof.name) / "DevToolsActivePort"
-        deadline = time.monotonic() + 25
-        while time.monotonic() < deadline:
-            if port_file.exists():
-                lines = port_file.read_text().split("\n")
-                if len(lines) >= 2 and lines[0].strip().isdigit():
+        order = list(range(len(LAUNCH_VARIANTS)))
+        if _GOOD_VARIANT in order:       # что сработало в прошлый раз — пробуем первым
+            order.remove(_GOOD_VARIANT)
+            order.insert(0, _GOOD_VARIANT)
+        problems, lines = [], None
+        for v in order:
+            args = self._args(exe, v, user_agent, direct)
+            self._err = tempfile.TemporaryFile()
+            kw = {"creationflags": 0x08000000} if os.name == "nt" else {"start_new_session": True}
+            try:
+                self.proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=self._err, **kw)
+            except OSError as e:
+                problems.append(f"{LAUNCH_VARIANTS[v][0]}: не запустился ({mo.describe_error(e)})")
+                continue
+            deadline = time.monotonic() + 25
+            died = False
+            while time.monotonic() < deadline:
+                if port_file.exists():
+                    lines = port_file.read_text().split("\n")
+                    if len(lines) >= 2 and lines[0].strip().isdigit():
+                        break
+                    lines = None
+                if self.proc.poll() is not None:
+                    died = True
                     break
-            if self.proc.poll() is not None:
-                raise CDPError("браузер не запустился")
-            time.sleep(0.2)
-        else:
+                time.sleep(0.2)
+            if lines:
+                _GOOD_VARIANT = v
+                self.variant = LAUNCH_VARIANTS[v][0]
+                break
+            if died:
+                problems.append(f"{LAUNCH_VARIANTS[v][0]}: {exit_info(self.proc, self._err)}")
+                try:
+                    port_file.unlink()
+                except OSError:
+                    pass
+                continue
             self.close()
-            raise CDPError("браузер не ответил")
+            raise CDPError("браузер не ответил" + (f" ({exit_info(None, self._err)})" if problems else ""))
+        if not lines:
+            self._prof.cleanup()
+            raise CDPError("браузер не запустился — " + "; ".join(problems))
         port, path = lines[0].strip(), lines[1].strip()
         self.ws = _WS(f"ws://127.0.0.1:{port}{path}", timeout=timeout)
         self._id = 0
@@ -144,6 +177,22 @@ class Browser:
             self.call(m, session=True)
         if cookies:
             self.set_cookies(cookies)
+
+    def _args(self, exe, variant, user_agent, direct):
+        name, headless = LAUNCH_VARIANTS[variant]
+        prof = f"--user-data-dir={self._prof.name}"
+        if name == "обычный":
+            args = [str(exe), headless, "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+                    "--disable-extensions", "--mute-audio", "--no-sandbox", "--remote-debugging-port=0", prof,
+                    f"--user-agent={user_agent or mo.USER_AGENT}", "--lang=ru-RU"]
+        else:     # только самое нужное: вдруг какой-то из ключей запрещён политикой или антивирусом
+            args = [str(exe), headless, "--no-first-run", "--remote-debugging-port=0", prof]
+        if direct:          # как и остальная программа: напрямую, мимо системного прокси (если не включено иное)
+            args.append("--no-proxy-server")
+        if os.environ.get("MOODLE_BROWSER_ARGS"):
+            args += os.environ["MOODLE_BROWSER_ARGS"].split()
+        args.append("about:blank")
+        return args
 
     # ── протокол ──
     def call(self, method, params=None, session=False, timeout=None):

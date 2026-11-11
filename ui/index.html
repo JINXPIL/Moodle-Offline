@@ -49,6 +49,9 @@ svg{flex:none}
 .dot.down{background:var(--bad);box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 25%,transparent);animation:pulse 1.6s infinite}
 @keyframes pulse{50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--bad) 0%,transparent)}}
 .spacer{flex:1}
+#net{min-width:0;flex:0 1 auto}
+#net .txt{min-width:0;overflow:hidden;text-overflow:ellipsis}   /* длинная надпись о сервере не должна растягивать шапку шире окна */
+.brand,.mtabs,.user{flex:none}
 .icon-btn{width:34px;height:34px;border-radius:10px;border:1px solid transparent;background:transparent;display:grid;place-items:center;cursor:pointer;color:var(--muted)}
 .icon-btn:hover{background:var(--raised);border-color:var(--line);color:var(--text)}
 .user{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
@@ -501,7 +504,7 @@ body.android .no-android{display:none!important}
       <div class="layout">
         <div class="content" style="display:flex;flex-direction:column">
           <div class="toolbar"><h2>Расписание</h2><span class="hint" id="schInfo" style="margin:0"></span></div>
-          <div id="schEmpty" class="empty hidden">Расписание ещё не сохранено. Выберите период справа и нажмите «Сохранить для офлайна».</div>
+          <div id="schEmpty" class="empty hidden">Расписание ещё не сохранено. Выберите период в блоке «Период для офлайна» и нажмите «Сохранить для офлайна».</div>
           <iframe class="schedframe hidden" id="schFrame" style="flex:1;min-height:420px"></iframe>
         </div>
         <aside class="side">
@@ -525,7 +528,10 @@ body.android .no-android{display:none!important}
               <button data-r="month">Месяц</button><button data-r="semester">До конца семестра</button><button data-r="custom">Свой период</button></div>
             <div class="times hidden" id="schCustom"><span class="hint" style="margin:0">с</span><input type="date" id="schFrom"><span class="hint" style="margin:0">по</span><input type="date" id="schTo"></div>
             <div class="row" style="margin-top:8px"><div class="lbl">Снимки страниц в PDF<small>каждая неделя — «как на сайте»</small></div><label class="sw-t"><input type="checkbox" id="schPdf"><span></span></label></div>
-            <div class="row"><div class="lbl">Обновлять при синхронизации<small>на 2 недели вперёд, и ночью тоже</small></div><label class="sw-t"><input type="checkbox" id="schAuto"><span></span></label></div>
+            <div class="row"><div class="lbl">Обновлять при синхронизации<small id="schAutoSmall">и ночью тоже</small></div><label class="sw-t"><input type="checkbox" id="schAuto"><span></span></label></div>
+            <div class="row"><div class="lbl">Насколько вперёд обновлять<small>«до конца семестра» — больше запросов к сайту, зато новые недели подтянутся сами</small></div>
+              <select id="schAutoRange" class="txt" style="max-width:190px"><option value="2weeks">2 недели</option><option value="month">Месяц</option><option value="semester">До конца семестра</option></select></div>
+            <div class="hint hidden" id="schLimit" style="margin:6px 0 0"></div>
             <button class="btn primary big" id="schSave" style="margin-top:10px">Сохранить для офлайна</button>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
               <button class="btn" id="schOpen">Открыть в браузере</button><button class="btn" id="schIcs">В календарь (.ics)</button><button class="btn" id="schSnaps">Снимки страниц</button></div>
@@ -1775,22 +1781,27 @@ async function loadSchedule(reloadFrame = true){
   if (!GRP) loadGroups();
   $("#schSources").innerHTML = (SCH.order || Object.keys(SCH.titles)).map(k => [k, SCH.titles[k]]).map(([k, t]) => `<label><span class="sw-t"><input type="checkbox" data-src="${k}" ${SCH.sources.includes(k) ? "checked" : ""}><span></span></span><span>${esc(t)}${SCH.auth && SCH.auth[k] && !SCH.has_creds ? '<br><small class="muted">войдите в программе с «Запомнить меня» — логин и пароль те же, что в Moodle</small>' : ""}</span></label>`).join("");
   $("#schUrls").innerHTML = Object.entries(SCH.urls).map(([k, u]) => `<div class="field"><label>${esc(k)}</label><input class="txt" data-url="${k}" value="${esc(u)}"></div>`).join("");
-  $("#schPdf").checked = SCH.pdf; $("#schAuto").checked = SCH.auto;
-  $("#schInfo").textContent = SCH.saved ? `сохранено ${SCH.updated} · пар: ${SCH.count} · ${SCH.first.split("-").reverse().join(".")} — ${SCH.last.split("-").reverse().join(".")}` : "";
+  $("#schPdf").checked = SCH.pdf; $("#schAuto").checked = SCH.auto; $("#schAutoRange").value = SCH.auto_range || "2weeks";
+  const ru = d => d.split("-").reverse().join(".");
+  $("#schInfo").textContent = SCH.saved ? `сохранено ${SCH.updated} · пар: ${SCH.count} · ${ru(SCH.first)} — ${ru(SCH.last)}` : "";
+  const lim = $("#schLimit");   // сайт выложил расписание не до конца семестра — говорим об этом прямо
+  const pub = SCH.published_until || "";
+  lim.classList.toggle("hidden", !pub);
+  if (pub) lim.textContent = `На сайте СевГУ расписание этой группы выложено до ${ru(pub)}. Всё, что позже, программа сохранит, когда сайт его покажет (нажмите «Сохранить для офлайна» позже или оставьте автообновление включённым).`;
   $("#schEmpty").classList.toggle("hidden", SCH.saved); $("#schFrame").classList.toggle("hidden", !SCH.saved);
   if (SCH.saved && reloadFrame) $("#schFrame").src = fileUrl(SCH.dir + "/index.html") + "&v=" + Date.now() + themeHash();
 }
 function schPayload(start){
   const urls = {}; $$("#schUrls [data-url]").forEach(i => urls[i.dataset.url] = i.value.trim());
   return {schedule_group: $("#schGroup").value.trim(), schedule_sources: $$("#schSources [data-src]").filter(i => i.checked).map(i => i.dataset.src),
-          schedule_urls: urls, schedule_pdf: $("#schPdf").checked, schedule_auto: $("#schAuto").checked, start,
+          schedule_urls: urls, schedule_pdf: $("#schPdf").checked, schedule_auto: $("#schAuto").checked, schedule_auto_range: $("#schAutoRange").value, start,
           range: schRange, from: $("#schFrom").value, to: $("#schTo").value};
 }
 $$("#schRanges button").forEach(b => b.onclick = () => { schRange = b.dataset.r; $$("#schRanges button").forEach(x => x.classList.toggle("on", x === b)); $("#schCustom").classList.toggle("hidden", schRange !== "custom"); });
 $("#schSave").onclick = async () => { const p = schPayload(true); if (!p.schedule_sources.length) return toast("Выберите хотя бы один источник", "bad");
   if (schRange === "custom" && !(p.from && p.to)) return toast("Укажите даты «с» и «по»", "bad");
   const r = await api("/api/schedule/save", p); if (!r.ok) return toast(r.error || "Не удалось начать", "bad"); $("#dock").classList.remove("collapsed"); toast("Сохраняю расписание…"); };
-["#schPdf", "#schAuto"].forEach(id => $(id).onchange = () => api("/api/schedule/save", schPayload(false)));
+["#schPdf", "#schAuto", "#schAutoRange"].forEach(id => $(id).onchange = () => api("/api/schedule/save", schPayload(false)));
 $("#schGroup").onchange = async () => { await api("/api/schedule/save", schPayload(false)); loadSchedule(false); };
 $("#schOpen").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/index.html"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); });
 $("#schIcs").onclick = () => api("/api/open", {path: (SCH ? SCH.dir : "Расписание") + "/raspisanie.ics"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); else toast("Откроется программа календаря — подтвердите импорт"); });

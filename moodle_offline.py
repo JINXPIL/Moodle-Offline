@@ -86,7 +86,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.9.0"
+VERSION = "1.10.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -2995,6 +2995,8 @@ class Processor:
                 else:
                     self.pdf_fail += 1
                     self.rep.log("  PDF не получился (страница сохранена в HTML)", "warn")
+                    if self.pdf_fail == 1 and PDF_LAST_ERROR:
+                        self.rep.log(f"  причина: {PDF_LAST_ERROR}", "warn")
                     if self.pdf_fail >= 2:
                         self.browser = None
                         self.rep.log("  PDF отключён до конца запуска: браузер не печатает страницы.", "warn")
@@ -3044,37 +3046,70 @@ def _kill_tree(proc):
             pass
 
 
+def proc_exit_info(proc, errfile) -> str:
+    """«код 21: сообщение браузера» — чтобы в журнале была причина, а не просто «не запустился»."""
+    parts = []
+    rc = proc.returncode if proc is not None else None
+    if rc is not None:
+        parts.append(f"код выхода {rc & 0xFFFFFFFF if rc < 0 else rc}")
+    try:
+        errfile.seek(0)
+        raw = errfile.read()[-1500:].decode("utf-8", "replace")
+        msg = " ".join(x.strip() for x in raw.splitlines() if x.strip())[-260:]
+        if msg:
+            parts.append(f"браузер пишет: {msg}")
+    except (OSError, ValueError):
+        pass
+    return ", ".join(parts) or "без сообщения"
+
+
+PDF_LAST_ERROR = ""     # почему фоновый браузер не напечатал PDF (код выхода и его сообщение) — для журнала
+
+
 def html_to_pdf(browser: Path, html_path: Path, pdf_path: Path, timeout=45) -> bool:
     """HTML → PDF через установленный Edge/Chrome в фоновом режиме (без окон)."""
+    global PDF_LAST_ERROR
     tmp_pdf = pdf_path.with_name(pdf_path.name + ".tmp")
     out_arg = os.path.abspath(str(tmp_pdf))
-    for headless in ("--headless=new", "--headless"):
+    problems = []
+    # сначала полный набор ключей, потом «только самое нужное» — вдруг какой-то ключ запрещён политикой/антивирусом
+    for headless, minimal in (("--headless=new", False), ("--headless", False), ("--headless=new", True)):
         with tempfile.TemporaryDirectory(prefix="mo-pdf-") as prof:
-            cmd = [str(browser), headless, "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-                   "--disable-extensions", "--disable-background-networking", "--disable-component-update",
-                   "--disable-sync", "--disable-default-apps", "--mute-audio", "--no-sandbox",
-                   f"--user-data-dir={prof}", "--no-pdf-header-footer", "--print-to-pdf-no-header",
-                   "--allow-file-access-from-files", "--virtual-time-budget=8000",
-                   f"--print-to-pdf={out_arg}", Path(os.path.abspath(html_path)).as_uri()]
+            if minimal:
+                cmd = [str(browser), headless, "--no-first-run", f"--user-data-dir={prof}", "--no-pdf-header-footer",
+                       f"--print-to-pdf={out_arg}", Path(os.path.abspath(html_path)).as_uri()]
+            else:
+                cmd = [str(browser), headless, "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+                       "--disable-extensions", "--disable-background-networking", "--disable-component-update",
+                       "--disable-sync", "--disable-default-apps", "--mute-audio", "--no-sandbox",
+                       f"--user-data-dir={prof}", "--no-pdf-header-footer", "--print-to-pdf-no-header",
+                       "--allow-file-access-from-files", "--virtual-time-budget=8000",
+                       f"--print-to-pdf={out_arg}", Path(os.path.abspath(html_path)).as_uri()]
             try:
                 kw = {"creationflags": 0x08000000} if os.name == "nt" else {"start_new_session": True}
-                proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kw)
-                try:
-                    proc.wait(timeout=timeout)
-                except subprocess.TimeoutExpired:
-                    _kill_tree(proc)
+                with tempfile.TemporaryFile() as err:
+                    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=err, **kw)
                     try:
-                        proc.wait(timeout=10)
+                        proc.wait(timeout=timeout)
                     except subprocess.TimeoutExpired:
-                        pass
-                    funlink(tmp_pdf)
-                    return False   # браузер завис — второй вариант не пробуем, чтобы не терять время
-            except OSError:
-                pass
+                        _kill_tree(proc)
+                        try:
+                            proc.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            pass
+                        funlink(tmp_pdf)
+                        PDF_LAST_ERROR = f"браузер завис дольше {timeout} с"
+                        return False   # браузер завис — другие варианты не пробуем, чтобы не терять время
+                    if not (fexists(tmp_pdf) and fsize(tmp_pdf) > 0):
+                        problems.append(f"{headless}{' (минимально)' if minimal else ''}: {proc_exit_info(proc, err)}")
+            except OSError as e:
+                problems.append(f"{headless}: не запустился ({describe_error(e)})")
         if fexists(tmp_pdf) and fsize(tmp_pdf) > 0:
             freplace(tmp_pdf, pdf_path)
+            PDF_LAST_ERROR = ""
             return True
     funlink(tmp_pdf)
+    PDF_LAST_ERROR = "; ".join(problems)
     return False
 
 
@@ -4090,7 +4125,8 @@ def extra_sync(settings, vault, client, out, rep, control, notify_on=True):
                                     use_system_proxy=bool(settings.get("use_system_proxy")),
                                     page_delay=parse_delay(settings.get("page_delay"), PAGE_DELAY),
                                     creds=creds, cookies=sec.get("sso_cookies"))
-            job.run("2weeks")
+            rng = settings.get("schedule_auto_range")
+            job.run(rng if rng in sched.AUTO_RANGES else "2weeks")
             if job.cookies_out and settings.get("remember"):
                 vault.save_secret({**vault.load_secret(), "sso_cookies": job.cookies_out[-60:]})
         except (Stopped, KeyboardInterrupt):

@@ -20,8 +20,10 @@ python -m pip install --disable-pip-version-check -q requests beautifulsoup4 tqd
   || { say "Не получилось поставить библиотеки — проверьте интернет и запустите скрипт снова."; exit 1; }
 if python -m pip install --disable-pip-version-check -q pypdfium2 >/dev/null 2>&1; then
   say "   pypdfium2 поставлена: поиск читает текст внутри PDF."
+elif python -m pip install --disable-pip-version-check -q pypdf >/dev/null 2>&1; then
+  say "   pypdfium2 на этом телефоне не нашлась — взял запасную pypdf: поиск читает текст внутри PDF (чуть медленнее)."
 else
-  say "   pypdfium2 на этом телефоне не установилась — поиск найдёт PDF только по названию. Всё остальное работает."
+  say "   Библиотека чтения PDF не установилась — поиск найдёт PDF только по названию. Всё остальное работает."
 fi
 
 say "3/5. Доступ к памяти телефона (чтобы материалы были в папке «Документы»)…"
