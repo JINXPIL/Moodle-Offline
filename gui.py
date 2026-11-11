@@ -41,6 +41,7 @@ import iotapi
 import qr
 import reader
 import schedule as sched
+import xlsx_schedule as xs
 import transfer
 import updater
 
@@ -72,6 +73,11 @@ class GuiReporter(mo.Reporter):
         self.course_info = None
         self.item_info = None
         self.counts = {"new": 0, "skipped": 0, "failed": 0, "bytes": 0}
+        self.tot_bytes = 0                       # сколько байт скачано в этом запуске (для общей скорости)
+        self.samples = deque(maxlen=200)         # (время, tot_bytes) — раз в полсекунды
+        self._smp_t = 0.0
+        self.plan_courses = []                   # очередь курсов запуска: [{"id", "name", "state"}]
+        self._plan_ix = {}
 
     def emit(self, msg, level):
         with self.glock:
@@ -79,9 +85,23 @@ class GuiReporter(mo.Reporter):
             self.lines.append({"seq": self.seq, "t": datetime.now().strftime("%H:%M:%S"), "level": level,
                                "msg": msg.strip("\n")})
 
+    def plan(self, courses):
+        self.plan_courses = [{"id": c.id, "name": c.fullname or str(c.id), "state": "wait", "new": 0, "skip": 0, "fail": 0, "bytes": 0}
+                             for c in courses]
+        self._plan_ix = {p["id"]: p for p in self.plan_courses}
+
     def course(self, i, n, course):
         super().course(i, n, course)
+        for p in self.plan_courses:              # прежний курс закончен, этот — «сейчас»
+            if p["state"] == "now":
+                p["state"] = "done"
+        p = self._plan_ix.get(course.id)
+        if p:
+            p["state"] = "now"
+            if course.fullname:
+                p["name"] = course.fullname
         self.course_info = {"i": i, "n": n, "name": course.fullname, "id": course.id}
+        self.item_info = None
 
     def item(self, i, n, sec, it):
         super().item(i, n, sec, it)
@@ -90,14 +110,19 @@ class GuiReporter(mo.Reporter):
     def file_start(self, title, total, initial=0, quiet=False):
         now = time.monotonic()
         self.file = {"title": title, "total": total, "done": initial, "speed": 0.0, "_t": now, "_d": initial,
-                     "quiet": quiet}
+                     "_last": initial, "quiet": quiet}
 
     def file_progress(self, done):
         f = self.file
         if not f:
             return
-        f["done"] = done
+        if done > f["_last"]:
+            self.tot_bytes += done - f["_last"]
+        f["_last"] = f["done"] = done
         now = time.monotonic()
+        if now - self._smp_t >= 0.5:
+            self.samples.append((now, self.tot_bytes))
+            self._smp_t = now
         dt = now - f["_t"]
         if dt >= 0.4:
             inst = (done - f["_d"]) / dt
@@ -117,40 +142,72 @@ class GuiReporter(mo.Reporter):
         if waited_seconds > 60:
             mo.notify(mo.APP_NAME, "Moodle снова доступен! Продолжаю загрузку.")
 
+    def _plan_now(self):
+        return self._plan_ix.get((self.course_info or {}).get("id"))
+
     def saved(self, rel_out, title, size, status):
+        p = self._plan_now()
         if status in ("new", "page"):
             self.counts["new"] += 1
             self.counts["bytes"] += size or 0
+            if p:
+                p["new"] += 1
+                p["bytes"] += size or 0
         elif status in ("skipped", "copied"):
             self.counts["skipped"] += 1
+            if p:
+                p["skip"] += 1
         if status == "skipped":
             return
         with self.glock:
             self.dseq += 1
             self.downloads.appendleft({"id": self.dseq, "path": rel_out, "title": title, "size": size,
                                        "status": status, "t": datetime.now().strftime("%H:%M"),
-                                       "course": (self.course_info or {}).get("name", "")})
+                                       "course": (self.course_info or {}).get("name", ""),
+                                       "cid": (self.course_info or {}).get("id")})
 
     def failed(self, entry):
         self.counts["failed"] += 1
+        p = self._plan_now()
+        if p:
+            p["fail"] += 1
         with self.glock:
             self.dseq += 1
             self.downloads.appendleft({"id": self.dseq, "path": "", "title": entry.get("item", ""),
                                        "size": 0, "status": "fail", "error": entry.get("error", ""),
                                        "url": entry.get("url", ""), "t": datetime.now().strftime("%H:%M"),
-                                       "course": entry.get("course", "")})
+                                       "course": entry.get("course", ""), "cid": (self.course_info or {}).get("id")})
 
-    def snapshot(self, since):
+    def overall(self):
+        """Общий ход запуска: процент (по курсам и элементам), скорость за последние 10 с, скачано байт."""
+        ci, ii, f = self.course_info, self.item_info, self.file
+        if not ci:
+            return None
+        frac = 0.0
+        if ii and ii.get("n"):
+            part = (f["done"] / f["total"]) if f and f.get("total") else 0.0
+            frac = min(1.0, (ii["i"] - 1 + min(1.0, part)) / ii["n"])
+        pct = min(100.0, 100.0 * (ci["i"] - 1 + frac) / max(ci["n"], 1))
+        now = time.monotonic()
+        pts = [(t, b) for t, b in list(self.samples) if now - t <= 10.0]
+        speed = (self.tot_bytes - pts[0][1]) / max(now - pts[0][0], 1.0) if pts else 0.0
+        return {"pct": round(pct, 1), "ci": ci["i"], "cn": ci["n"], "bytes": self.tot_bytes, "speed": max(speed, 0.0)}
+
+    def snapshot(self, since, dsince=None):
         with self.glock:
             lines = [ln for ln in self.lines if ln["seq"] > since]
-            downloads = list(self.downloads)[:150]
+            # окно запоминает уже полученное и просит только новое (dsince); без него — последние 150, как раньше
+            downloads = list(self.downloads)[:150] if dsince is None else [d for d in self.downloads if d["id"] > dsince]
         f = self.file
         fs = None
         if f:
             eta = (f["total"] - f["done"]) / f["speed"] if f["total"] and f["speed"] > 1 else None
             fs = {"title": f["title"], "total": f["total"], "done": f["done"], "speed": f["speed"], "eta": eta}
         return {"lines": lines, "seq": self.seq, "downloads": downloads, "file": fs,
-                "course": self.course_info, "item": self.item_info, "counts": dict(self.counts)}
+                "course": self.course_info, "item": self.item_info, "counts": dict(self.counts),
+                "overall": self.overall(), "dseq": self.dseq,
+                "plan": [dict(p, state="done" if p["state"] == "now" and self.app.job_state == "idle" else p["state"])
+                         for p in self.plan_courses]}
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -883,7 +940,7 @@ class App:
         try:
             k = self._upd_kind()
             cfg = updater.run_check(self._upd_cfg(), mo.VERSION, k,
-                                    fetch=lambda cur: updater.fetch_latest(cur, bool(self.settings.get("use_system_proxy"))))
+                                    fetch=updater.fetch_latest)
             st = updater.status(cfg, mo.VERSION, k)
             if updater.should_notify(cfg, st):
                 cfg["notified"] = st["latest"]["tag"]
@@ -928,7 +985,8 @@ class App:
                 "titles": {k: v["title"] for k, v in sched.SOURCES.items()},
                 "pdf": bool(st.get("schedule_pdf", True)), "auto": bool(st.get("schedule_auto", True)),
                 "auto_range": st.get("schedule_auto_range") if st.get("schedule_auto_range") in sched.AUTO_RANGES else "2weeks",
-                "published_until": "", "saved": False, "count": 0, "updated": "", "first": "", "last": "", "dir": sched.SCHEDULE_DIR}
+                "published_until": "", "saved": False, "count": 0, "updated": "", "first": "", "last": "", "dir": sched.SCHEDULE_DIR,
+                "excel": self.excel_status()}
         try:
             sched.refresh_viewer(out / sched.SCHEDULE_DIR)      # после обновления программы страница сама получает новый вид
         except Exception:
@@ -969,6 +1027,109 @@ class App:
         return {"ok": bool(cache.get("departments")), "error": err, "offline": bool(err),
                 "departments": cache.get("departments", []), "current": dept,
                 "groups": cache["groups"].get(dept, []), "selected": self.settings.get("schedule_group") or sched.DEFAULT_GROUP}
+
+    # ── Excel-расписание университета ──
+    def excel_status(self):
+        st = self.settings
+        cfg = st.get("schedule_excel") or {}
+        out = Path(st.get("out_dir") or mo.DEFAULT_OUT)
+        info = {"mode": cfg.get("mode") if cfg.get("mode") in ("site", "local") else "auto",
+                "name": cfg.get("name") or "", "text": (cfg.get("sig") or {}).get("text", ""),
+                "ctx": " › ".join((cfg.get("sig") or {}).get("ctx", [])), "on": "excel" in (st.get("schedule_sources") or []),
+                "last": None}
+        try:
+            with mo.fopen(out / sched.SCHEDULE_DIR / "data" / "excel.json", "r", encoding="utf-8") as f:
+                d = json.load(f)
+            ls = d.get("lessons", [])
+            info["last"] = {"updated": d.get("updated", ""), "file": d.get("file", ""), "count": len(ls),
+                            "first": ls[0]["date"] if ls else "", "last": ls[-1]["date"] if ls else ""}
+        except (OSError, ValueError, KeyError, IndexError):
+            pass
+        return info
+
+    def _excel_enable(self):
+        src = list(self.settings.get("schedule_sources") or sched.DEFAULT_SOURCES)
+        if "excel" not in src:
+            src.append("excel")
+        self.settings["schedule_sources"] = src
+
+    def excel_links(self):
+        """Ссылки на Excel со страницы расписания университета — для выбора файла в окне."""
+        page = (self.settings.get("schedule_urls") or {}).get("excel") or sched.SOURCES["excel"]["url"]
+        if not sched.is_sevsu_url(page):
+            return {"ok": False, "error": "адрес страницы должен быть https на sevsu.ru", "links": [], "page": page}
+        try:
+            pu = urlparse(page)
+            c = mo.MoodleClient(f"{pu.scheme}://{pu.netloc}", page_delay=(0.2, 0.5), wait_minutes=1, control=mo.Control(),
+                                reporter=self.rep, use_system_proxy=bool(self.settings.get("use_system_proxy")))
+            c.no_wait = True
+            r = c.request("GET", page, kind="page")
+            if r.status_code >= 400:
+                return {"ok": False, "error": f"сайт ответил {r.status_code}", "links": [], "page": page}
+            links = sched.find_excel_links(c._text(r), r.url or page)
+        except Exception as e:
+            return {"ok": False, "error": mo.describe_error(e), "links": [], "page": page}
+        group = self.settings.get("schedule_group") or sched.DEFAULT_GROUP
+        ranked = sched.rank_excel(links, group)
+        top = ranked[0]["score"] if ranked else 0
+        for i, l in enumerate(ranked):
+            l["best"] = bool(top > 0 and l["score"] == top and i < 3)
+        cfg = (self.settings.get("schedule_excel") or {}).get("sig")
+        cur = sched.match_sig(links, cfg)
+        course, level = sched.excel_course(group)
+        return {"ok": True, "error": "", "page": page, "links": ranked, "current": cur["url"] if cur else "",
+                "hint": f"{course} курс, {level}" if course and level else ""}
+
+    def excel_choose(self, b):
+        url = str(b.get("url") or "")
+        if not sched.is_sevsu_url(url):
+            return {"ok": False, "error": "ссылка должна быть https на sevsu.ru"}
+        link = {"url": url, "file": b.get("file") or Path(unquote(urlparse(url).path)).name, "text": str(b.get("text") or ""),
+                "col": str(b.get("col") or ""), "ctx": [str(x) for x in (b.get("ctx") or [])][:4]}
+        with self.lock:
+            self.settings["schedule_excel"] = {"mode": "site", "sig": sched.link_sig(link), "name": link["file"], "url": url}
+            self._excel_enable()
+            self.save_settings()
+        return {"ok": True}
+
+    def excel_auto(self):
+        with self.lock:
+            self.settings.pop("schedule_excel", None)
+            self._excel_enable()
+            self.save_settings()
+        return {"ok": True}
+
+    def excel_upload(self, rfile, length, name):
+        """Файл Excel, выбранный на устройстве (если страницу университета не открыть или она изменилась)."""
+        if length <= 0 or length > sched.MAX_XLSX:
+            return {"ok": False, "error": "файл пустой или слишком большой для расписания"}
+        data = rfile.read(length) if length else b""
+        if len(data) != length:
+            return {"ok": False, "error": "файл передался не до конца — попробуйте ещё раз"}
+        group = self.settings.get("schedule_group") or sched.DEFAULT_GROUP
+        try:
+            names = xs.list_groups(xs.read_workbook(data))
+        except xs.XlsxError as e:
+            return {"ok": False, "error": str(e)}
+        if not names:
+            return {"ok": False, "error": "в таблице не нашёл блоков «Группа : …» — это не расписание занятий"}
+        if not any(xs.group_key(n) == xs.group_key(group) for n in names):
+            return {"ok": False, "error": f"в файле нет группы «{sched.group_name(group) or group}». В нём: " + ", ".join(names[:12])}
+        out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
+        self._write_bin(out / sched.SCHEDULE_DIR / "excel" / sched.LOCAL_XLSX, data)
+        with self.lock:
+            self.settings["schedule_excel"] = {"mode": "local", "name": mo.safe_filename(name or "") or sched.LOCAL_XLSX}
+            self._excel_enable()
+            self.save_settings()
+        return {"ok": True, "groups": len(names)}
+
+    @staticmethod
+    def _write_bin(path: Path, data: bytes):
+        mo.fmkdir(path.parent)
+        tmp = path.with_name(path.name + ".tmp")
+        with mo.fopen(tmp, "wb") as f:
+            f.write(data)
+        mo.freplace(tmp, path)
 
     # ── элективы ──
     def _el_creds(self, password=None, username=None):
@@ -1220,13 +1381,19 @@ class App:
                                     urls=st.get("schedule_urls"), pdf=bool(st.get("schedule_pdf", True)),
                                     use_system_proxy=bool(st.get("use_system_proxy")),
                                     page_delay=mo.parse_delay(st.get("page_delay"), mo.PAGE_DELAY),
-                                    creds=self._el_creds(), cookies=self._sso_cookies())
+                                    creds=self._el_creds(), cookies=self._sso_cookies(), excel=st.get("schedule_excel"))
             try:
                 res = job.run(params.get("range", "2weeks"), params.get("from"), params.get("to"))
             finally:
                 self._save_sso(job.cookies_out)
+                if job.excel_out:                   # файл нашли сами — запоминаем, чтобы в следующий раз не перебирать
+                    with self.lock:
+                        self.settings["schedule_excel"] = job.excel_out
+                        self.save_settings()
             text = (f"Расписание сохранено за {mo.fmt_dur(time.monotonic() - t0)}: {res['total']} пар "
                     f"({res['range'][0]} — {res['range'][1]})")
+            if res.get("per_source", {}).get("excel"):
+                text += f". Из Excel-таблицы взят весь семестр ({res['per_source']['excel']} пар)"
             if res.get("note"):
                 text += ". " + res["note"]
             self.last_result = {"ok": True, "text": text, "aborted": None, "kind": "schedule"}
@@ -1770,6 +1937,19 @@ def pick_folder(initial: str):
     return path or None
 
 
+EXT_MIME = {".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json",
+            ".html": "text/html", ".htm": "text/html", ".xml": "application/xml", ".svg": "image/svg+xml",
+            ".wasm": "application/wasm", ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf",
+            ".otf": "font/otf", ".webp": "image/webp", ".mp4": "video/mp4", ".webm": "video/webm",
+            ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".wav": "audio/wav", ".pdf": "application/pdf"}
+
+
+def guess_ctype(name: str) -> str:
+    ext = Path(name).suffix.lower()
+    ct = EXT_MIME.get(ext) or mimetypes.guess_type(name)[0] or "application/octet-stream"
+    return ct + "; charset=utf-8" if ct.startswith("text/") or ct in ("application/json", "application/xml") else ct
+
+
 def inside(base: Path, target: Path) -> bool:
     try:
         target.resolve().relative_to(base.resolve())
@@ -1864,12 +2044,59 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 r.close()
 
-    def _authorized(self, q) -> bool:
+    def _host_ok(self) -> bool:
         host = (self.headers.get("Host") or "").split(":")[0]
-        if host not in ("127.0.0.1", "localhost"):
-            return False   # защита от DNS-rebinding
-        tok = self.headers.get("X-Token") or q.get("t", "")
-        return secrets.compare_digest(tok, APP.token)
+        return host in ("127.0.0.1", "localhost")      # защита от DNS-rebinding
+
+    def _token_ok(self, tok: str) -> bool:
+        return self._host_ok() and secrets.compare_digest(tok or "", APP.token)
+
+    def _authorized(self, q) -> bool:
+        return self._token_ok(self.headers.get("X-Token") or q.get("t", ""))
+
+    def _serve_files(self, rel: str):
+        """Файл из папки с материалами. Докачка частями (Range) нужна видео и аудио: без неё их нельзя перематывать."""
+        out = Path(APP.settings.get("out_dir") or mo.DEFAULT_OUT)
+        target = out / rel
+        if not rel or not inside(out, target) or not target.is_file():
+            return self._send(404, {"error": "not found"})
+        try:
+            size = target.stat().st_size
+        except OSError:
+            return self._send(404, {"error": "not found"})
+        start, end, code = 0, size - 1, 200
+        m = re.match(r"bytes=(\d*)-(\d*)$", (self.headers.get("Range") or "").strip())
+        if m and (m.group(1) or m.group(2)):
+            if m.group(1):
+                start = int(m.group(1))
+                end = min(int(m.group(2)), size - 1) if m.group(2) else size - 1
+            else:                                   # «последние N байт»
+                start = max(0, size - int(m.group(2)))
+            if start >= size or start > end:
+                return self._send(416, b"", "text/plain", {"Content-Range": f"bytes */{size}"})
+            code = 206
+        self.send_response(code)
+        self.send_header("Content-Type", guess_ctype(target.name))
+        self.send_header("Content-Length", str(max(0, end - start + 1)))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        if code == 206:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        try:
+            with open(target, "rb") as f:
+                f.seek(start)
+                left = end - start + 1
+                while left > 0:
+                    chunk = f.read(min(262144, left))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    left -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
 
     def _body(self):
         n = int(self.headers.get("Content-Length") or 0)
@@ -1887,19 +2114,28 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, (UI_DIR / "index.html").read_bytes(), "text/html; charset=utf-8")
         if u.path == "/api/ping":
             return self._send(200, {"ok": self._authorized(q)})
+        if u.path.startswith("/f/"):
+            # Ключ — в самом адресе: относительные ссылки страницы (скрипты, стили, картинки, соседние разделы пакета)
+            # получают тот же префикс сами. С «?t=» они приходили без ключа, и страницы из курсов открывались пустыми.
+            tok, _, rel = u.path[3:].partition("/")
+            if not self._token_ok(unquote(tok)):
+                return self._send(403, {"error": "forbidden"})
+            return self._serve_files(unquote(rel))
         if not self._authorized(q):
             return self._send(403, {"error": "forbidden"})
         if u.path == "/api/state":
             if not APP.window_seen and android.is_apk():
                 APP.window_seen = True
                 print("Окно приложения подключилось к программе", flush=True)
-            return self._send(200, self.state(int(q.get("since", 0) or 0)))
+            return self._send(200, self.state(int(q.get("since", 0) or 0), int(q["dsince"]) if q.get("dsince", "").isdigit() else None))
         if u.path == "/api/courses":
             return self._send(200, APP.course_list())
         if u.path == "/api/course":
             return self._send(200, APP.course_structure(int(q.get("id", 0) or 0), live=q.get("live") == "1"))
         if u.path == "/api/schedule/groups":
             return self._send(200, APP.schedule_groups(q.get("dept") or None, bool(q.get("refresh"))))
+        if u.path == "/api/schedule/excel/links":
+            return self._send(200, APP.excel_links())
         if u.path == "/api/update":
             return self._send(200, APP.update_status())
         if u.path == "/api/schedule":
@@ -1938,14 +2174,7 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/reader/file":
             return self._send_reader_file(q.get("url", ""))
         if u.path.startswith("/files/"):
-            out = Path(APP.settings.get("out_dir") or mo.DEFAULT_OUT)
-            target = out / unquote(u.path[len("/files/"):])
-            if not inside(out, target) or not target.is_file():
-                return self._send(404, {"error": "not found"})
-            ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-            if ctype.startswith("text/"):
-                ctype += "; charset=utf-8"
-            return self._send(200, target.read_bytes(), ctype)
+            return self._serve_files(unquote(u.path[len("/files/"):]))
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -1958,6 +2187,8 @@ class Handler(BaseHTTPRequestHandler):
             cats = [c for c in (q.get("cats") or "").split(",") if c]
             return self._send(200, APP.transfer_upload(self.rfile, int(self.headers.get("Content-Length") or 0), cats,
                                                        q.get("force") == "1"))
+        if p == "/api/schedule/excel/upload":
+            return self._send(200, APP.excel_upload(self.rfile, int(self.headers.get("Content-Length") or 0), q.get("name", "")))
         b = self._body()
         if p == "/api/login":
             return self._send(200, APP.login(b.get("url", ""), b.get("username", ""), b.get("password", ""),
@@ -2044,6 +2275,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, APP.start_job({"kind": "schedule", "range": b.get("range", "2weeks"),
                                                       "from": b.get("from"), "to": b.get("to")}))
             return self._send(200, {"ok": True})
+        if p == "/api/schedule/excel/choose":
+            return self._send(200, APP.excel_choose(b))
+        if p == "/api/schedule/excel/auto":
+            return self._send(200, APP.excel_auto())
         if p == "/api/transfer/serve":
             return self._send(200, APP.transfer_serve(b.get("cats") or [], b.get("ip")))
         if p == "/api/transfer/stop":
@@ -2144,9 +2379,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True})
         return self._send(404, {"error": "not found"})
 
-    def state(self, since):
+    def state(self, since, dsince=None):
         APP.last_poll = time.monotonic()
-        snap = APP.rep.snapshot(since)
+        snap = APP.rep.snapshot(since, dsince)
         st = APP.settings
         return {
             "version": mo.VERSION,

@@ -61,7 +61,7 @@ DEFAULT_CATS = list(CAT_IDS)   # материалов может быть мно
 # Из settings.json переносится только это (остальное — вход, пути, прокси, токены — остаётся на своём устройстве).
 SETTINGS_KEYS = ("rules", "layout_dir", "layout_file", "mode", "original_names", "index_in_mode2", "course_ids",
                  "schedule_group", "schedule_sources", "schedule_urls", "schedule_pdf", "schedule_auto",
-                 "schedule_auto_range", "news", "calendar", "electives_url")
+                 "schedule_auto_range", "schedule_excel", "news", "calendar", "electives_url")
 _SECRET_KEY = re.compile(r"token|secret|passw|webhook|telegram|cookie|chat_id|bot_|api_?key", re.I)
 
 SERVICE_TOP = {"_бэкапы", "_debug", "Расписание", "Календарь", "Элективы", "снимки", "Перенос"}   # в корне папки сохранения — не курсы

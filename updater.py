@@ -1,7 +1,7 @@
 """Проверка обновлений самой программы. Только `requests` и стандартная библиотека; без Moodle-кода.
 
 Что делает: раз в сутки (или по кнопке) спрашивает у GitHub, какая версия последняя, и сравнивает со своей.
-Ходит ТОЛЬКО на api.github.com (последний релиз репозитория программы). Ничего о вас не отправляет:
+Ходит ТОЛЬКО на api.github.com (последний релиз репозитория программы; через системный прокси, если он есть). Ничего о вас не отправляет:
 ни пароля, ни имени, ни курсов — обычный запрос «какая версия последняя». GitHub видит только IP-адрес.
 Сама программа ничего не заменяет и не запускает: даёт ссылку на файл, а скачать и поставить — вам.
 Ссылки берутся только с github.com/JINXPIL/Moodle-Offline — любые другие из ответа выбрасываются.
@@ -121,19 +121,43 @@ def summarize(release: dict, k: str) -> dict:
             "notes": notes[:700] + ("…" if len(notes) > 700 else "")}
 
 
-def fetch_latest(current: str, use_system_proxy: bool = False, url: str | None = None, timeout: int = 15) -> dict:
-    """Один запрос «последний релиз». → ответ GitHub (dict). Ошибки — UpdateError с понятным текстом."""
+def _reason(e: Exception) -> str:
+    """Короткая причина сбоя связи простыми словами — чтобы было видно, что чинить."""
+    import requests
+    if isinstance(e, requests.exceptions.SSLError):
+        return "ошибка защищённого соединения (проверьте дату и время на компьютере, антивирус, прокси)"
+    if isinstance(e, requests.exceptions.ProxyError):
+        return "не работает прокси"
+    if isinstance(e, requests.exceptions.ConnectTimeout) or isinstance(e, requests.exceptions.ReadTimeout):
+        return "GitHub не ответил вовремя (возможно, он у вас не открывается без VPN/прокси)"
+    if isinstance(e, requests.exceptions.ConnectionError):
+        t = str(e).lower()
+        if "name or service" in t or "getaddrinfo" in t or "resolve" in t:
+            return "не нашёл адрес api.github.com (DNS или нет интернета)"
+        return "не удалось соединиться с api.github.com (нет интернета или он заблокирован)"
+    return type(e).__name__
+
+
+def fetch_latest(current: str, use_system_proxy: bool = True, url: str | None = None, timeout: int = 15) -> dict:
+    """Один запрос «последний релиз». → ответ GitHub (dict). Ошибки — UpdateError с понятным текстом.
+    GitHub — не сайт вуза, поэтому системный прокси/VPN используем (на Windows берётся из настроек системы);
+    если через прокси не вышло — один раз пробуем напрямую."""
     import requests
     url = url or API_URL                      # адрес подменяют только тесты
-    s = requests.Session()
-    s.trust_env = bool(use_system_proxy)
-    try:
-        r = s.get(url, timeout=timeout, headers={"Accept": "application/vnd.github+json",
-                                                  "User-Agent": f"MoodleOffline/{current}"})
-    except requests.RequestException:
-        raise UpdateError("нет связи с GitHub (проверьте интернет)") from None
-    finally:
-        s.close()
+    hdr = {"Accept": "application/vnd.github+json", "User-Agent": f"MoodleOffline/{current}"}
+    r, err = None, None
+    for env in ((True, False) if use_system_proxy else (False,)):
+        s = requests.Session()
+        s.trust_env = env
+        try:
+            r = s.get(url, timeout=timeout, headers=hdr)
+            break
+        except requests.RequestException as e:
+            err = e
+        finally:
+            s.close()
+    if r is None:
+        raise UpdateError("нет связи с GitHub: " + _reason(err)) from None
     if r.status_code == 404:
         raise UpdateError("на GitHub пока нет ни одного выпущенного релиза")
     if r.status_code in (403, 429):
