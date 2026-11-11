@@ -74,13 +74,14 @@ adb root > /dev/null 2>&1 || true
 adb wait-for-device
 sleep 3
 adb logcat -c
-adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p "$PKG"
+# после force-stop приложение «остановлено» и рассылки не получает; при настоящей перезагрузке такого состояния нет, поэтому разрешаем доставку явно
+adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p "$PKG" --include-stopped-packages
 for i in $(seq 1 15); do
   sleep 3
   adb logcat -d > "$OUT/logcat-boot.txt"
   grep -q "сервер приложения запущен" "$OUT/logcat-boot.txt" && break
 done
-if grep -q "сервер приложения запущен" "$OUT/logcat-boot.txt"; then echo "после BOOT_COMPLETED программа запустилась без окна: ДА"; else echo "после BOOT_COMPLETED программа запустилась без окна: НЕТ"; fail=1; grep -E "BootReceiver|ServerService|ForegroundService|MoodleOffline" "$OUT/logcat-boot.txt" | tail -15; fi
+if grep -q "сервер приложения запущен" "$OUT/logcat-boot.txt"; then echo "после BOOT_COMPLETED программа запустилась без окна: ДА"; else echo "после BOOT_COMPLETED программа запустилась без окна: НЕТ"; fail=1; grep -iE "moodleoffline" "$OUT/logcat-boot.txt" | tail -30; fi
 
 say "итог: $([ $fail -eq 0 ] && echo ОК || echo ПРОВАЛ)"
 exit $fail
