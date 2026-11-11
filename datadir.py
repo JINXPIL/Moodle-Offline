@@ -7,6 +7,9 @@
        Windows:        %LOCALAPPDATA%\\MoodleOffline
        Linux/Android:  ~/.local/share/moodle-offline
 При запуске из исходников всё остаётся рядом с кодом (как раньше), если не задана MOODLE_OFFLINE_DATA.
+На Android (Termux) программа всегда работает из исходников, поэтому данные лежат в папке пользователя (~/.local/share/moodle-offline),
+а не рядом с кодом: так вход и настройки переживают переустановку папки с программой. Материалы по умолчанию — в общей памяти телефона
+(~/storage/shared/Documents/Материалы Moodle, если выдан доступ к памяти), иначе в домашней папке Termux.
 
 При первом запуске новой версии программа сама ищет данные прошлой версии (папку `.moodle_offline`) и КОПИРУЕТ их:
 вход, настройки, список курсов для офлайна, расписание, ленту «Что нового». Старая папка не меняется и не удаляется.
@@ -19,6 +22,8 @@ import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+import android
 
 LEGACY_DIR = ".moodle_offline"          # так папка данных называлась раньше (и называется в portable-режиме)
 LEGACY_OUT = "Материалы Moodle"         # где по умолчанию лежали материалы рядом со старым .exe
@@ -51,19 +56,25 @@ def user_data_root(env=None, home: Path | None = None, os_name: str | None = Non
     return (Path(xdg) if xdg else home / ".local" / "share") / "moodle-offline"
 
 
-def default_materials(home: Path) -> Path:
+def default_materials(home: Path, on_android: bool = False) -> Path:
+    if on_android:
+        return android.default_materials(home, LEGACY_OUT)
     docs = home / "Documents"
     return (docs if docs.is_dir() else home) / LEGACY_OUT
 
 
-def make_plan(app_dir: Path, frozen: bool, env=None, home: Path | None = None, os_name: str | None = None) -> Plan:
+def make_plan(app_dir: Path, frozen: bool, env=None, home: Path | None = None, os_name: str | None = None,
+              on_android: bool | None = None) -> Plan:
     env = os.environ if env is None else env
     app_dir = Path(app_dir)
     home = Path(home) if home else Path.home()
+    on_android = android.is_android(env) if on_android is None else on_android
     custom = (env.get(ENV_DATA) or "").strip()
     if custom:
         d = Path(custom).expanduser()
         return Plan("custom", app_dir, d, d / LEGACY_OUT)
+    if on_android and not (app_dir / PORTABLE_FLAG).exists():
+        return Plan("user", app_dir, user_data_root(env, home, "posix"), default_materials(home, True))
     if not frozen:
         return Plan("dev", app_dir, app_dir / LEGACY_DIR, app_dir / LEGACY_OUT)
     if (app_dir / PORTABLE_FLAG).exists():
