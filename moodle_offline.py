@@ -86,7 +86,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.14.0"
+VERSION = "1.14.1"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -112,6 +112,7 @@ def prepare_data_dir(rep=None) -> dict | None:
     return info
 
 STATE_FILE = ".moodle_state.json"   # что уже скачано (для докачки и синхронизации)
+COURSE_JSON = ".course.json"       # структура курса в его папке (для окна курса; по ней же возвращаем курс в состояние)
 LOG_FILE = "_журнал.log"
 FAILED_FILE = "_не_скачано.txt"
 NEW_FILE = "_новое.txt"
@@ -3891,6 +3892,59 @@ def write_course_json(course: Course, layout: Layout):
                  "online_only": it.online_only, "error": it.error, "files": it.files} for it in s.items]}
                 for s in course.sections]}
     write_text_atomic(layout.course_dir / ".course.json", json.dumps(data, ensure_ascii=False, indent=1))
+
+
+def adopt_courses(out: Path) -> list:
+    """Курсы, которые лежат в папке сохранения (в папке курса есть .course.json), но не записаны в .moodle_state.json.
+    Так бывает после «Переноса данных» (файлы курса приходят, а память программы — нет) и после копирования папки вручную.
+    Окно курса и карточки считают курс скачанным только по записи в состоянии, поэтому дописываем её из .course.json.
+    Чужие записи не трогаем, файлы не качаем и не удаляем. Возвращает названия добавленных курсов."""
+    try:
+        tops = sorted(os.scandir(fsp(out)), key=lambda e: e.name)
+    except OSError:
+        return []
+    found = []
+    for e in tops:
+        if e.name.startswith((".", "_")):
+            continue
+        try:
+            if not e.is_dir() or not os.path.isfile(os.path.join(e.path, COURSE_JSON)):
+                continue
+        except OSError:
+            continue
+        found.append(e)
+    if not found:
+        return []
+    state = State(out / STATE_FILE)
+    known_ids = set(state.data["courses"])
+    known_dirs = {str(v.get("dir") or "").lower() for v in state.data["courses"].values() if isinstance(v, dict)}
+    added = []
+    for e in found:
+        if e.name.lower() in known_dirs:
+            continue
+        try:
+            with fopen(out / e.name / COURSE_JSON, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            cid = str(int(d["id"]))
+            sections = d.get("sections") or []
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if cid in known_ids:
+            continue
+        n_files = sum(len(it.get("files") or []) for sec in sections for it in sec.get("items") or [])
+        try:
+            when = d.get("updated") or datetime.fromtimestamp(os.stat(os.path.join(e.path, COURSE_JSON)).st_mtime).strftime("%d.%m.%Y %H:%M")
+        except OSError:
+            when = ""
+        name = d.get("fullname") or e.name
+        with state.lock:
+            state.data["courses"][cid] = {"name": name, "dir": e.name, "files": n_files, "updated": when, "mode": d.get("mode", 1)}
+        known_ids.add(cid)
+        known_dirs.add(e.name.lower())
+        added.append(name)
+    if added:
+        state.save(force=True)
+    return added
 
 
 def write_root_index(out: Path, state: State):
