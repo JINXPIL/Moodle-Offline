@@ -247,6 +247,7 @@ class App:
         self.reader_lock = threading.Lock()     # читалка: по одному запросу к Moodle за раз
         self.electives_checked = 0.0
         self.upd_lock = threading.Lock()      # одна проверка обновлений за раз
+        self.upd_install = {"state": "idle", "done": 0, "total": 0, "error": "", "version": ""}   # установка новой версии (только .exe)
         self.offline = {"reason": "", "since": "", "cached": ""}   # офлайн-режим: работаем с сохранённым
         self.relogin_tried = 0.0
         self.tracker = watch.Tracker()          # упал / ожил: по ряду проверок
@@ -953,8 +954,86 @@ class App:
     def _upd_kind(self) -> str:
         return updater.kind(frozen=bool(getattr(sys, "frozen", False)), apk=android.is_apk(), android=ANDROID)
 
+    def _exe_path(self) -> str:
+        return os.path.abspath(sys.executable)
+
     def update_status(self) -> dict:
-        return {"ok": True, **updater.status(self._upd_cfg(), mo.VERSION, self._upd_kind())}
+        st = updater.status(self._upd_cfg(), mo.VERSION, self._upd_kind())
+        lt = st.get("latest") or {}
+        # «Обновить сейчас» есть только у Windows-программы (.exe), когда в релизе есть и файл, и контрольная сумма, и рядом можно писать
+        can = bool(st["kind"] == "exe" and st["newer"] and lt.get("asset_url") and lt.get("sha_url") and updater.can_write_next_to(self._exe_path()))
+        with self.lock:
+            inst = dict(self.upd_install)
+        return {"ok": True, **st, "can_install": can, "install": inst}
+
+    def update_install_start(self) -> dict:
+        """Скачать новую версию в фоне (рядом с программой), проверить контрольную сумму. Подмена и перезапуск — отдельной кнопкой."""
+        st = self.update_status()
+        if not st["can_install"]:
+            return {"ok": False, "error": "Из программы обновиться нельзя (не Windows-версия, нет файла в релизе или папку программы нельзя менять) — скачайте файл вручную."}
+        with self.lock:
+            if self.upd_install["state"] in ("downloading", "ready"):
+                return {"ok": True, **self.update_status_unlocked()}
+            self.upd_install = {"state": "downloading", "done": 0, "total": 0, "error": "", "version": st["latest"]["version"]}
+        threading.Thread(target=self._update_install_job, args=(st["latest"],), daemon=True).start()
+        return {"ok": True, **self.update_status()}
+
+    def update_status_unlocked(self) -> dict:
+        return {"install": dict(self.upd_install)}
+
+    def _update_install_job(self, lt: dict) -> None:
+        exe = self._exe_path()
+        proxy = bool(self.settings.get("use_system_proxy", True))
+
+        def prog(done, total):
+            with self.lock:
+                self.upd_install["done"], self.upd_install["total"] = done, total
+
+        try:
+            sha = updater.fetch_expected_sha(lt.get("sha_url", ""), mo.VERSION, proxy)
+            updater.download_verified(lt["asset_url"], updater.new_path(exe), sha, int(lt.get("size") or 0), progress=prog,
+                                      stop=lambda: self.shutdown.is_set(), current=mo.VERSION, use_system_proxy=proxy)
+            with self.lock:
+                self.upd_install["state"] = "ready"
+            self.rep.log(f"Новая версия {lt['version']} скачана и проверена. Нажмите «Перезапустить и обновить».")
+        except updater.UpdateError as e:
+            with self.lock:
+                self.upd_install = {"state": "error", "done": 0, "total": 0, "error": str(e), "version": lt.get("version", "")}
+            self.rep.log(f"Обновление не скачалось: {e}", "warn")
+        except Exception as e:                                        # noqa: BLE001 — любая неожиданность не должна оставить «скачиваю…» навсегда
+            with self.lock:
+                self.upd_install = {"state": "error", "done": 0, "total": 0, "error": f"{type(e).__name__}: {e}", "version": lt.get("version", "")}
+            self.rep.log(f"Обновление не скачалось: {type(e).__name__}: {e}", "warn")
+
+    def update_restart(self) -> dict:
+        """Подменить программу скачанным файлом и запустить новую; эта копия закрывается (идущая загрузка останавливается и продолжится позже)."""
+        with self.lock:
+            ready = self.upd_install["state"] == "ready"
+        exe = self._exe_path()
+        if not ready or not os.path.exists(updater.new_path(exe)):
+            return {"ok": False, "error": "Новая версия ещё не скачана"}
+        try:
+            updater.swap_exe(exe, updater.new_path(exe))
+        except updater.UpdateError as e:
+            with self.lock:
+                self.upd_install = {"state": "error", "done": 0, "total": 0, "error": str(e), "version": ""}
+            return {"ok": False, "error": str(e)}
+        err = ""
+        try:
+            updater.launch(exe)
+        except updater.UpdateError as e:
+            err = str(e)
+        if err:                                   # файл уже новый, но сам не запустился: эту копию не закрываем, пусть человек решит
+            return {"ok": False, "error": err}
+        self.rep.log("Перезапускаюсь в новую версию…")
+
+        def _bye():
+            time.sleep(0.8)                       # дать ответу уйти в окно
+            if self.control:
+                self.control.stop()
+            self.shutdown.set()
+        threading.Thread(target=_bye, daemon=True).start()
+        return {"ok": True}
 
     def update_brief(self) -> dict:
         """Для общего состояния окна: без сети, только «есть ли новая версия»."""
@@ -2272,7 +2351,8 @@ class Handler(BaseHTTPRequestHandler):
         if u.path in ("/", "/index.html"):
             return self._send(200, (UI_DIR / "index.html").read_bytes(), "text/html; charset=utf-8")
         if u.path == "/api/ping":
-            return self._send(200, {"ok": self._authorized(q)})
+            ok = self._authorized(q)
+            return self._send(200, {"ok": ok, **({"version": mo.VERSION, "pid": os.getpid()} if ok else {})})
         if u.path.startswith("/f/"):
             # Ключ — в самом адресе: относительные ссылки страницы (скрипты, стили, картинки, соседние разделы пакета)
             # получают тот же префикс сами. С «?t=» они приходили без ключа, и страницы из курсов открывались пустыми.
@@ -2392,6 +2472,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True})
         if p == "/api/update/check":
             return self._send(200, APP.update_check(True))
+        if p == "/api/update/install":
+            return self._send(200, APP.update_install_start())
+        if p == "/api/update/restart":
+            return self._send(200, APP.update_restart())
         if p == "/api/update/settings":
             return self._send(200, APP.update_settings(b))
         if p == "/api/rules/save":
@@ -2606,17 +2690,45 @@ def open_window(url: str):
     webbrowser.open(url)
 
 
-def existing_instance():
+def running_instance():
+    """Уже запущенная копия программы (по gui.json + проверка связи). → {url, port, token, version, pid} или None.
+    version — None, если копия настолько старая, что не сообщает версию."""
     info = mo.DATA_DIR / "gui.json"
     try:
         d = json.loads(info.read_text(encoding="utf-8"))
         import urllib.request
         with urllib.request.urlopen(f"http://127.0.0.1:{d['port']}/api/ping?t={d['token']}", timeout=2) as r:
-            if json.loads(r.read()).get("ok"):
-                return f"http://127.0.0.1:{d['port']}/?t={d['token']}"
+            j = json.loads(r.read())
+        if j.get("ok"):
+            return {"url": f"http://127.0.0.1:{d['port']}/?t={d['token']}", "port": d["port"], "token": d["token"],
+                    "version": j.get("version"), "pid": j.get("pid") or d.get("pid")}
     except Exception:
         return None
     return None
+
+
+def existing_instance():
+    r = running_instance()
+    return r["url"] if r else None
+
+
+def hand_off(old: dict, timeout: float = 75.0) -> bool:
+    """Новая версия просит прежнюю (ещё работающую в фоне) закрыться и ждёт, пока та освободит место. → True, если место свободно.
+    Иначе (раньше так и было) запуск новой версии просто открывал окно старой, и казалось, что обновление «не встало»."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{old['port']}/api/quit?t={old['token']}", data=b"{}", method="POST",
+                                     headers={"Content-Type": "application/json", "X-Token": old["token"]})
+        urllib.request.urlopen(req, timeout=5).read()
+    except Exception:
+        pass                                        # возможно, она уже закрывается — это видно ниже
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        cur = running_instance()
+        if not cur or cur["port"] != old["port"]:
+            return True
+        time.sleep(0.5)
+    return False
 
 
 def gui_main(no_window=False, port=0, keep_running=False, on_ready=None):
@@ -2624,11 +2736,23 @@ def gui_main(no_window=False, port=0, keep_running=False, on_ready=None):
     mo.ensure_console_utf8()
     mo.load_env()
     migrated = mo.prepare_data_dir()
-    url = existing_instance()
-    if url and not no_window:
-        print("Программа уже запущена — открываю окно.")
-        open_window(url)
-        return 0
+    old = running_instance() if not no_window else None
+    if old:
+        ov = old.get("version")
+        if ov == mo.VERSION or (ov and updater.is_newer(ov, mo.VERSION)):
+            # та же (или более новая) версия уже работает — просто открываем её окно
+            print("Программа уже запущена — открываю окно." if ov == mo.VERSION else
+                  f"Уже работает более новая версия {ov} (этот файл — {mo.VERSION}) — открываю её окно.")
+            open_window(old["url"])
+            return 0
+        # прежняя версия ещё работает (например, свёрнута или докачивает): просим её закрыться и запускаем эту
+        print(f"Работает прежняя версия {ov or 'старее 1.16.2'} — прошу её закрыться (текущая загрузка остановится и продолжится позже).")
+        if not hand_off(old):
+            print("Прежняя версия не закрылась за 75 секунд — открываю её окно. Закройте её кнопкой «Остановить программу» и запустите новую снова.")
+            open_window(old["url"])
+            return 1
+    if getattr(sys, "frozen", False):
+        updater.cleanup(os.path.abspath(sys.executable))        # остатки обновления рядом с программой (прежний файл, недокачанное)
     APP = App()
     if migrated:
         APP.rep.log(f"Данные прошлой версии перенесены из {migrated['from']} (файлов: {migrated['files']}). Старая папка осталась как была.")

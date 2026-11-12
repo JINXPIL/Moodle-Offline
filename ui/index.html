@@ -2477,7 +2477,7 @@ $("#electivesView").addEventListener("click", async e => {
 });
 
 /* ── обновление программы ── */
-let UPD = null, updBarTag = "", updDismissed = "";
+let UPD = null, updBarTag = "", updDismissed = "", updPoll = 0;
 const updTs = t => t ? new Date(t * 1000).toLocaleString("ru-RU", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) : "";
 function renderUpd(u){
   UPD = u; const lt = u.latest || {};
@@ -2492,11 +2492,41 @@ function renderUpd(u){
   if (!u.newer) { box.innerHTML = ""; return; }
   box.innerHTML = `<b>Версия ${esc(lt.version)}</b>${lt.published ? " · " + esc(lt.published) : ""}${lt.size ? " · " + hsize(lt.size) : ""}`
     + `<div class="hint">${esc(u.how)}</div>`
+    + updInstallHtml(u)
     + (lt.notes ? `<details><summary>Что изменилось</summary><pre class="updnotes">${esc(lt.notes)}</pre></details>` : "")
-    + `<div class="acts">${lt.asset_url ? `<button class="btn primary" data-url="${esc(lt.asset_url)}">Скачать ${esc(lt.asset_name)}</button>` : ""}`
+    + `<div class="acts">${u.can_install ? "" : (lt.asset_url ? `<button class="btn primary" data-url="${esc(lt.asset_url)}">Скачать ${esc(lt.asset_name)}</button>` : "")}`
+    + (u.can_install && lt.asset_url ? `<button class="btn" data-url="${esc(lt.asset_url)}">Скачать файл вручную</button>` : "")
     + `<button class="btn" data-url="${esc(lt.page)}">Страница версии</button>`
     + `<button class="btn ghost" id="updSkip">${u.skipped ? "Снова напоминать" : "Пропустить эту версию"}</button></div>`;
   $("#updSkip").onclick = async () => { renderUpd(await api("/api/update/settings", {skip: u.skipped ? "" : lt.tag})); updBarTag = ""; };
+  const ib = $("#updInstall"); if (ib) ib.onclick = updInstall;
+  const rb = $("#updRestart"); if (rb) rb.onclick = updRestart;
+  clearTimeout(updPoll);
+  if (u.install && u.install.state === "downloading") updPoll = setTimeout(loadUpd, 700);     // пока качается — показываем ход
+}
+/* «Обновить сейчас» (только Windows-программа): скачать → проверить → перезапустить */
+function updInstallHtml(u){
+  if (!u.can_install) return "";
+  const i = u.install || {state: "idle"};
+  if (i.state === "downloading") {
+    const pct = i.total ? Math.min(100, Math.round(i.done * 100 / i.total)) : 0;
+    return `<div class="acts"><button class="btn primary" disabled>Скачиваю… ${pct}%</button></div><div class="bar"><i style="width:${pct}%"></i></div>`
+      + `<div class="hint">${hsize(i.done)}${i.total ? " из " + hsize(i.total) : ""}. Можно пользоваться программой — после загрузки появится кнопка перезапуска.</div>`;
+  }
+  if (i.state === "ready") return `<div class="hint">Новая версия скачана и проверена (контрольная сумма совпала).</div><div class="acts"><button class="btn primary" id="updRestart">Перезапустить и обновить</button></div>`;
+  return (i.state === "error" ? `<div class="hint" style="color:var(--bad)">Не получилось: ${esc(i.error)}</div>` : "")
+    + `<div class="acts"><button class="btn primary" id="updInstall">Обновить сейчас</button></div>`;
+}
+async function updInstall(){
+  const r = await api("/api/update/install", {});
+  if (r.ok === false) toast(r.error || "Не получилось начать", "bad");
+  loadUpd();
+}
+async function updRestart(){
+  if (!confirm("Программа закроется и сразу откроется новая версия. Идущая сейчас загрузка остановится и продолжится после запуска (нажмите «Скачать» ещё раз). Продолжить?")) return;
+  const r = await api("/api/update/restart", {});
+  if (r.ok) { toast("Перезапускаюсь… откроется новое окно, это окно можно закрыть", "ok"); $("#updNew").innerHTML = "<b>Перезапуск…</b><div class=\"hint\">Откроется новое окно программы. Это окно можно закрыть.</div>"; }
+  else { toast(r.error || "Не получилось обновить", "bad"); loadUpd(); }
 }
 async function loadUpd(){ try { renderUpd(await api("/api/update")); } catch (e) {} }
 $("#updCheck").onclick = async () => {
@@ -2520,9 +2550,10 @@ async function renderUpdBar(b){
   if (!u.newer || u.skipped) { bar.classList.add("hidden"); return; }
   const lt = u.latest;
   bar.innerHTML = `<div class="ut"><b>Вышла новая версия ${esc(lt.version)}</b><div class="s">У вас ${esc(u.current)}. Вход, настройки и материалы сохранятся.</div></div>`
-    + `<div class="acts">${lt.asset_url ? `<button class="btn primary" data-url="${esc(lt.asset_url)}">Скачать</button>` : `<button class="btn primary" id="updHow">Как обновить</button>`}`
+    + `<div class="acts">${u.can_install ? `<button class="btn primary" id="updNow">Обновить</button>` : lt.asset_url ? `<button class="btn primary" data-url="${esc(lt.asset_url)}">Скачать</button>` : `<button class="btn primary" id="updHow">Как обновить</button>`}`
     + `<button class="btn" id="updMore">Подробнее</button><button class="btn ghost" id="updLater">Позже</button></div>`;
   const how = $("#updHow"); if (how) how.onclick = goUpdPanel;
+  const now = $("#updNow"); if (now) now.onclick = async () => { bar.classList.add("hidden"); goUpdPanel(); await updInstall(); };
   $("#updMore").onclick = () => { bar.classList.add("hidden"); goUpdPanel(); };
   $("#updLater").onclick = () => { updDismissed = lt.tag; bar.classList.add("hidden"); };
   bar.classList.remove("hidden");
