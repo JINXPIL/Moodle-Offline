@@ -25,6 +25,10 @@ for i in $(seq 1 100); do
 done
 grep -E "SELFTEST|FATAL|Traceback|AndroidRuntime" "$OUT/logcat.txt" | tee "$OUT/selftest.txt"
 if grep -q "SELFTEST DONE ok=[0-9]* fail=0" "$OUT/selftest.txt"; then echo "самопроверка: ПРОЙДЕНА"; else echo "самопроверка: НЕ ПРОЙДЕНА"; fail=1; fi
+# какой Python внутри этого варианта (EXPECT_PY, например 3.11): так видно, что собран именно тот вариант, который заявлен
+if [ -n "${EXPECT_PY:-}" ]; then
+  if grep -q "SELFTEST OK libs: Python ${EXPECT_PY}\." "$OUT/selftest.txt"; then echo "Python в приложении ${EXPECT_PY}: ДА"; else echo "Python в приложении ${EXPECT_PY}: НЕТ"; fail=1; fi
+fi
 
 # снимок экрана печатаем в журнал уменьшенным и в base64: так его можно посмотреть, не скачивая артефакты
 show_image() {

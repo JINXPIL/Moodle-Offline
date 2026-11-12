@@ -45,8 +45,21 @@ android {
         targetSdk = 34
         versionCode = vp[0] * 10000 + vp[1] * 100 + vp[2]
         versionName = appVersion
-        // Python 3.13 в Chaquopy есть только для 64-битных процессоров: arm64-v8a (почти все телефоны) и x86_64 (эмулятор)
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+    }
+
+    // Варианты сборки по процессору. В Chaquopy 32-битные процессоры (armeabi-v7a, x86) есть только с Python 3.11 и старше,
+    // а Python 3.12+ — только 64-битные; и в одном приложении может быть одна версия Python. Поэтому:
+    //   arm64     — Python 3.13, только arm64-v8a: почти все телефоны с 2017 года (самый маленький файл);
+    //   arm32     — Python 3.11, только armeabi-v7a: старые 32-битные телефоны;
+    //   x64       — Python 3.13, только x86_64: эмуляторы и ChromeOS (на нём же проверяем сборку на GitHub);
+    //   universal — Python 3.11, все четыре процессора: один файл для любого устройства (он же MoodleOffline.apk в Releases).
+    // Подпись, applicationId и versionCode у всех одинаковые, поэтому один вариант ставится поверх другого с сохранением данных.
+    flavorDimensions += "cpu"
+    productFlavors {
+        create("arm64") { dimension = "cpu"; ndk { abiFilters += listOf("arm64-v8a") } }
+        create("arm32") { dimension = "cpu"; ndk { abiFilters += listOf("armeabi-v7a") } }
+        create("x64") { dimension = "cpu"; ndk { abiFilters += listOf("x86_64") } }
+        create("universal") { dimension = "cpu"; ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") } }
     }
 
     signingConfigs {
@@ -89,6 +102,12 @@ chaquopy {
             install("python-dotenv")
             install("pypdf")
         }
+    }
+    // 32-битные процессоры есть в Chaquopy только с Python 3.11 — для них (и для универсального файла) берём его.
+    // Код программы одинаково работает на 3.11 и 3.13 (проверено: все модульные проверки на обеих версиях).
+    productFlavors {
+        getByName("arm32") { version = "3.11" }
+        getByName("universal") { version = "3.11" }
     }
     sourceSets { getByName("main") { srcDir(pyOut) } }
 }
