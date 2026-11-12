@@ -255,6 +255,7 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .mres button:hover{border-color:var(--accent);color:var(--accent)}
 .schedframe{width:100%;height:100%;flex:1;min-height:420px;border:0;border-radius:var(--r);background:var(--surface)}
 .schhead,.schback{display:none}
+.dlbtn,.topprog,#dockClose{display:none}
 .xl-list{margin-top:8px;border:1px solid var(--line);border-radius:10px;max-height:260px;overflow:auto}
 .xl-row{display:block;width:100%;text-align:left;padding:8px 10px;border:0;border-top:1px solid var(--line);background:transparent;cursor:pointer;color:var(--text);font:inherit}
 .xl-row:first-child{border-top:0}.xl-row:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
@@ -438,7 +439,27 @@ body.android .no-android{display:none!important}
   .brand{order:1;white-space:nowrap;gap:8px}
   .spacer{display:none}
   #net{order:2;flex:1 1 0;min-width:0}   /* статус сервера — в той же строке, а не отдельной */
-  .user{order:3}#themeBtn{order:4}
+  .dlbtn{order:3}.user{order:4}#themeBtn{order:5}
+  #ip{display:none}                      /* IP и страна: при VPN всё равно выводится плашка-предупреждение ниже шапки, а здесь IP съедал место у статуса */
+  .user .avatar{display:none}
+  /* «Загрузки» — значок в шапке: идёт загрузка — на нём процент, под шапкой тонкая полоска; нажать — открывается панель на весь экран */
+  .dlbtn{display:inline-flex;align-items:center;justify-content:center;position:relative;flex:none;color:var(--text)}
+  .dlbtn svg{flex:none}
+  .dlbtn .dlpct{display:none;font:700 12px var(--font-display);font-variant-numeric:tabular-nums}
+  .dlbtn.busy{width:auto;padding:0 10px 0 8px;gap:3px;border-radius:20px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+  .dlbtn.busy .dlpct{display:inline}
+  .dlbtn[data-st=paused],.dlbtn[data-st=stopping],.dlbtn[data-st=waiting_window]{background:color-mix(in srgb,var(--warn) 20%,transparent);color:color-mix(in srgb,var(--warn) 80%,var(--text))}
+  .dlbtn[data-st=waiting_network]{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+  .dlbtn .dlmark{display:none;position:absolute;top:5px;right:5px;width:10px;height:10px;border-radius:50%;border:2px solid var(--surface-solid);background:var(--ok)}
+  .dlbtn.mark .dlmark{display:block}.dlbtn.mark.bad .dlmark{background:var(--bad)}
+  .dlbtn.ping{animation:dlping .9s ease-out 1}
+  @keyframes dlping{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}100%{box-shadow:0 0 0 14px transparent}}
+  .topprog{display:block;position:absolute;left:0;right:0;bottom:-1px;height:3px;overflow:hidden;opacity:0;transition:opacity .2s;pointer-events:none}
+  .topprog.on{opacity:1}
+  .topprog i{display:block;height:100%;width:0;background:var(--accent);border-radius:0 3px 3px 0;transition:width .35s}
+  .topprog.indet i{width:30%;animation:ind 1.3s ease-in-out infinite}
+  .topprog[data-st=paused] i,.topprog[data-st=stopping] i,.topprog[data-st=waiting_window] i{background:var(--warn)}
+  .topprog[data-st=waiting_network] i{background:var(--bad)}
   /* вкладки — нижняя панель, как в обычных приложениях: пальцем дотянуться удобнее, и ничего не обрезается */
   :root{--bnav-h:58px}
   body{padding-bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom))}
@@ -452,7 +473,7 @@ body.android .no-android{display:none!important}
   .mtabs button.on{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);box-shadow:none}
   .mtabs .nbadge{position:absolute;top:1px;left:calc(50% + 4px);margin:0;min-width:16px;height:16px;line-height:16px;font-size:10px;padding:0 4px}
   #ip{order:7}
-  .pill{max-width:100%;min-width:0}
+  .pill{max-width:100%;min-width:0;padding:0 10px;gap:6px}
   .pill .txt{overflow:hidden;text-overflow:ellipsis}
   .user span#uname{display:none}
   .pop{right:12px;left:12px;width:auto;top:100px}
@@ -478,13 +499,23 @@ body.android .no-android{display:none!important}
   .toasts{left:12px;right:12px;bottom:12px}
   .updbar{margin:8px 12px 0}
   .toast{max-width:none}
-  .dock{position:sticky;bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom));z-index:20;background:var(--surface-solid)}   /* не просвечивает: под ней прокручивается страница */
-  .dock-head{padding:6px 12px;gap:4px 8px;flex-wrap:wrap;cursor:pointer}
-  .dock-head h3{font-size:13px}
-  .dock.collapsed .tab{display:none}
-  .dock.collapsed .tabs{margin-left:auto}
-  .dock .tabs{width:auto}
-  .dock-body{height:auto;max-height:38vh;grid-template-columns:1fr;overflow:auto}
+  /* панель «Загрузки» — лист на весь экран: открывается значком в шапке, закрывается крестиком или системным «Назад»; внизу страницы ничего не висит */
+  .dock{position:fixed;inset:0;z-index:48;border:0;background:var(--surface-solid);backdrop-filter:none;padding-top:env(safe-area-inset-top)}
+  .dock.collapsed{display:none}
+  .dock-head{padding:10px 12px 8px;gap:6px 8px;flex-wrap:wrap;cursor:default;flex:none}
+  .dock-head h3{order:1;font-size:17px}
+  .dock-head .state{order:2}
+  #dockClose{order:3;display:grid;margin-left:auto;color:var(--text)}
+  .dock-head .counts{order:4;flex:1 1 100%}
+  .dock-head .counts:empty{display:none}
+  .dock .tabs{order:5;flex:1 1 100%;margin:0;width:auto;background:var(--bg2);border-radius:10px;padding:3px}
+  .dock .tabs .tab{flex:1;min-width:0}
+  #collapse{display:none}
+  .dock-head .ovp{order:6}
+  .dock-body{flex:1;min-height:0;height:auto;max-height:none;display:flex;flex-direction:column;overflow:hidden}
+  .dock-body .list,.dock-body .log{flex:1 1 auto;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch}
+  .dock .now{display:flex;flex:none;padding:10px 12px;gap:6px}   /* в @media 980 .now скрыт — на телефоне в листе он нужен: там «Пауза» и «Стоп» */
+  .dock .now.idle{display:none}
   /* курс: кнопки «Открыть здесь / На сайте» — под текстом, а не справа (справа они съедали ширину, и текст шёл по слову в строке) */
   .mi{grid-template-columns:36px minmax(0,1fr);gap:4px 10px;padding:10px 12px}
   .mi .side-b{grid-column:2;flex-wrap:wrap;gap:6px!important}
@@ -498,16 +529,22 @@ body.android .no-android{display:none!important}
   .cv-info{padding:12px}
   .cv-acts{margin-left:0;width:100%}
   .schedframe{flex:none}
-  /* расписание — на всю высоту экрана: сверху шапка, снизу «Загрузки» и вкладки (их высоту ставит скрипт) */
+  /* расписание — на весь экран: сверху шапка, снизу вкладки, посередине выбор расписания и само расписание без полей по бокам.
+     Страница при этом не прокручивается (иначе прокрутка расписания «цепляла» бы страницу), а настройки (другие группы, источники, период) — отдельный лист на весь экран */
   #scheduleView .toolbar{display:none}
-  .schhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
-  .schhead b{font:600 16px var(--font-display)}
-  .schback{display:inline-flex;margin-bottom:12px}
-  #scheduleView .content{padding-bottom:4px}
-  #scheduleView .side{scroll-margin-top:calc(var(--top-h,52px) + 6px)}
-  #scheduleView .schedframe{height:calc(100vh - var(--top-h,52px) - var(--bnav-h) - var(--dock-h,42px) - var(--upd-h,0px) - env(safe-area-inset-bottom) - 66px);
-    height:calc(100dvh - var(--top-h,52px) - var(--bnav-h) - var(--dock-h,42px) - var(--upd-h,0px) - env(safe-area-inset-bottom) - 66px);min-height:340px}
-}
+  body.sched-lock{overflow:hidden}
+  body.sched-lock #app{min-height:0}
+  #scheduleView .content{padding:8px 0 0}
+  .schhead{display:flex;align-items:center;justify-content:space-between;gap:8px;height:44px;margin:0 12px 8px}
+  .schhead .schsel{height:44px}
+  .schhead .btn{height:44px;flex:none}
+  #scheduleView .schedframe{width:100%;border-radius:0;
+    height:calc(100vh - var(--top-h,52px) - var(--above-h,0px) - var(--bnav-h) - env(safe-area-inset-bottom) - 60px);
+    height:calc(100dvh - var(--top-h,52px) - var(--above-h,0px) - var(--bnav-h) - env(safe-area-inset-bottom) - 60px);min-height:300px}
+  #scheduleView #schEmpty{margin:0 12px}
+  #scheduleView .side{display:none;position:fixed;inset:0;z-index:48;overflow:auto;background:var(--bg);padding:0 12px calc(24px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+  #scheduleView.side-open .side{display:block}
+  .schback{display:flex;position:sticky;top:0;z-index:2;width:calc(100% + 24px);margin:0 -12px 12px;border-radius:0;border-width:0 0 1px;justify-content:flex-start;height:52px;padding:env(safe-area-inset-top) 16px 0;background:var(--surface-solid);font-weight:600}
 @media (max-width:520px){.brand{font-size:0;gap:0}}
 </style>
 </head>
@@ -518,10 +555,12 @@ body.android .no-android{display:none!important}
     <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/></svg><span class="tl">Курсы</span></button><button data-view="search"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg><span class="tl">Поиск</span></button><button data-view="calendar"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="tl">Календарь</span><span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="tl">Расписание</span></button><button data-view="electives"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="tl">Элективы</span></button><button data-view="news"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="tl">Что нового</span><span class="nbadge hidden" id="newsBadge"></span></button></div>
     <div class="pill" id="net" title="Проверка доступности Moodle (частоту можно изменить: «Таймер и автообновление»)"><span class="dot"></span><span class="txt">Проверяю сервер…</span></div>
     <div class="pill hidden" id="ip"></div>
+    <button class="icon-btn dlbtn hidden" id="dlBtn" title="Загрузки" aria-label="Загрузки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg><span class="dlpct" id="dlPct"></span><span class="dlmark" id="dlMark"></span></button>
     <div class="spacer"></div>
     <div class="user hidden" id="user"><div class="avatar" id="avatar"></div><span id="uname"></span>
       <button class="icon-btn" id="logoutBtn" title="Выйти и забыть вход"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h12"/></svg></button></div>
     <button class="icon-btn" id="themeBtn" title="Оформление"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18" fill="currentColor"/></svg></button>
+    <div class="topprog" id="topProg" aria-hidden="true"><i></i></div>
   </header>
   <div class="pop hidden" id="themePop">
     <h4>Тема</h4>
@@ -645,11 +684,11 @@ body.android .no-android{display:none!important}
         <div class="content" style="display:flex;flex-direction:column">
           <div class="toolbar"><h2>Расписание</h2><select class="txt schsel" id="schSelD" aria-label="Какое расписание показать"></select><span class="hint" id="schInfo" style="margin:0"></span></div>
           <div id="schEmpty" class="empty hidden">Расписание ещё не сохранено. Выберите период в блоке «Период для офлайна» и нажмите «Сохранить для офлайна».</div>
-          <div class="schhead"><select class="txt schsel" id="schSelM" aria-label="Какое расписание показать"></select><button class="btn" id="schToSettings">Настройки ↓</button></div>
+          <div class="schhead"><select class="txt schsel" id="schSelM" aria-label="Какое расписание показать"></select><button class="btn" id="schToSettings" aria-haspopup="dialog">Настройки</button></div>
           <iframe class="schedframe hidden" id="schFrame"></iframe>
         </div>
         <aside class="side">
-          <button class="btn schback" id="schToView">↑ К расписанию</button>
+          <button class="btn schback" id="schToView">← К расписанию</button>
           <div class="panel" id="schBook">
             <h3>Другие группы</h3>
             <p class="hint" style="margin-top:0">Расписание друга или другой группы: скачайте с сайта или загрузите файл, который вам прислали. Переключаться между ними можно над расписанием. Галочкой отметьте, чем поделиться.</p>
@@ -810,6 +849,7 @@ body.android .no-android{display:none!important}
   <section class="dock collapsed" id="dock">
     <div class="dock-head">
       <h3>Загрузки</h3><span class="state" id="jobState">Ожидание</span><span class="counts" id="counts"></span>
+      <button class="icon-btn" id="dockClose" title="Закрыть" aria-label="Закрыть"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       <div class="tabs"><button class="tab on" data-tab="files">Файлы</button><button class="tab" data-tab="errors">Ошибки</button><button class="tab" data-tab="log">Журнал</button>
         <button class="icon-btn" id="collapse" title="Свернуть"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg></button></div>
       <div class="ovp hidden" id="ovp" title="Процент считается по курсам и их элементам: чем больше курсов и разделов обработано, тем ближе к 100%"><div class="bar" id="ovBar"><i></i></div><span class="pct" id="ovPct"></span><span class="inf" id="ovInf"></span></div>
@@ -1333,7 +1373,7 @@ async function start(sync, ignoreGeo=false, ids=null){
   if (r.geo) { if (confirm(r.geo + "\n\nВсё равно начать?")) return start(sync, true, ids); return; }
   if (!r.ok) { if (r.need_login) api("/api/relogin", {}); return toast(r.error || "Не удалось начать", "bad"); }
   if (r.armed) toast("Moodle сейчас недоступен — начну автоматически, как только он оживёт.");
-  $("#dock").classList.remove("collapsed");
+  showDock();
 }
 $("#startBtn").onclick = () => start(false);
 $("#syncBtn").onclick = () => start(true);
@@ -1341,16 +1381,36 @@ $("#pauseBtn").onclick = () => api(S.job.state === "paused" ? "/api/resume" : "/
 $("#skipBtn").onclick = () => api("/api/skip", {});
 $("#stopBtn").onclick = () => { if (confirm("Остановить загрузку? Прогресс сохранится, при следующем запуске продолжу с этого места.")) api(S.job.armed ? "/api/disarm" : "/api/stop", {}); };
 $("#collapse").onclick = () => $("#dock").classList.toggle("collapsed");
-$(".dock-head").addEventListener("click", e => { if (matchMedia("(max-width:700px)").matches && !e.target.closest("button")) $("#dock").classList.toggle("collapsed"); });
 /* на узком экране (телефон) вкладки уезжают в нижнюю панель, на широком возвращаются в шапку */
 const NARROW = matchMedia("(max-width:700px)");
 function placeTabs(){ const t = $("#mainTabs"); if (NARROW.matches) { if (t.parentElement !== document.body) document.body.appendChild(t); } else if (t.parentElement !== $(".top")) $(".brand").after(t); }
 NARROW.addEventListener("change", placeTabs); placeTabs();
-// высоты верхней шапки и панели «Загрузки» нужны CSS, чтобы окно расписания занимало ровно оставшееся место экрана
-function setBarVars(){ const r = document.documentElement.style; r.setProperty("--top-h", $(".top").offsetHeight + "px"); r.setProperty("--dock-h", $("#dock").offsetHeight + "px"); r.setProperty("--upd-h", ($("#updBar").classList.contains("hidden") ? 0 : $("#updBar").offsetHeight + 8) + "px"); }
-if (window.ResizeObserver) { const ro = new ResizeObserver(setBarVars); ro.observe($(".top")); ro.observe($("#dock")); ro.observe($("#updBar")); } addEventListener("resize", setBarVars); setBarVars();
-$("#schToSettings").onclick = () => $("#scheduleView .side").scrollIntoView({behavior: "smooth", block: "start"});
-$("#schToView").onclick = () => window.scrollTo({top: 0, behavior: "smooth"});
+// высота шапки и всего, что между шапкой и страницей (плашки, «есть обновление»): CSS по ней растягивает окно расписания ровно на оставшееся место экрана
+function setBarVars(){
+  const r = document.documentElement.style, top = $(".top").offsetHeight; r.setProperty("--top-h", top + "px"); r.setProperty("--above-h", Math.max(0, $("main").offsetTop - top) + "px");
+  const nav = $("#mainTabs");   // нижняя панель вкладок (телефон): реальная высота без отступа под «жестовую» полосу — CSS добавляет его сам
+  if (NARROW.matches && nav.offsetHeight) r.setProperty("--bnav-h", Math.max(0, nav.offsetHeight - (parseFloat(getComputedStyle(nav).paddingBottom) - 4)) + "px");
+}
+if (window.ResizeObserver) { const ro = new ResizeObserver(setBarVars); ro.observe($(".top")); ro.observe($("#topStack")); ro.observe($("#mainTabs")); } addEventListener("resize", setBarVars); setBarVars();
+/* телефон: «Загрузки» — лист на весь экран, открывается значком в шапке. Пока идёт загрузка, ход виден на самом значке и по полоске под шапкой, поэтому сама панель сама не выскакивает */
+function showDock(){
+  if (!NARROW.matches) return $("#dock").classList.remove("collapsed");
+  const b = $("#dlBtn"); b.classList.remove("ping"); void b.offsetWidth; b.classList.add("ping");
+  if (!dlHinted) { dlHinted = true; toast("Загрузка пошла. Ход — на значке ↓ вверху; нажмите на него, чтобы открыть список."); }
+}
+let dlHinted = false, dlAck = "";
+function dockOpen(){ return !$("#dock").classList.contains("collapsed"); }
+function openDock(){ $("#dock").classList.remove("collapsed"); dlAck = dlKey(S && S.job); renderDlBtn(S && S.job); if (tab === "log") $("#log").scrollTop = 1e9; }
+function closeDock(){ $("#dock").classList.add("collapsed"); dlAck = dlKey(S && S.job); renderDlBtn(S && S.job); }
+$("#dlBtn").onclick = () => dockOpen() ? closeDock() : openDock();
+$("#dockClose").onclick = closeDock;
+/* лист настроек расписания (телефон): «Настройки» открывает, «← К расписанию» закрывает */
+const schSide = open => { $("#scheduleView").classList.toggle("side-open", !!open); if (open) $("#scheduleView .side").scrollTop = 0; };
+$("#schToSettings").onclick = () => schSide(true);
+$("#schToView").onclick = () => schSide(false);
+/* страница расписания на телефоне не прокручивается — прокручивается само расписание */
+function lockPage(){ document.body.classList.toggle("sched-lock", NARROW.matches && view === "schedule"); if (!NARROW.matches) schSide(false); setBarVars(); }
+NARROW.addEventListener("change", lockPage);
 $$(".tab").forEach(t => t.onclick = () => { tab = t.dataset.tab; $$(".tab").forEach(x => x.classList.toggle("on", x === t));
   $("#dlist").classList.toggle("hidden", tab !== "files"); $("#elist").classList.toggle("hidden", tab !== "errors"); $("#log").classList.toggle("hidden", tab !== "log");
   $("#dock").classList.remove("collapsed"); if (tab === "log") $("#log").scrollTop = 1e9; });
@@ -1405,6 +1465,24 @@ $("#dlist").addEventListener("click", e => {
   const h = e.target.closest(".dg-h"); if (!h) return;
   const g = h.parentElement; DG[g.dataset.k] = !g.classList.contains("open"); renderDl();
 });
+/* значок «Загрузки» в шапке телефона: процент, пока идёт загрузка; точка — когда закончилась, а вы ещё не смотрели (зелёная — всё хорошо, красная — были ошибки) */
+function dlKey(j){ return j && j.result ? String(j.started || 0) + (j.result.ok ? "+" : "-") + ((j.counts && j.counts.failed) || 0) : ""; }
+function renderDlBtn(j){
+  if (!j) return;
+  const b = $("#dlBtn"), strip = $("#topProg"), o = j.overall, busy = j.state !== "idle", key = dlKey(j);
+  const failed = !!(j.counts && j.counts.failed) || (j.result && !j.result.ok);
+  b.dataset.st = strip.dataset.st = j.state;
+  b.classList.toggle("busy", busy);
+  const pct = busy && o ? Math.min(99.9, o.pct) : 0;
+  $("#dlPct").textContent = busy ? (o ? Math.floor(pct) + "%" : "…") : "";
+  b.classList.toggle("mark", !busy && !!key && key !== dlAck && !dockOpen());
+  b.classList.toggle("bad", !!failed);
+  b.title = busy ? "Загрузки: " + $("#jobState").textContent + (o ? ", " + Math.round(pct) + "%" : "") : "Загрузки";
+  b.setAttribute("aria-label", b.title);
+  strip.classList.toggle("on", busy);
+  strip.classList.toggle("indet", busy && !o);
+  strip.firstElementChild.style.width = busy && o ? pct.toFixed(1) + "%" : "";
+}
 function renderOverall(j){
   const o = j.overall, ov = $("#ovp"), busy = j.state !== "idle", fin = !busy && j.result && j.result.ok;
   if (!o || (!busy && !j.result)) return ov.classList.add("hidden");
@@ -1431,6 +1509,8 @@ $("#mClose").onclick = () => { $("#modal").classList.add("hidden"); $("#mFrame")
 window.moBack = () => {
   const open = [...document.querySelectorAll(".modal:not(.hidden)")].pop();
   if (open) { const b = open.querySelector('[id$="Close"]') || open.querySelector('[id$="Cancel"]'); if (b) { b.click(); return true; } open.classList.add("hidden"); return true; }
+  if (NARROW.matches && dockOpen()) { closeDock(); return true; }
+  if ($("#scheduleView").classList.contains("side-open")) { schSide(false); return true; }
   if (CV) { closeCourse(); return true; }
   return false;
 };
@@ -1448,6 +1528,7 @@ function renderJob(j){
   const c = j.counts || {};
   $("#counts").textContent = (c.new || c.skipped || c.failed) ? `новых ${c.new} · ${hsize(c.bytes)} · уже было ${c.skipped}` + (c.failed ? ` · ошибок ${c.failed}` : "") : "";
   const busy = j.state !== "idle";
+  $(".dock .now").classList.toggle("idle", !busy && !j.armed);
   $("#pauseBtn").disabled = !busy || j.state === "stopping"; $("#skipBtn").disabled = !j.file; $("#stopBtn").disabled = !busy && !j.armed;
   $("#pauseBtn span").textContent = j.state === "paused" ? "Продолжить" : "Пауза";
   $("#nowCourse").textContent = j.course ? `${j.course.name} (${j.course.i}/${j.course.n})` : "—";
@@ -1471,7 +1552,7 @@ function renderJob(j){
     }
   } else DL = j.downloads;
   PLAN = j.plan || [];
-  renderOverall(j);
+  renderOverall(j); renderDlBtn(j);
   const sig = (DL.length ? DL[0].id : 0) + "|" + DL.length + "|" + PLAN.map(p => p.state[0] + p.new + "." + p.skip + "." + p.fail).join(",");
   if (sig !== dlSig) {
     dlSig = sig;
@@ -1526,7 +1607,7 @@ function renderNet(st){
 /* ── вкладки ── */
 let view = "courses";
 function showView(v){
-  view = v; $$("#mainTabs button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+  view = v; schSide(false); lockPage(); $$("#mainTabs button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
   $("#coursesView").classList.toggle("hidden", v !== "courses"); $("#scheduleView").classList.toggle("hidden", v !== "schedule");
   $("#electivesView").classList.toggle("hidden", v !== "electives"); $("#newsView").classList.toggle("hidden", v !== "news");
   $("#searchView").classList.toggle("hidden", v !== "search"); $("#calView").classList.toggle("hidden", v !== "calendar");
@@ -2202,11 +2283,11 @@ $("#schOtherAdd").onclick = async () => {
   const g = $("#schOtherGroup").value.trim(); if (!g) return toast("Напишите группу, например ИБ/б-25-1-о", "bad");
   const r = await api("/api/schedule/other/save", {group: g, sources: $("#schOtherXl").checked ? ["schedule", "excel"] : ["schedule"], range: "semester"});
   if (!r.ok) return toast(r.error || "Не удалось начать", "bad");
-  schPending = r.slug || ""; $("#schOtherGroup").value = ""; $("#dock").classList.remove("collapsed"); toast("Скачиваю расписание группы…");
+  schPending = r.slug || ""; $("#schOtherGroup").value = ""; showDock(); toast("Скачиваю расписание группы…");
 };
 $("#schCurUpd").onclick = async () => { const p = schProf(); if (!p || p.own) return;
   const r = await api("/api/schedule/other/refresh", {slug: p.id, range: "semester"}); if (!r.ok) return toast(r.error || "Не удалось начать", "bad");
-  $("#dock").classList.remove("collapsed"); toast("Обновляю расписание группы…"); };
+  showDock(); toast("Обновляю расписание группы…"); };
 $("#schCurAuto").onchange = async () => { const p = schProf(); if (!p || p.own) return; await api("/api/schedule/other/flags", {slug: p.id, auto: $("#schCurAuto").checked}); loadSchedule(false); };
 $("#schCurOpen").onclick = () => $("#schOpen").onclick();
 $("#schCurIcs").onclick = () => $("#schIcs").onclick();
@@ -2270,7 +2351,7 @@ function schPayload(start){
 $$("#schRanges button").forEach(b => b.onclick = () => { schRange = b.dataset.r; $$("#schRanges button").forEach(x => x.classList.toggle("on", x === b)); $("#schCustom").classList.toggle("hidden", schRange !== "custom"); });
 $("#schSave").onclick = async () => { const p = schPayload(true); if (!p.schedule_sources.length) return toast("Выберите хотя бы один источник", "bad");
   if (schRange === "custom" && !(p.from && p.to)) return toast("Укажите даты «с» и «по»", "bad");
-  const r = await api("/api/schedule/save", p); if (!r.ok) return toast(r.error || "Не удалось начать", "bad"); $("#dock").classList.remove("collapsed"); toast("Сохраняю расписание…"); };
+  const r = await api("/api/schedule/save", p); if (!r.ok) return toast(r.error || "Не удалось начать", "bad"); showDock(); toast("Сохраняю расписание…"); };
 ["#schPdf", "#schAuto", "#schAutoRange"].forEach(id => $(id).onchange = () => api("/api/schedule/save", schPayload(false)));
 $("#schGroup").onchange = async () => { await api("/api/schedule/save", schPayload(false)); loadSchedule(false); };
 $("#schOpen").onclick = () => api("/api/open", {path: schDirNow() + "/index.html"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); });
@@ -2603,7 +2684,7 @@ async function poll(){
     if (L.state !== lastLogin) {
       const ok = L.state === "ok" || L.state === "offline";
       $("#loginView").classList.toggle("hidden", ok); $("#coursesView").classList.toggle("hidden", !ok); $("#user").classList.toggle("hidden", !ok);
-      $("#dock").classList.toggle("hidden", !ok && st.job.state === "idle");
+      $("#dock").classList.toggle("hidden", !ok && st.job.state === "idle"); $("#dlBtn").classList.toggle("hidden", !ok && st.job.state === "idle");
       $("#mainTabs").classList.toggle("hidden", !ok);
       if (!ok) { $("#scheduleView").classList.add("hidden"); $("#electivesView").classList.add("hidden"); $("#newsView").classList.add("hidden"); $("#searchView").classList.add("hidden"); }
       else showView(view);

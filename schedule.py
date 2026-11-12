@@ -1489,6 +1489,15 @@ h1 .other{font-size:.7em;font-weight:500;color:var(--muted)}
 /* фильтры */
 .fpanel{display:none;max-height:58vh;overflow:auto;padding:4px 0 8px}
 .fpanel.open{display:block}
+.fhead,.fscrim{display:none}
+/* узкий экран: настройки — нижний лист поверх расписания, а не вставка в верхнюю панель (она раздвигала панель и съедала экран) */
+html:not(.wide) .fscrim.open{display:block;position:fixed;inset:0;z-index:19;background:rgba(0,0,0,.42)}
+html:not(.wide) .fpanel.open{display:block;position:fixed;left:0;right:0;bottom:0;z-index:20;max-height:84vh;max-height:84dvh;overflow:auto;overscroll-behavior:contain;
+  background:var(--bg);border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding:0 14px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -12px 40px rgba(0,0,0,.35)}
+html:not(.wide) .fpanel.open .fhead{display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;background:var(--bg);padding:12px 0 6px;font-size:1.05rem}
+html:not(.wide) .fpanel.open .fg:first-of-type{margin-top:4px}
+/* верхняя строка (вид и фильтры) при прокрутке уезжает, дата и полоска недели остаются — под список остаётся больше места */
+html:not(.wide) .bar{top:-52px}
 .fg{margin-top:10px}.fg>label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:4px}
 .fg .seg{flex:none;width:100%}
 input[type=search]{height:44px;width:100%;border-radius:12px;border:1px solid var(--line);background:var(--card);padding:0 12px;min-width:0}
@@ -1568,7 +1577,10 @@ html.wide main{padding:14px 16px 40px}
   .sd{flex-direction:row;justify-content:center;align-items:center;gap:6px;min-height:38px;padding:2px 0}
   .sd .dt{display:none}.sd .n{font-size:1.05rem}
   .fpanel{max-height:46vh}
+  html:not(.wide) .bar{top:0}
 }
+/* низкое, но узкое окно (телефон стоймя с маленьким экраном или с плашками сверху): панель в несколько строк, верхняя строка тоже уезжает при прокрутке */
+@media (max-height:520px) and (max-width:759px){html:not(.wide) .bar{top:-46px}}
 @media print{.bar{position:static}.btn,.ib,.seg,.chips,input,.strip,.fpanel{display:none!important}.day{break-inside:avoid}}
 </style></head><body>
 <header class="bar" id="bar">
@@ -1583,7 +1595,9 @@ html.wide main{padding:14px 16px 40px}
     <button class="btn" id="tw">Сегодня</button>
   </div>
   <div class="strip" id="strip" hidden></div>
+  <div class="fscrim" id="fscrim"></div>
   <div class="fpanel" id="fpanel">
+    <div class="fhead"><b>Фильтры и настройки</b><button class="ib" id="fclose" aria-label="Закрыть"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="fg" id="whoBox"><label>Показывать</label><div class="seg" id="who"><button data-w="me">Моё</button><button data-w="group">Вся группа</button></div></div>
     <div class="fg"><label>Подгруппа</label><div class="seg" id="sub"><button data-s="">Все</button><button data-s="1">1</button><button data-s="2">2</button></div></div>
     <details class="streams" id="streams"><summary>Потоки (по выбору)</summary><div class="box">
@@ -1778,7 +1792,9 @@ $("strip").onclick = e => { const c = e.target.closest("[data-d]"); if (c) { cur
 $("prev").onclick = () => step(-1); $("next").onclick = () => step(1);
 $("tw").onclick = () => { cur = new Date(today); if (L.length) { const f = parse(L[0].date), la = parse(L[L.length - 1].date); if (cur < f) cur = f; else if (cur > la) cur = la; }
   scrollTo(0, 0); render(); };
-$("fbtn").onclick = () => { const p = $("fpanel"), o = p.classList.toggle("open"); $("fbtn").setAttribute("aria-expanded", o); };
+const fToggle = on => { const o = on === undefined ? !$("fpanel").classList.contains("open") : on; $("fpanel").classList.toggle("open", o); $("fscrim").classList.toggle("open", o); $("fbtn").setAttribute("aria-expanded", o); };
+$("fbtn").onclick = () => fToggle(); $("fscrim").onclick = $("fclose").onclick = () => fToggle(false);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("fpanel").classList.contains("open")) fToggle(false); });
 const segs = (id, attr, val, cb) => { const el = $(id); el.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset[attr] === val));
   el.onclick = e => { const b = e.target.closest("button"); if (!b) return; el.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); cb(b.dataset[attr]); }; };
 $("view").onclick = e => { const b = e.target.closest("button"); if (!b) return; view = b.dataset.v; LS.set("rs_view", view); q = ""; $("q").value = ""; scrollTo(0, 0); render(); };
