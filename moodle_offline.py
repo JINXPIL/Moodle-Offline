@@ -183,7 +183,9 @@ MOD_TITLES = {
     "chat": "чат", "choice": "опрос", "feedback": "анкета", "workshop": "семинар",
     "wiki": "вики", "data": "база данных", "h5pactivity": "H5P", "hvp": "H5P",
     "file": "файл", "text": "текст", "zoom": "Zoom", "questionnaire": "анкета", "survey": "обзор",
+    "pruffme": "вебинар (Pruffme)",
 }
+DONE_TEXT = {"done": "выполнено", "todo": "не выполнено", "fail": "не пройдено (оценка ниже проходного)"}   # отметки сайта
 
 # ── CSS-селекторы (Moodle 3.8 Boost + запасные варианты для 4.x) ─────────────
 SEL = {
@@ -595,6 +597,8 @@ class Item:
     cached: bool = False
     rule_skip: str | None = None   # причина, если элемент пропущен по правилам
     rule_notes: list = field(default_factory=list)   # какие файлы элемента пропущены по правилам
+    done: str = ""             # отметка о выполнении на сайте: "done" / "todo" / "fail" ("" — сайт её не показывает)
+    restriction: str = ""      # «Недоступно, пока не выполнено…» — кому элемент закрыт и почему
 
 
 @dataclass
@@ -603,6 +607,7 @@ class Section:
     name: str
     items: list = field(default_factory=list)
     page_url: str | None = None
+    restriction: str = ""      # ограничение доступа к разделу (например, «Вы принадлежите к группе …»)
 
 
 @dataclass
@@ -1994,6 +1999,37 @@ def label_heading(content) -> str:
     return ""
 
 
+_COMPLETION_ICON = re.compile(r"completion-(?:auto|manual)-(y|pass|n|fail)(?![a-z])")
+
+
+def completion_state(a_el) -> str:
+    """Отметка «выполнено» рядом с элементом на странице курса (Moodle 3.x: значок completion-auto-y / manual-n …).
+    → "done" | "todo" | "fail" | "" (отметки нет или вид не знаком — тогда ничего не утверждаем)."""
+    box = a_el.select_one(".actions, .completion-info") or a_el
+    for img in box.select("img[src*='completion-']"):
+        m = _COMPLETION_ICON.search(img.get("src", ""))
+        if m:
+            return {"y": "done", "pass": "done", "n": "todo", "fail": "fail"}[m.group(1)]
+    for img in box.select("img[alt]"):                      # запасной путь: по подписи значка
+        alt = (img.get("alt") or "").strip().lower()
+        if alt.startswith("не выполнено"):
+            return "todo"
+        if alt.startswith("выполнено"):
+            return "done"
+    return ""
+
+
+def restriction_text(el) -> str:
+    """Текст «Недоступно, пока не выполнено…» (блок .availabilityinfo), без плашки «Ограничено»."""
+    box = el.select_one(".availabilityinfo")
+    if box is None:
+        return ""
+    box = copy.copy(box)
+    for junk in box.select(".badge, .accesshide, .sr-only"):
+        junk.decompose()
+    return short(clean_text(box.get_text(" ")), 300)
+
+
 def parse_sections(soup, page_url: str, cid: int) -> list[Section]:
     main = select_main(soup)
     els = main.select(SEL["section"]) or soup.select(SEL["section"])
@@ -2011,6 +2047,9 @@ def parse_sections(soup, page_url: str, cid: int) -> list[Section]:
         if not name:
             name = "Общее" if num == 0 else f"Раздел {num}"
         sec = Section(num, name)
+        sec_av = el.select_one(".section_availability")
+        if sec_av is not None:
+            sec.restriction = restriction_text(sec_av)
         for a in el.select("a[href]"):
             u = urljoin(page_url, a["href"])
             if is_section_link(u, cid):
@@ -2094,6 +2133,8 @@ def parse_activity(a_el, page_url, hint):
     if modtype == "folder":  # папка, показанная прямо на странице курса
         for a in a_el.select(SEL["folder_files"]):
             it.inline_links.append((urljoin(page_url, a["href"]), clean_text(a.get_text(" "))))
+    it.done = completion_state(a_el)
+    it.restriction = restriction_text(a_el)
     if modtype not in HANDLERS or (not href and not it.inline_links):
         it.online_only = True
     return [it], hint, False
@@ -3865,6 +3906,8 @@ def write_course_index(course: Course, layout: Layout):
     rows_html = []
     for sec in course.sections:
         md.append(f"## {sec.number:02d}. {sec.name}")
+        if sec.restriction:
+            md.append(f"_Ограничение на сайте: {sec.restriction}_")
         sec_rows = []
         for kind in KINDS:
             items = [it for it in sec.items if it.kind == kind]
@@ -3887,6 +3930,10 @@ def write_course_index(course: Course, layout: Layout):
                         md.append(f"  - {_mdlink(f['title'], f['path'])} · {hsize(f['size'])}")
                 if it.external:
                     md.append(f"  - внешняя ссылка: <{it.external}>")
+                if it.done:
+                    md.append(f"  - на сайте: {DONE_TEXT[it.done]}")
+                if it.restriction:
+                    md.append(f"  - ограничение на сайте: {it.restriction}")
                 for note in it.rule_notes:
                     md.append(f"  - ⊘ пропущено правилами: {note}")
                 if it.error:
@@ -3904,6 +3951,10 @@ def write_course_index(course: Course, layout: Layout):
                     extra += f'<div class="online">Пропущено правилами: {esc(note)}</div>'
                 if it.external:
                     extra += f'<div class="online">Внешняя ссылка: <a href="{esc(it.external)}">{esc(short(it.external, 90))}</a></div>'
+                if it.done:
+                    extra += f'<div class="online">На сайте: {esc(DONE_TEXT[it.done])}</div>'
+                if it.restriction:
+                    extra += f'<div class="online">Ограничение на сайте: {esc(it.restriction)}</div>'
                 if it.error:
                     extra += f'<div class="warn">Скачано не полностью: {esc(it.error)}</div>'
                 desc = f'<div class="desc">{esc(it.description)}</div>' if it.description else ""
@@ -3913,8 +3964,9 @@ def write_course_index(course: Course, layout: Layout):
                                 f'<div class="name">{esc(it.name)}</div>{ctxh}{desc}'
                                 f'<ul class="files">{files_html}</ul>{extra}</div></div>')
         md.append("")
+        sec_note = f'<div class="online" style="padding:6px 16px">Ограничение на сайте: {esc(sec.restriction)}</div>' if sec.restriction else ""
         rows_html.append(f"<details open><summary>{sec.number:02d}. {esc(sec.name)}<small>{len(sec.items)} эл.</small></summary>"
-                         f"{''.join(sec_rows)}</details>")
+                         f"{sec_note}{''.join(sec_rows)}</details>")
     write_text_atomic(cdir / "README.md", "\n".join(md) + "\n")
     chips = '<button class="chip on" data-k="">Все</button>' + "".join(
         f'<button class="chip" data-k="{KIND_CODE[k]}">{k}</button>' for k in KINDS)
@@ -3931,10 +3983,11 @@ def write_course_json(course: Course, layout: Layout):
     """Структура курса для просмотра в окне программы «как на сайте» (разделы, элементы, скачанные файлы)."""
     data = {"id": course.id, "fullname": course.fullname, "url": course.url, "category": course.category,
             "dir": layout.course_rel.as_posix(), "mode": layout.mode, "updated": datetime.now().strftime("%d.%m.%Y %H:%M"),
-            "sections": [{"number": s.number, "name": s.name, "items": [
+            "sections": [{"number": s.number, "name": s.name, "restriction": s.restriction, "items": [
                 {"key": it.key, "name": it.name, "modtype": it.modtype, "kind": it.kind, "url": it.url,
                  "description": it.description, "context": it.context, "external": it.external,
-                 "online_only": it.online_only, "error": it.error, "files": it.files} for it in s.items]}
+                 "online_only": it.online_only, "error": it.error, "files": it.files,
+                 "done": it.done, "restriction": it.restriction} for it in s.items]}
                 for s in course.sections]}
     write_text_atomic(layout.course_dir / ".course.json", json.dumps(data, ensure_ascii=False, indent=1))
 
