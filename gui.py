@@ -837,9 +837,10 @@ class App:
         mo.classify_course(course)
         d = {"id": course.id, "fullname": course.fullname, "url": course.url, "category": course.category, "dir": "",
              "updated": datetime.now().strftime("%d.%m.%Y %H:%M"), "sections": [
-                 {"number": s.number, "name": s.name, "items": [
+                 {"number": s.number, "name": s.name, "restriction": s.restriction, "items": [
                      {"key": it.key, "name": it.name, "modtype": it.modtype, "kind": it.kind, "url": it.url,
-                      "description": it.description, "context": it.context, "online_only": it.online_only, "files": []}
+                      "description": it.description, "context": it.context, "online_only": it.online_only, "files": [],
+                      "done": it.done, "restriction": it.restriction}
                      for it in s.items]} for s in course.sections]}
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")

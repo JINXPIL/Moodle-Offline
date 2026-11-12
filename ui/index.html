@@ -238,6 +238,8 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .mname{font-weight:600}.mname .kb{font-size:10.5px;font-weight:700;color:#fff;border-radius:5px;padding:1px 6px;margin-right:6px;vertical-align:1px}
 .kb.ЛК{background:#2f6fde}.kb.ПЗ{background:#0f9d8a}.kb.ЛЗ{background:#e8710a}.kb.ДР{background:#6b7280}
 .mdesc{font-size:12.5px;color:var(--muted);font-style:italic;margin-top:2px}
+.dn{font-size:12px;color:var(--faint)}.dn.ok{color:var(--ok)}.dn.warn{color:var(--warn)}.dn.bad{color:var(--bad)}
+.restr{font-size:12px;color:var(--warn);margin-top:2px}
 .mfiles{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .mf{display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
 .mf .fn{max-width:520px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1996,7 +1998,7 @@ const ICON = {resource:["#d93a3a","M7 3h7l5 5v13H7z M14 3v5h5"], folder:["#e8a10
   book:["#2f6fde","M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z M5 17a3 3 0 0 1 3-3h11"], lesson:["#2f6fde","M4 5h16v11H4z M9 20h6 M12 16v4"],
   text:["#8a93a3","M5 7h14 M5 12h14 M5 17h9"], file:["#d93a3a","M7 3h7l5 5v13H7z M14 3v5h5"], attendance:["#1a9e5c","M4 6h16v14H4z M4 10h16 M9 15l2 2 4-4"]};
 const MODT = {resource:"Файл",folder:"Папка",url:"Ссылка",page:"Страница",assign:"Задание",quiz:"Тест",forum:"Форум",imscp:"Пакет",scorm:"SCORM",book:"Книга",lesson:"Лекция",
-  text:"Пояснение",file:"Файл",attendance:"Посещаемость"};
+  text:"Пояснение",file:"Файл",attendance:"Посещаемость",pruffme:"Вебинар",feedback:"Анкета"};
 const KC = {"Лекции":"ЛК","ПЗ":"ПЗ","ЛЗ":"ЛЗ","Прочее":"ДР"};
 const icon = m => { const [c, d] = ICON[m] || ["#8a93a3","M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0"];
   return `<div class="micon" style="background:${c}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg></div>`; };
@@ -2019,13 +2021,19 @@ function reserveHtml(d, f){
     + rv.map(v => { const vp = pre + v.path, e = extOf(vp);
         return `<span class="rv">заменена ${esc(rvWhen(v.saved))} · ${hsize(v.size)}${PREVIEW.has(e) ? `<button data-prev="${esc(vp)}">Просмотр</button>` : ""}<button data-ext="${esc(vp)}">Открыть</button></span>`; }).join("") + `</div>`;
 }
+function doneSummary(d){
+  let n = 0, ok = 0;
+  for (const s of d.sections || []) for (const it of s.items || []) if (it.done) { n++; if (it.done === "done") ok++; }
+  return n ? `<div class="mmeta" style="margin-top:4px">Отметки сайта: выполнено ${ok} из ${n} (на момент последнего обновления)</div>` : "";
+}
+const DONE_UI = {done: ["✓ выполнено на сайте", "ok"], todo: ["не выполнено на сайте", ""], fail: ["✕ не пройдено", "bad"]};
 function renderCourse(){
   const {c, d} = CV, el = $("#courseView");
   const img = c.image ? (c.image.startsWith("data:") ? c.image : c.image + "&t=" + encodeURIComponent(T)) : "";
   let html = `<button class="btn ghost" id="cvBack" style="margin-bottom:10px">← Все курсы</button><div class="cv-head"><div class="cv-cover" style="${coverStyle(c)}">${img ? `<img src="${esc(img)}" alt="" onerror="this.remove()">` : ""}</div>
     <div class="cv-info"><div style="min-width:260px;flex:1"><div class="cat">${esc(c.category || "")}</div><h2>${esc(d.fullname || c.fullname)}</h2>
       <div class="mmeta">${d.error ? "" : d.downloaded ? `Сохранено на этом устройстве · обновлено ${esc(d.updated)}` : "Ещё не скачан — показана структура с сайта, файлы откроются после загрузки"}</div>
-      ${c.progress != null ? `<div class="prog" style="margin-top:8px;max-width:340px"><i style="width:${Math.round(c.progress)}%"></i></div>` : ""}</div>
+      ${doneSummary(d)}${c.progress != null ? `<div class="prog" style="margin-top:8px;max-width:340px"><i style="width:${Math.round(c.progress)}%"></i></div>` : ""}</div>
     <div class="cv-acts"><button class="btn primary" id="cvDl">${d.downloaded ? "Обновить курс" : "Скачать курс"}</button>
       ${(d.url || c.url) ? `<button class="btn" id="cvSite">Открыть на сайте</button>` : ""}${d.dir ? `<button class="btn" id="cvDir">Папка курса</button>` : ""}
       <button class="btn ghost" id="cvLive" title="Перечитать разделы и элементы с сайта">↻ С сайта</button></div></div></div>`;
@@ -2036,7 +2044,7 @@ function renderCourse(){
   const secs = d.sections.map(s => ({...s, items: s.items.filter(okItem)})).filter(s => s.items.length);
   html += `<div class="cv-body"><nav class="toc">${secs.map(s => `<a href="#" data-sec="${s.number}">${esc(s.name)}</a>`).join("")}</nav><div>`;
   for (const s of secs) {
-    html += `<section class="msec" id="msec-${s.number}"><h3>${esc(s.name)}</h3>`;
+    html += `<section class="msec" id="msec-${s.number}"><h3>${esc(s.name)}</h3>${s.restriction ? `<div class="restr" style="padding:0 16px 6px">Ограничение на сайте: ${esc(s.restriction)}</div>` : ""}`;
     for (const it of s.items) {
       const files = (it.files || []).map(f => { const p = (d.dir ? d.dir + "/" : "") + f.path, e = extOf(p);
         return `<div class="mf"><span class="fn" title="${esc(f.title)}">${esc(f.title)}</span><span class="mmeta">${hsize(f.size)}</span>${PREVIEW.has(e) ? `<button data-prev="${esc(p)}">Просмотр</button>` : ""}<button data-ext="${esc(p)}">Открыть</button><button data-rev="${esc(p)}">В папке</button></div>` + reserveHtml(d, f); }).join("");
@@ -2044,8 +2052,8 @@ function renderCourse(){
       const extl = it.external ? `<button data-url="${esc(it.external)}">Ссылка</button>` : "";
       const note = it.online_only ? `<div class="mmeta">только онлайн${it.url ? "" : " · недоступно"}</div>` : it.error ? `<div class="mmeta" style="color:var(--bad)">${esc(it.error)}</div>` : (!d.downloaded ? `<div class="mmeta">не скачано</div>` : "");
       html += `<div class="mi ${it.online_only && !it.url ? "dim" : ""}">${icon(it.modtype)}<div style="min-width:0"><div class="mname"><span class="kb ${KC[it.kind] || "ДР"}">${KC[it.kind] || "ДР"}</span>${esc(it.name)}</div>
-        <div class="mmeta">${esc(MODT[it.modtype] || it.modtype)}${it.context && it.context !== it.name ? " · из блока «" + esc(it.context) + "»" : ""}</div>
-        ${it.description ? `<div class="mdesc">${esc(it.description)}</div>` : ""}${files ? `<div class="mfiles">${files}</div>` : ""}${note}</div><div class="side-b" style="display:flex;gap:4px">${extl}${site}</div></div>`;
+        <div class="mmeta">${esc(MODT[it.modtype] || it.modtype)}${it.context && it.context !== it.name ? " · из блока «" + esc(it.context) + "»" : ""}${it.done && DONE_UI[it.done] ? ` · <span class="dn ${DONE_UI[it.done][1]}">${DONE_UI[it.done][0]}</span>` : ""}</div>
+        ${it.restriction ? `<div class="restr">Ограничение на сайте: ${esc(it.restriction)}</div>` : ""}${it.description ? `<div class="mdesc">${esc(it.description)}</div>` : ""}${files ? `<div class="mfiles">${files}</div>` : ""}${note}</div><div class="side-b" style="display:flex;gap:4px">${extl}${site}</div></div>`;
     }
     html += `</section>`;
   }
