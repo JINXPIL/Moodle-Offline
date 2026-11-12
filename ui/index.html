@@ -71,6 +71,8 @@ svg{flex:none}
   background:color-mix(in srgb,var(--warn) 14%,var(--surface-solid));border:1px solid color-mix(in srgb,var(--warn) 40%,transparent)}
 .banner.bad{background:color-mix(in srgb,var(--bad) 12%,var(--surface-solid));border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
 .banner b{display:block;margin-bottom:2px}
+.banner .bn-d{display:block}
+.banner .bn-btns{display:flex;flex-direction:column;gap:6px}
 
 /* основная область */
 main{overflow:hidden;min-height:0}
@@ -477,7 +479,19 @@ body.android .no-android{display:none!important}
   .pill .txt{overflow:hidden;text-overflow:ellipsis}
   .user span#uname{display:none}
   .pop{right:12px;left:12px;width:auto;top:100px}
-  .banner{margin:10px 12px 0;flex-wrap:wrap}
+  /* плашки («Офлайн-режим», VPN, сессия истекла): одна тонкая строка — раньше они занимали треть экрана и съедали место у расписания; подробности и вторичные кнопки — по нажатию на текст */
+  .banner{margin:8px 12px 0;padding:5px 6px 5px 12px;gap:8px;flex-wrap:nowrap;align-items:center;font-size:13px;line-height:1.3}
+  .banner .spacer{display:none}
+  .banner .bn-t{flex:1 1 0;min-width:0;cursor:pointer;padding:3px 0}
+  .banner b{margin:0;font-size:13.5px}
+  .banner:not(.open) .bn-t b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .banner:not(.open) .bn-t b::after{content:" ▾";opacity:.55}
+  .banner.open .bn-t b::after{content:" ▴";opacity:.55}
+  .banner:not(.open) .bn-d,.banner:not(.open) .bn-btns{display:none}
+  .banner .btn{min-height:34px;height:34px;padding:0 12px;flex:none}
+  .banner.open{flex-wrap:wrap}
+  .banner.open .bn-t{flex:1 1 100%}
+  .banner.open .bn-btns{flex-direction:row;flex-wrap:wrap;width:100%}
   main{overflow:visible}
   .view{height:auto}
   .layout{display:block;height:auto}
@@ -497,7 +511,10 @@ body.android .no-android{display:none!important}
   .rules-foot{flex-wrap:wrap}
   .modgrid{grid-template-columns:1fr}
   .toasts{left:12px;right:12px;bottom:12px}
-  .updbar{margin:8px 12px 0}
+  .updbar{margin:8px 12px 0;padding:8px 12px;gap:6px 10px}
+  .updbar .ut{flex:1 1 100%}
+  .updbar .s{display:none}
+  .updbar .acts .btn{min-height:34px;height:34px}
   .toast{max-width:none}
   /* панель «Загрузки» — лист на весь экран: открывается значком в шапке, закрывается крестиком или системным «Назад»; внизу страницы ничего не висит */
   .dock{position:fixed;inset:0;z-index:48;border:0;background:var(--surface-solid);backdrop-filter:none;padding-top:env(safe-area-inset-top)}
@@ -534,13 +551,13 @@ body.android .no-android{display:none!important}
   #scheduleView .toolbar{display:none}
   body.sched-lock{overflow:hidden}
   body.sched-lock #app{min-height:0}
-  #scheduleView .content{padding:8px 0 0}
-  .schhead{display:flex;align-items:center;justify-content:space-between;gap:8px;height:44px;margin:0 12px 8px}
-  .schhead .schsel{height:44px}
-  .schhead .btn{height:44px;flex:none}
+  #scheduleView .content{padding:6px 0 0}
+  .schhead{display:flex;align-items:center;justify-content:space-between;gap:8px;height:40px;margin:0 12px 6px}
+  .schhead .schsel{height:40px;min-height:40px}
+  .schhead .btn{height:40px;flex:none}
   #scheduleView .schedframe{width:100%;border-radius:0;
-    height:calc(100vh - var(--top-h,52px) - var(--above-h,0px) - var(--bnav-h) - env(safe-area-inset-bottom) - 60px);
-    height:calc(100dvh - var(--top-h,52px) - var(--above-h,0px) - var(--bnav-h) - env(safe-area-inset-bottom) - 60px);min-height:300px}
+    height:calc(100vh - var(--top-h,52px) - var(--above-h,0px) - var(--bnav-h) - env(safe-area-inset-bottom) - 52px);
+    height:calc(100dvh - var(--top-h,52px) - var(--above-h,0px) - var(--bnav-h) - env(safe-area-inset-bottom) - 52px);min-height:300px}
   #scheduleView #schEmpty{margin:0 12px}
   #scheduleView .side{display:none;position:fixed;inset:0;z-index:48;overflow:auto;background:var(--bg);padding:0 12px calc(24px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
   #scheduleView.side-open .side{display:block}
@@ -1591,13 +1608,15 @@ function renderNet(st){
   if (g.skipped || !g.cc) ip.classList.add("hidden");
   if (g.checked && g.cc) { ip.classList.remove("hidden"); ip.innerHTML = g.warning ? `<span class="dot down"></span>IP ${esc(g.cc)} — выключите VPN` : `<span class="dot ok"></span>IP ${esc(g.ip || "")} · ${esc(g.cc)}`; }
   let html = "";
-  if (g.warning) html += `<div class="banner bad"><div><b>Похоже, включён VPN</b>${esc(g.warning)}</div><span class="spacer"></span>
-    <div style="display:flex;flex-direction:column;gap:6px"><button class="btn" id="geoHide">Скрыть: у меня DIRECT для СевГУ</button><button class="btn ghost" id="geoRe">Проверить снова</button></div></div>`;
+  if (g.warning) html += `<div class="banner bad"><div class="bn-t"><b>Похоже, включён VPN</b><span class="bn-d">${esc(g.warning)}</span></div><span class="spacer"></span>
+    <div class="bn-btns"><button class="btn" id="geoHide">Скрыть: у меня DIRECT для СевГУ</button><button class="btn ghost" id="geoRe">Проверить снова</button></div></div>`;
   const off = st.login.offline;
-  if (off) html += `<div class="banner"><div><b>Офлайн-режим — ${esc(off.reason)}</b>Работаю с сохранённым: курсы${off.cached ? " (список от " + esc(off.cached) + ")" : ""}, скачанные файлы, расписание и элективы.
-    ${st.net.status === "down" ? "Как только Moodle оживёт, войду сам и обновлю данные." : "Moodle сейчас отвечает — можно войти."}${st.job.armed ? " Загрузка начнётся сама." : ""}</div><span class="spacer"></span>
-    <button class="btn" id="reloginBtn">Войти</button></div>`;
-  if (st.job.result && st.job.result.aborted === "session" && st.job.state === "idle") html += `<div class="banner"><div><b>Сессия Moodle истекла</b>Войдите снова — скачанное не потеряется, продолжу с того же места.</div></div>`;
+  if (off) html += `<div class="banner"><div class="bn-t"><b>Офлайн-режим — ${esc(off.reason)}</b><span class="bn-d">Работаю с сохранённым: курсы${off.cached ? " (список от " + esc(off.cached) + ")" : ""}, скачанные файлы, расписание и элективы.
+    ${st.net.status === "down" ? "Как только Moodle оживёт, войду сам и обновлю данные." : "Moodle сейчас отвечает — можно войти."}${st.job.armed ? " Загрузка начнётся сама." : ""}</span></div><span class="spacer"></span>
+    <button class="btn bn-keep" id="reloginBtn">Войти</button></div>`;
+  if (st.job.result && st.job.result.aborted === "session" && st.job.state === "idle") html += `<div class="banner"><div class="bn-t"><b>Сессия Moodle истекла</b><span class="bn-d">Войдите снова — скачанное не потеряется, продолжу с того же места.</span></div></div>`;
+  if (!$("#bannerWrap").dataset.bnInit) { $("#bannerWrap").dataset.bnInit = "1";
+    $("#bannerWrap").addEventListener("click", e => { const t = e.target.closest(".bn-t"); if (t && NARROW.matches) { t.parentElement.classList.toggle("open"); setBarVars(); } }); }
   if ($("#bannerWrap").dataset.h !== html) { $("#bannerWrap").innerHTML = html; $("#bannerWrap").dataset.h = html; const b = $("#geoRe"); if (b) b.onclick = () => api("/api/geo", {});
     const rl = $("#reloginBtn"); if (rl) rl.onclick = () => api("/api/relogin", {});
     const h = $("#geoHide"); if (h) h.onclick = () => api("/api/settings", {no_geo_check: true}).then(() => toast("Проверка IP выключена. Включить снова: «Дополнительно» → «Не проверять страну IP»."));
