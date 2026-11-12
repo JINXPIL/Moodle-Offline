@@ -61,7 +61,7 @@ DEFAULT_CATS = list(CAT_IDS)   # материалов может быть мно
 # Из settings.json переносится только это (остальное — вход, пути, прокси, токены — остаётся на своём устройстве).
 SETTINGS_KEYS = ("rules", "layout_dir", "layout_file", "mode", "original_names", "index_in_mode2", "course_ids",
                  "schedule_group", "schedule_sources", "schedule_urls", "schedule_pdf", "schedule_auto",
-                 "schedule_auto_range", "schedule_excel", "news", "calendar", "electives_url", "keep_versions")
+                 "schedule_auto_range", "schedule_excel", "news", "calendar", "electives_url", "keep_versions", "save_grades")
 _SECRET_KEY = re.compile(r"token|secret|passw|webhook|telegram|cookie|chat_id|bot_|api_?key", re.I)
 
 SERVICE_TOP = {"_бэкапы", "_debug", "Расписание", "Календарь", "Элективы", "снимки", "Перенос"}   # в корне папки сохранения — не курсы
@@ -134,6 +134,8 @@ def iter_cat(cat: str, out: Path, data: Path):
         for sub in ("structure", "covers"):
             for rel, full in _walk(data / sub, sub + "/"):
                 yield "data", rel, full
+        for rel, full in _single(out, ".moodle_grades.json"):      # оценки по курсам — к списку курсов
+            yield "out", rel, full
     elif cat == "schedule":
         for rel, full in _walk(out / "Расписание", "Расписание/", skip_top=("Поделиться",)):   # готовые файлы «для друзей» не переносим
             yield "out", rel, full

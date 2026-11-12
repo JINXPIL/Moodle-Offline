@@ -112,6 +112,7 @@ def prepare_data_dir(rep=None) -> dict | None:
         rep.log(f"Данные прошлой версии перенесены из {info['from']} (файлов: {info['files']}). Старая папка осталась как была.")
     return info
 
+GRADES_FILE = ".moodle_grades.json"
 STATE_FILE = ".moodle_state.json"   # что уже скачано (для докачки и синхронизации)
 COURSE_JSON = ".course.json"       # структура курса в его папке (для окна курса; по ней же возвращаем курс в состояние)
 LOG_FILE = "_журнал.log"
@@ -169,9 +170,10 @@ HANDLERS = {
     "scorm": "package",      # Пакет SCORM
     "file": "file",          # файл по прямой ссылке из текста раздела/блока
     "text": "text",          # длинный текстовый блок (label)
+    "attendance": "attendance",   # Посещаемость (ваша таблица занятий и итог)
 }
 IGNORED_MODS = {"subsection", "qbank"}
-RECHECK_IN_SYNC = {"folder"}  # в быстрой синхронизации папки перепроверяем всегда (в них часто докладывают файлы)
+RECHECK_IN_SYNC = {"folder", "attendance"}  # в быстрой синхронизации папки (докладывают файлы) и посещаемость (отметки меняются) читаем заново
 RESOURCE_RECHECK = 24 * 3600  # при включённом «Резерве файлов» файловые ресурсы быстрая синхронизация перепроверяет раз в сутки:
                               # так замену лекции «заглушкой» видно и при автообновлении, а к серверу — по запросу на ресурс в день
 
@@ -598,6 +600,7 @@ class Item:
     rule_skip: str | None = None   # причина, если элемент пропущен по правилам
     rule_notes: list = field(default_factory=list)   # какие файлы элемента пропущены по правилам
     done: str = ""             # отметка о выполнении на сайте: "done" / "todo" / "fail" ("" — сайт её не показывает)
+    attendance: dict | None = None   # «Посещаемость»: итоги и занятия (см. parse_attendance)
     restriction: str = ""      # «Недоступно, пока не выполнено…» — кому элемент закрыт и почему
 
 
@@ -646,6 +649,7 @@ class JobOptions:
     news: dict | None = None       # настройки «Что нового» (см. news.DEFAULTS)
     calendar: dict | None = None   # настройки календаря (см. deadlines.DEFAULTS)
     calendar_on: bool = False      # после курсов обновить календарь сроков (вызывающий включает сам)
+    grades_on: bool = False        # после курсов прочитать оценки по всем курсам (один запрос; вызывающий включает сам)
 
 
 @dataclass
@@ -1999,6 +2003,143 @@ def label_heading(content) -> str:
     return ""
 
 
+# ── «Посещаемость» (mod_attendance) и «Оценки» (grade/report/overview) ────────────────────────────────
+_ATT_KINDS = (("pending", re.compile(r"^\s*\?\s*$")), ("present", re.compile(r"^присутств", re.I)),
+              ("late", re.compile(r"опозд", re.I)), ("excused", re.compile(r"уважит", re.I)),
+              ("absent", re.compile(r"не\s+был|отсутств", re.I)))
+
+
+def attendance_kind(status: str) -> str:
+    """Статус занятия → present / late / excused / absent / pending («?» — ещё не отмечено) / other."""
+    for k, rx in _ATT_KINDS:
+        if rx.search(status or ""):
+            return k
+    return "other"
+
+
+def parse_attendance(soup) -> dict | None:
+    """Таблица «Посещаемость» студента: занятия (дата, время, описание, статус, баллы, заметки) и итоговые строки.
+    → {"sessions": [...], "counts": {...}, "summary": {"taken", "points", "percent"}} или None, если такой таблицы нет."""
+    main = select_main(soup)
+    table = main.select_one("table.attwidth, table.generaltable.attwidth")
+    if table is None:
+        return None
+    sessions = []
+    for tr in table.select("tbody tr"):
+        tds = {c: tr.select_one("td." + c) for c in ("datecol", "desccol", "statuscol", "pointscol", "remarkscol")}
+        if not tds["datecol"] or not tds["statuscol"]:
+            continue
+        d = tds["datecol"]
+        tm = d.select_one("nobr")
+        tm_txt = clean_text(tm.get_text(" ")) if tm else ""
+        date_txt = clean_text(d.get_text(" "))
+        if tm_txt and date_txt.endswith(tm_txt):
+            date_txt = date_txt[:-len(tm_txt)].strip()
+        status = clean_text(tds["statuscol"].get_text(" "))
+        sessions.append({"date": date_txt, "time": tm_txt,
+                         "desc": clean_text(tds["desccol"].get_text(" ")) if tds["desccol"] else "",
+                         "status": status, "kind": attendance_kind(status),
+                         "points": clean_text(tds["pointscol"].get_text(" ")) if tds["pointscol"] else "",
+                         "remarks": clean_text(tds["remarkscol"].get_text(" ")) if tds["remarkscol"] else ""})
+    summary = {}
+    rows = [[clean_text(c.get_text(" ")) for c in tr.select("td")] for tr in main.select("table.attlist tr")]
+    for r in rows:
+        if len(r) < 2:
+            continue
+        label = r[0].lower()
+        if "процент" in label:
+            summary["percent"] = r[1]
+        elif "балл" in label:
+            summary["points"] = r[1]
+        elif "занят" in label:
+            summary["taken"] = r[1]
+    counts = {k: 0 for k in ("present", "late", "excused", "absent", "pending", "other")}
+    for s in sessions:
+        counts[s["kind"]] += 1
+    counts["total"] = len(sessions)
+    return {"sessions": sessions, "counts": counts, "summary": summary}
+
+
+def parse_grades_overview(soup, base_host: str = "") -> list[dict]:
+    """Сводка «Оценки» (grade/report/overview): строки «курс — оценка — место». → [{"id", "name", "grade", "rank"}].
+    Прочерк «-» значит «оценки нет» — храним пустую строку. id курса берётся из ссылки на отчёт по курсу."""
+    out = []
+    for tr in soup.select("table#overview-grade tr, table.generaltable[id*='overview'] tr"):
+        tds = tr.select("td")
+        if len(tds) < 2:
+            continue
+        a = tds[0].select_one("a[href]")
+        if a is None:
+            continue
+        cid = query_param(a["href"], "id")
+        if not cid or not cid.isdigit():
+            continue
+        def cell(i):
+            v = clean_text(tds[i].get_text(" ")) if len(tds) > i else ""
+            return "" if v in ("-", "—", "–") else v
+        out.append({"id": int(cid), "name": clean_text(a.get_text(" ")), "grade": cell(1), "rank": cell(2)})
+    return out
+
+
+
+def attendance_fragment(soup):
+    """Страница «Посещаемость» для офлайн-копии: описание преподавателя, таблица занятий и итог.
+    Вкладки «Текущий курс / Все курсы / Все занятия» и переключатели «месяц / неделя / дни» с календариком убираем:
+    ссылки ведут на сайт, а нужной выборки в офлайне уже не сделать."""
+    frag = copy.copy(select_main(soup))
+    for nav in frag.select("ul.nav-tabs, .attfiltercontrols"):
+        if nav.select_one("a[href*='attendance/view.php']") or "attfiltercontrols" in (nav.get("class") or []):
+            nav.decompose()
+    for tb in frag.select("table"):
+        cls = tb.get("class") or []
+        if "attwidth" not in cls and "attlist" not in cls and tb.select_one("a[href*='attendance/view.php']"):
+            tb.decompose()
+    return frag
+
+
+def attendance_line(att: dict) -> str:
+    """Короткая строка итога: «был 1 · опоздал 0 · не был 1 · ещё не отмечено 6 из 8 занятий · 50,0%»."""
+    c, sm = att.get("counts") or {}, att.get("summary") or {}
+    bits = []
+    for k, label in (("present", "был"), ("late", "опоздал"), ("excused", "уважительная причина"), ("absent", "не был")):
+        if c.get(k):
+            bits.append(f"{label} {c[k]}")
+    if c.get("pending"):
+        bits.append(f"впереди или не отмечено {c['pending']}")
+    line = " · ".join(bits) if bits else "нет отмеченных занятий"
+    line += f" (всего занятий: {c.get('total', 0)})"
+    if sm.get("percent"):
+        line += f" · {sm['percent']}"
+    return line
+
+
+def grades_sync(client: "MoodleClient", out: Path, rep: Reporter) -> dict:
+    """Один запрос: сводка «Оценки» по всем курсам → .moodle_grades.json в папке сохранения.
+    Сеть или сессия сломались — исключение уходит наверх, прежние оценки остаются. → {"ok", "courses", "graded"}."""
+    rep.log("Оценки: читаю сводку по курсам…")
+    soup, _ = client.page(client.base + "/grade/report/overview/index.php")
+    rows = parse_grades_overview(soup)
+    if not rows:
+        rep.log("Оценки: таблицу на странице не нашёл — прежние оценки оставил как были.", "warn")
+        return {"ok": False, "courses": 0, "graded": 0}
+    data = {"updated": datetime.now().strftime("%d.%m.%Y %H:%M"),
+            "courses": {str(r["id"]): {"name": r["name"], "grade": r["grade"], "rank": r["rank"]} for r in rows}}
+    write_text_atomic(Path(out) / GRADES_FILE, json.dumps(data, ensure_ascii=False, indent=1))
+    graded = sum(1 for r in rows if r["grade"])
+    rep.log(f"Оценки: курсов в сводке {len(rows)}, с оценкой {graded}.")
+    return {"ok": True, "courses": len(rows), "graded": graded}
+
+
+def load_grades(out: Path) -> dict:
+    """Сохранённые оценки: {"updated": …, "courses": {id: {name, grade, rank}}} или {}."""
+    try:
+        with fopen(Path(out) / GRADES_FILE, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) and isinstance(d.get("courses"), dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 _COMPLETION_ICON = re.compile(r"completion-(?:auto|manual)-(y|pass|n|fail)(?![a-z])")
 
 
@@ -2919,6 +3060,12 @@ class Processor:
         soup, r = self.client.page(it.url, referer=self.course.url)
         self.save_html(s, it, select_main(soup), r.url)
 
+    def h_attendance(self, s, it):
+        """Посещаемость: страница «Все занятия» (по умолчанию сайт показывает только текущий месяц) — таблица и итог."""
+        soup, r = self.client.page(add_query(it.url, view=5), referer=self.course.url)
+        it.attendance = parse_attendance(soup)
+        self.save_html(s, it, attendance_fragment(soup), r.url)
+
     def h_text(self, s, it):
         frag = BeautifulSoup(it.label_html or "", PARSER)
         self.save_html(s, it, frag.body or frag, self.course.url)
@@ -3665,7 +3812,8 @@ def auto_job_options(settings: dict, out: Path) -> "JobOptions":
                       index_in_mode2=bool(settings.get("index_in_mode2")), rules=settings.get("rules"),
                       dir_template=settings.get("layout_dir") or "", file_template=settings.get("layout_file") or "",
                       news=settings.get("news"), calendar=settings.get("calendar"),
-                      calendar_on=deadlines.normalize(settings.get("calendar"))["auto"])
+                      calendar_on=deadlines.normalize(settings.get("calendar"))["auto"],
+                      grades_on=bool(settings.get("save_grades", True)))
 
 
 def auto_update(client: "MoodleClient", vault: "Vault", settings: dict, rep: Reporter, control: Control, *,
@@ -3932,6 +4080,8 @@ def write_course_index(course: Course, layout: Layout):
                     md.append(f"  - внешняя ссылка: <{it.external}>")
                 if it.done:
                     md.append(f"  - на сайте: {DONE_TEXT[it.done]}")
+                if it.attendance:
+                    md.append(f"  - посещаемость: {attendance_line(it.attendance)}")
                 if it.restriction:
                     md.append(f"  - ограничение на сайте: {it.restriction}")
                 for note in it.rule_notes:
@@ -3953,6 +4103,8 @@ def write_course_index(course: Course, layout: Layout):
                     extra += f'<div class="online">Внешняя ссылка: <a href="{esc(it.external)}">{esc(short(it.external, 90))}</a></div>'
                 if it.done:
                     extra += f'<div class="online">На сайте: {esc(DONE_TEXT[it.done])}</div>'
+                if it.attendance:
+                    extra += f'<div class="online">Посещаемость: {esc(attendance_line(it.attendance))}</div>'
                 if it.restriction:
                     extra += f'<div class="online">Ограничение на сайте: {esc(it.restriction)}</div>'
                 if it.error:
@@ -3987,7 +4139,7 @@ def write_course_json(course: Course, layout: Layout):
                 {"key": it.key, "name": it.name, "modtype": it.modtype, "kind": it.kind, "url": it.url,
                  "description": it.description, "context": it.context, "external": it.external,
                  "online_only": it.online_only, "error": it.error, "files": it.files,
-                 "done": it.done, "restriction": it.restriction} for it in s.items]}
+                 "done": it.done, "restriction": it.restriction, "attendance": it.attendance} for it in s.items]}
                 for s in course.sections]}
     write_text_atomic(layout.course_dir / ".course.json", json.dumps(data, ensure_ascii=False, indent=1))
 
@@ -4199,6 +4351,14 @@ def run_job(client: MoodleClient, courses: list[Course], opts: JobOptions, rep: 
                 raise
             except Exception as e:
                 rep.log(f"Календарь: сроки не обновлены ({describe_error(e)}). Скачанное в порядке.", "warn")
+        if proc and opts.grades_on and not opts.dry_run:
+            control.checkpoint()
+            try:
+                grades_sync(client, out, rep)
+            except (NetworkDown, Stopped, SessionExpired, KeyboardInterrupt):
+                raise
+            except Exception as e:
+                rep.log(f"Оценки: не обновлены ({describe_error(e)}). Скачанное в порядке.", "warn")
     except NetworkDown as e:
         res.aborted, res.message = "network", str(e)
         rep.log(f"Остановлено: {e}. Прогресс сохранён — запустите программу ещё раз, когда связь появится.", "error")
@@ -4513,6 +4673,7 @@ def cli_main(argv=None) -> int:
                    help="показать сроки сдачи и пары на N дней вперёд (по умолчанию 14) и выйти; без интернета и входа")
     p.add_argument("--calendar-sync", action="store_true", help="обновить только календарь Moodle (сроки и .ics), без скачивания материалов")
     p.add_argument("--no-calendar", action="store_true", help="не обновлять календарь сроков в этом запуске")
+    p.add_argument("--no-grades", action="store_true", help="не читать оценки по курсам в этом запуске")
     p.add_argument("--search", metavar="ЗАПРОС", help="найти в скачанных материалах и выйти (слова — все сразу, \"точная фраза\", -исключить)")
     p.add_argument("--search-course", metavar="КУРС", help="искать только в этом курсе (часть названия папки курса)")
     p.add_argument("--search-limit", type=int, default=10, help="сколько файлов показать (по умолчанию 10)")
@@ -4816,7 +4977,8 @@ def cli_main(argv=None) -> int:
                       file_template=settings.get("layout_file") or "",
                       news={**news.normalize(settings.get("news")), "enabled": False} if args.no_news else settings.get("news"),
                       calendar=settings.get("calendar"),
-                      calendar_on=(not args.no_calendar and deadlines.normalize(settings.get("calendar"))["auto"]))
+                      calendar_on=(not args.no_calendar and deadlines.normalize(settings.get("calendar"))["auto"]),
+                      grades_on=(not args.no_grades and bool(settings.get("save_grades", True))))
     rep.log(f"\nКурсов: {len(selected)} · режим {mode} · папка: {out}"
             + (f" · тихие часы {fmt_window(window)}" if window else ""))
     t0 = time.monotonic()

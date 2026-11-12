@@ -240,6 +240,8 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .mdesc{font-size:12.5px;color:var(--muted);font-style:italic;margin-top:2px}
 .dn{font-size:12px;color:var(--faint)}.dn.ok{color:var(--ok)}.dn.warn{color:var(--warn)}.dn.bad{color:var(--bad)}
 .restr{font-size:12px;color:var(--warn);margin-top:2px}
+.gr{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--raised);border:1px solid var(--line);font-size:12px;color:var(--text);white-space:nowrap}
+.att{margin-top:4px;font-size:12.5px}.att .absent{color:var(--bad);font-weight:600}.att table{border-collapse:collapse;margin-top:6px;width:100%}.att td{padding:3px 8px 3px 0;border-top:1px solid var(--line);vertical-align:top}.att td.s-absent{color:var(--bad)}.att td.s-present{color:var(--ok)}.att td.s-late,.att td.s-excused{color:var(--warn)}.att td.s-pending{color:var(--faint)}
 .mfiles{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .mf{display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
 .mf .fn{max-width:520px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -596,6 +598,7 @@ body.android .no-android{display:none!important}
             <div class="row"><div class="lbl">PDF-копии страниц<small id="pdfNote">задания, тесты, страницы — ещё и в PDF</small></div><label class="sw-t"><input type="checkbox" data-s="pdf"><span></span></label></div>
             <div class="row"><div class="lbl">ZIP-бэкап курса<small>архив с датой в папке _бэкапы</small></div><label class="sw-t"><input type="checkbox" data-s="zip"><span></span></label></div>
             <div class="row"><div class="lbl">Резерв файлов<small>если преподаватель заменит файл (или поставит «заглушку»), прежняя версия останется в папке «_Резерв» курса</small></div><label class="sw-t"><input type="checkbox" data-s="keep_versions"><span></span></label></div>
+            <div class="row"><div class="lbl">Оценки с сайта<small>после загрузки — один запрос «Оценки» по всем курсам; видно на карточках и в окне курса, в том числе без сети</small></div><label class="sw-t"><input type="checkbox" data-s="save_grades"><span></span></label></div>
             <button class="btn big ghost" id="rulesBtn" style="margin-top:10px">Правила скачивания…</button>
             <p class="hint" id="rulesInfo">Какие файлы брать, что пропускать, свои правила для каждого курса.</p>
           </div>
@@ -1083,7 +1086,7 @@ function renderGrid(){
         <span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>${tag ? `<span class="tag">${tag}</span>` : ""}</div>
       <div class="cbody"><div class="cat">${esc(c.category || " ")}</div><div class="ctitle" title="${esc(c.fullname)}">${esc(c.fullname)}</div>
         ${c.progress != null ? `<div class="prog" title="Выполнено в Moodle: ${Math.round(c.progress)}%"><i style="width:${Math.round(c.progress)}%"></i></div>` : `<div style="margin-top:auto"></div>`}
-        <div class="cfoot"><span>${c.downloaded ? `Скачано ${c.downloaded} · ${esc(c.updated.split(" ")[0])}` : "Ещё не скачан"}</span>
+        <div class="cfoot"><span>${c.downloaded ? `Скачано ${c.downloaded} · ${esc(c.updated.split(" ")[0])}` : "Ещё не скачан"}${c.grade ? ` <span class="gr" title="Оценка в Moodle на момент последней загрузки">оценка ${esc(c.grade)}</span>` : ""}</span>
         ${c.dir ? `<button class="mini" data-open="${esc(c.dir)}" title="Открыть папку курса">Папка</button>` : ""}</div></div></div>`;
   }).join("") : `<div class="empty">${courses.length ? "Ничего не найдено — попробуйте другой фильтр." : "Курсы загружаются…"}</div>`;
   updateSelInfo();
@@ -2021,6 +2024,16 @@ function reserveHtml(d, f){
     + rv.map(v => { const vp = pre + v.path, e = extOf(vp);
         return `<span class="rv">заменена ${esc(rvWhen(v.saved))} · ${hsize(v.size)}${PREVIEW.has(e) ? `<button data-prev="${esc(vp)}">Просмотр</button>` : ""}<button data-ext="${esc(vp)}">Открыть</button></span>`; }).join("") + `</div>`;
 }
+const ATT_L = [["present", "был"], ["late", "опоздал"], ["excused", "уважительная причина"], ["absent", "не был"]];
+function attHtml(a){
+  if (!a || !a.counts) return "";
+  const c = a.counts, sm = a.summary || {};
+  const bits = ATT_L.filter(([k]) => c[k]).map(([k, l]) => k === "absent" ? `<span class="absent">${l} ${c[k]}</span>` : `${l} ${c[k]}`);
+  if (c.pending) bits.push(`впереди или не отмечено ${c.pending}`);
+  const rows = (a.sessions || []).map(s => `<tr><td>${esc(s.date)}<br><span class="mmeta">${esc(s.time)}</span></td><td>${esc(s.desc)}${s.remarks ? `<div class="mmeta">${esc(s.remarks)}</div>` : ""}</td><td class="s-${esc(s.kind)}">${esc(s.status)}</td><td style="white-space:nowrap">${esc(s.points)}</td></tr>`).join("");
+  return `<div class="att">Посещаемость: ${bits.join(" · ") || "нет отмеченных занятий"} · всего занятий ${c.total}${sm.percent ? " · " + esc(sm.percent) : ""} <span class="mmeta">(на момент последней загрузки)</span>`
+    + (rows ? `<details><summary class="mmeta" style="cursor:pointer">Показать все занятия</summary><table>${rows}</table></details>` : "") + `</div>`;
+}
 function doneSummary(d){
   let n = 0, ok = 0;
   for (const s of d.sections || []) for (const it of s.items || []) if (it.done) { n++; if (it.done === "done") ok++; }
@@ -2033,9 +2046,9 @@ function renderCourse(){
   let html = `<button class="btn ghost" id="cvBack" style="margin-bottom:10px">← Все курсы</button><div class="cv-head"><div class="cv-cover" style="${coverStyle(c)}">${img ? `<img src="${esc(img)}" alt="" onerror="this.remove()">` : ""}</div>
     <div class="cv-info"><div style="min-width:260px;flex:1"><div class="cat">${esc(c.category || "")}</div><h2>${esc(d.fullname || c.fullname)}</h2>
       <div class="mmeta">${d.error ? "" : d.downloaded ? `Сохранено на этом устройстве · обновлено ${esc(d.updated)}` : "Ещё не скачан — показана структура с сайта, файлы откроются после загрузки"}</div>
-      ${doneSummary(d)}${c.progress != null ? `<div class="prog" style="margin-top:8px;max-width:340px"><i style="width:${Math.round(c.progress)}%"></i></div>` : ""}</div>
+      ${c.grade ? `<div class="mmeta" style="margin-top:4px">Оценка на сайте: <b>${esc(c.grade)}</b> (на момент последней загрузки)</div>` : ""}${doneSummary(d)}${c.progress != null ? `<div class="prog" style="margin-top:8px;max-width:340px"><i style="width:${Math.round(c.progress)}%"></i></div>` : ""}</div>
     <div class="cv-acts"><button class="btn primary" id="cvDl">${d.downloaded ? "Обновить курс" : "Скачать курс"}</button>
-      ${(d.url || c.url) ? `<button class="btn" id="cvSite">Открыть на сайте</button>` : ""}${d.dir ? `<button class="btn" id="cvDir">Папка курса</button>` : ""}
+      ${(d.url || c.url) ? `<button class="btn" id="cvSite">Открыть на сайте</button><button class="btn" id="cvGrades" title="Оценки по заданиям и тестам этого курса — страница сайта в читалке">Оценки курса</button>` : ""}${d.dir ? `<button class="btn" id="cvDir">Папка курса</button>` : ""}
       <button class="btn ghost" id="cvLive" title="Перечитать разделы и элементы с сайта">↻ С сайта</button></div></div></div>`;
   if (d.error) { el.innerHTML = html + `<div class="empty">${esc(d.error)}</div>`; bindCV(); return; }
   html += `<div class="toolbar"><div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="cvQ" placeholder="Поиск в курсе" value="${esc(cvQ)}"></div>
@@ -2053,7 +2066,7 @@ function renderCourse(){
       const note = it.online_only ? `<div class="mmeta">только онлайн${it.url ? "" : " · недоступно"}</div>` : it.error ? `<div class="mmeta" style="color:var(--bad)">${esc(it.error)}</div>` : (!d.downloaded ? `<div class="mmeta">не скачано</div>` : "");
       html += `<div class="mi ${it.online_only && !it.url ? "dim" : ""}">${icon(it.modtype)}<div style="min-width:0"><div class="mname"><span class="kb ${KC[it.kind] || "ДР"}">${KC[it.kind] || "ДР"}</span>${esc(it.name)}</div>
         <div class="mmeta">${esc(MODT[it.modtype] || it.modtype)}${it.context && it.context !== it.name ? " · из блока «" + esc(it.context) + "»" : ""}${it.done && DONE_UI[it.done] ? ` · <span class="dn ${DONE_UI[it.done][1]}">${DONE_UI[it.done][0]}</span>` : ""}</div>
-        ${it.restriction ? `<div class="restr">Ограничение на сайте: ${esc(it.restriction)}</div>` : ""}${it.description ? `<div class="mdesc">${esc(it.description)}</div>` : ""}${files ? `<div class="mfiles">${files}</div>` : ""}${note}</div><div class="side-b" style="display:flex;gap:4px">${extl}${site}</div></div>`;
+        ${it.restriction ? `<div class="restr">Ограничение на сайте: ${esc(it.restriction)}</div>` : ""}${attHtml(it.attendance)}${it.description ? `<div class="mdesc">${esc(it.description)}</div>` : ""}${files ? `<div class="mfiles">${files}</div>` : ""}${note}</div><div class="side-b" style="display:flex;gap:4px">${extl}${site}</div></div>`;
     }
     html += `</section>`;
   }
@@ -2062,7 +2075,8 @@ function renderCourse(){
 }
 function bindCV(){
   const {c, d} = CV, on = (id, f) => { const b = $("#" + id); if (b) b.onclick = f; };
-  on("cvBack", closeCourse); on("cvSite", () => openUrl(d.url || c.url)); on("cvDir", () => api("/api/open", {path: d.dir}));
+  on("cvBack", closeCourse); on("cvSite", () => openUrl(d.url || c.url));
+  on("cvGrades", () => { try { rdOpen(new URL(d.url || c.url).origin + "/grade/report/user/index.php?id=" + c.id, "Оценки: " + (d.fullname || c.fullname)); } catch (e) {} }); on("cvDir", () => api("/api/open", {path: d.dir}));
   on("cvLive", () => openCourse(c.id, true));
   on("cvDl", () => { selected.add(c.id); saveSel(); start(false, false, [c.id]); });
   const q = $("#cvQ"); if (q) q.oninput = e => { cvQ = e.target.value.trim().toLowerCase(); const pos = e.target.selectionStart; renderCourse(); const n = $("#cvQ"); n.focus(); n.setSelectionRange(pos, pos); };

@@ -762,8 +762,10 @@ class App:
         except (OSError, ValueError):
             pass
         res = []
+        grades = (mo.load_grades(out).get("courses") or {})
         for c in self.courses:
             d = c.to_dict()
+            d["grade"] = (grades.get(str(c.id)) or {}).get("grade", "")
             sc = state_courses.get(str(c.id)) or {}
             d["downloaded"] = sc.get("files", 0)
             d["updated"] = sc.get("updated", "")
@@ -1527,7 +1529,8 @@ class App:
                                  original_names=bool(st.get("original_names")), index_in_mode2=bool(st.get("index_in_mode2")),
                                  keep_versions=bool(st.get("keep_versions", True)), rules=st.get("rules"), dir_template=st.get("layout_dir") or "",
                                  file_template=st.get("layout_file") or "", news=st.get("news"),
-                                 calendar=st.get("calendar"), calendar_on=deadlines.normalize(st.get("calendar"))["auto"])
+                                 calendar=st.get("calendar"), calendar_on=deadlines.normalize(st.get("calendar"))["auto"],
+                                 grades_on=bool(st.get("save_grades", True)))
             auto = bool(params.get("auto"))
             self.rep.log(f"{'Автообновление' if auto else 'Быстрая синхронизация' if opts.sync else 'Загрузка'}: курсов {len(selected)}, "
                          f"режим {opts.mode}, папка {opts.out_dir}")
@@ -2455,7 +2458,7 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/settings":
             allowed = {"mode", "out_dir", "pdf", "zip", "course_ids", "quiet_hours", "quiet_hours_on",
                        "page_delay", "file_delay", "wait_minutes", "use_system_proxy", "original_names",
-                       "index_in_mode2", "wait_for_server", "no_geo_check", "base_url", "android_wakelock", "keep_versions"}
+                       "index_in_mode2", "wait_for_server", "no_geo_check", "base_url", "android_wakelock", "keep_versions", "save_grades"}
             with APP.lock:
                 for k, v in b.items():
                     if k in allowed:
@@ -2654,7 +2657,7 @@ class Handler(BaseHTTPRequestHandler):
             "settings": {**{k: st.get(k) for k in ("mode", "out_dir", "pdf", "zip", "course_ids", "quiet_hours",
                                                    "quiet_hours_on", "schedule_on", "schedule_time", "wait_for_server",
                                                    "use_system_proxy", "original_names", "index_in_mode2", "no_geo_check", "android_wakelock")},
-                         "keep_versions": bool(st.get("keep_versions", True))},
+                         "keep_versions": bool(st.get("keep_versions", True)), "save_grades": bool(st.get("save_grades", True))},
             "platform": os.name, "android": ANDROID, "android_info": APP.android_info() if ANDROID else None, "browser_pdf": bool(mo.find_browser()),
             "news_unread": APP.news_unread(),
             "update": APP.update_brief(),
