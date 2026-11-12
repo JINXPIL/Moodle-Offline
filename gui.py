@@ -2726,6 +2726,56 @@ def existing_instance():
     return r["url"] if r else None
 
 
+class _WinApi:
+    """Окна Windows через ctypes (без сторонних библиотек): список видимых окон верхнего уровня и «закрыть как кнопкой ×»."""
+    def __init__(self):
+        import ctypes
+        from ctypes import wintypes
+        self.ct, self.wt = ctypes, wintypes
+        self.u = ctypes.windll.user32
+
+    def windows(self):
+        ct, wt, u = self.ct, self.wt, self.u
+        out = []
+        proc = ct.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+
+        def cb(hwnd, _lp):
+            if u.IsWindowVisible(hwnd):
+                n = u.GetWindowTextLengthW(hwnd)
+                title = ct.create_unicode_buffer(n + 1)
+                u.GetWindowTextW(hwnd, title, n + 1)
+                cls = ct.create_unicode_buffer(256)
+                u.GetClassNameW(hwnd, cls, 256)
+                out.append((hwnd, title.value, cls.value))
+            return True
+        u.EnumWindows(proc(cb), 0)
+        return out
+
+    def close(self, hwnd):
+        self.u.PostMessageW(hwnd, 0x0010, 0, 0)         # WM_CLOSE — то же, что нажать «×»
+
+
+def close_old_windows(title: str = "Moodle Offline", api=None) -> int:
+    """Windows: закрыть окна прежней копии программы. Окно-приложение — отдельное окно Edge/Chrome, и копии до 1.17.1 сами его
+    не закрывали: после обновления оставалось пустое окно «Программа закрыта — перезапустите её». Берём только окна Chromium
+    (класс Chrome_WidgetWin_1) с заголовком ровно «Moodle Offline»: у обычной вкладки заголовок длиннее («… — Microsoft Edge»).
+    Зовём, когда прежняя копия уже ушла, а своё окно ещё не открыто. Любой сбой — тихо (окно тогда закроют вручную).
+    → сколько окон закрыто."""
+    try:
+        if api is None:
+            if os.name != "nt":
+                return 0
+            api = _WinApi()
+        n = 0
+        for hwnd, t, cls in api.windows():
+            if t == title and cls == "Chrome_WidgetWin_1":
+                api.close(hwnd)
+                n += 1
+        return n
+    except Exception:
+        return 0
+
+
 def hand_off(old: dict, timeout: float = 75.0) -> bool:
     """Новая версия просит прежнюю (ещё работающую в фоне) закрыться и ждёт, пока та освободит место. → True, если место свободно.
     Иначе (раньше так и было) запуск новой версии просто открывал окно старой, и казалось, что обновление «не встало»."""
@@ -2739,8 +2789,12 @@ def hand_off(old: dict, timeout: float = 75.0) -> bool:
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         cur = running_instance()
-        if not cur or cur["port"] != old["port"]:
+        if not cur:
+            if close_old_windows():                   # окно прежней копии (в нём ещё «Программа закрыта») — закрываем за неё
+                time.sleep(1.5)                       # браузеру нужно успеть закрыться: свежий запуск с тем же профилем в этот миг мог бы потеряться
             return True
+        if cur["port"] != old["port"]:
+            return True                               # место уже занято другой копией: её окно не трогаем
         time.sleep(0.5)
     return False
 
