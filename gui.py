@@ -51,6 +51,7 @@ UI_DIR = Path(os.environ.get("MOODLE_OFFLINE_UI") or (Path(getattr(sys, "_MEIPAS
 TASK_NAME = "MoodleOffline - ночная синхронизация"
 SSO_DOMAIN = "sevsu.ru"      # единый вход вуза: auth.sevsu.ru, iot.sevsu.ru, timetable.sevsu.ru
 HEARTBEAT_IDLE = 30
+CLOSE_GRACE = 3.0           # сколько сервер ещё живёт после просьбы новой версии закрыться: окну нужно успеть закрыть себя
 HEARTBEAT_BUSY = 60
 ANDROID = android.is_android()      # на телефоне окно — это браузер, а программа живёт в Termux
 CAL_WATCH_EVERY = 300         # как часто (сек) проверять «горящие» сроки, пока открыто окно
@@ -243,6 +244,7 @@ class App:
         self.last_poll = time.monotonic()
         self.token = secrets.token_urlsafe(18)
         self.shutdown = threading.Event()
+        self.closing = ""             # почему эта копия закрывается: "update" (ставит новую версию) / "replaced" (новая просит место); окна по этому закрываются сами
         self.el_lock = threading.Lock()
         self.reader_lock = threading.Lock()     # читалка: по одному запросу к Moodle за раз
         self.electives_checked = 0.0
@@ -1029,11 +1031,14 @@ class App:
         if err:                                   # файл уже новый, но сам не запустился: эту копию не закрываем, пусть человек решит
             return {"ok": False, "error": err}
         self.rep.log("Перезапускаюсь в новую версию…")
+        self.closing = "update"                   # окно увидит это и дождётся, пока новая копия займёт место
+        if self.control:
+            self.control.stop()                   # идущая загрузка останавливается сразу
 
         def _bye():
-            time.sleep(0.8)                       # дать ответу уйти в окно
-            if self.control:
-                self.control.stop()
+            # Новая копия стартует несколько секунд, а потом сама просит эту закрыться (/api/quit): окно в этот момент закрывается
+            # само и открывается её окно. Если она так и не пришла (не запустилась) — не висим вечно и закрываемся сами.
+            self.shutdown.wait(25)
             self.shutdown.set()
         threading.Thread(target=_bye, daemon=True).start()
         return {"ok": True}
@@ -2636,7 +2641,12 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/quit":
             if APP.control:
                 APP.control.stop()
-            APP.shutdown.set()
+            if b.get("why") == "replaced":
+                # просит новая версия: окну нужно успеть увидеть «closing» и закрыться само, потом уже выключаем сервер
+                APP.closing = "replaced"
+                threading.Timer(CLOSE_GRACE, APP.shutdown.set).start()
+            else:
+                APP.shutdown.set()
             return self._send(200, {"ok": True})
         return self._send(404, {"error": "not found"})
 
@@ -2645,7 +2655,7 @@ class Handler(BaseHTTPRequestHandler):
         snap = APP.rep.snapshot(since, dsince)
         st = APP.settings
         return {
-            "version": mo.VERSION,
+            "version": mo.VERSION, "closing": APP.closing,
             "login": {"state": APP.login_state, "error": APP.login_error, "user": APP.user_name,
                       "base": APP.client.base if APP.client else st.get("base_url"), "username": st.get("username", ""),
                       "remember": bool(st.get("remember", True)), "can_encrypt": APP.vault.can_encrypt,
@@ -2721,7 +2731,7 @@ def hand_off(old: dict, timeout: float = 75.0) -> bool:
     Иначе (раньше так и было) запуск новой версии просто открывал окно старой, и казалось, что обновление «не встало»."""
     import urllib.request
     try:
-        req = urllib.request.Request(f"http://127.0.0.1:{old['port']}/api/quit?t={old['token']}", data=b"{}", method="POST",
+        req = urllib.request.Request(f"http://127.0.0.1:{old['port']}/api/quit?t={old['token']}", data=b'{"why": "replaced"}', method="POST",
                                      headers={"Content-Type": "application/json", "X-Token": old["token"]})
         urllib.request.urlopen(req, timeout=5).read()
     except Exception:
@@ -2756,7 +2766,7 @@ def gui_main(no_window=False, port=0, keep_running=False, on_ready=None):
             open_window(old["url"])
             return 1
     if getattr(sys, "frozen", False):
-        updater.cleanup(os.path.abspath(sys.executable))        # остатки обновления рядом с программой (прежний файл, недокачанное)
+        updater.cleanup_later(os.path.abspath(sys.executable))  # остатки обновления рядом с программой (прежний файл, недокачанное); с повторами: прежний процесс ещё завершается
     APP = App()
     if migrated:
         APP.rep.log(f"Данные прошлой версии перенесены из {migrated['from']} (файлов: {migrated['files']}). Старая папка осталась как была.")
