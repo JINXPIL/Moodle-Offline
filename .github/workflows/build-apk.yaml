@@ -1,7 +1,13 @@
-# Сборка приложения для Android (MoodleOffline.apk) на серверах GitHub и проверка его в эмуляторе.
-#  • В pull request (если менялись android-app/, *.py или ui/) и вручную (Actions → build-apk → Run workflow): собирает apk,
-#    ставит его в эмулятор Android, запускает самопроверку, снимает экран. apk и снимки — в артефактах запуска.
-#  • По тегу v*: то же самое + apk (и контрольная сумма SHA-256) выкладываются в Releases рядом с MoodleOffline.exe.
+# Сборка приложения для Android на серверах GitHub и проверка его в эмуляторе. Четыре файла под разные процессоры:
+#    MoodleOffline.apk             — универсальный: любой телефон (ARM 32/64 бит, x86), Python 3.11
+#    MoodleOffline-arm64-v8a.apk   — современные 64-битные телефоны (почти все с 2017 года), Python 3.13, самый маленький
+#    MoodleOffline-armeabi-v7a.apk — старые 32-битные ARM-телефоны, Python 3.11
+#    MoodleOffline-x86_64.apk      — эмуляторы и ChromeOS, Python 3.13
+#  (32-битные процессоры есть в Chaquopy только с Python 3.11 и старше — подробности в android-app/app/build.gradle.kts.)
+#  • В pull request (если менялись android-app/, *.py или ui/) и вручную (Actions → build-apk → Run workflow): собирает все четыре apk,
+#    проверяет подпись и состав процессоров в каждом, ставит x86_64- и универсальный apk в эмулятор Android, запускает самопроверку,
+#    снимает экран. apk и снимки — в артефактах запуска.
+#  • По тегу v*: то же самое + apk (и контрольные суммы SHA-256) выкладываются в Releases рядом с MoodleOffline.exe.
 # Подпись: ключ берётся из секретов репозитория (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS) — как его
 # создать, см. android-app/make_keystore.py. Без секретов apk подписывается временным ключом: ставится, но обновить поверх нельзя.
 name: build-apk
@@ -34,9 +40,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: actions/setup-python@v5      # Chaquopy ставит библиотеки Python при сборке
+      - uses: actions/setup-python@v5      # Chaquopy ставит библиотеки Python при сборке и ищет python той же версии, что в приложении (3.13 и 3.11)
         with:
-          python-version: "3.13"
+          python-version: |
+            3.11
+            3.13
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
@@ -62,19 +70,43 @@ jobs:
               echo "KEY_KIND=одноразовый ключ (секреты не заданы)"
             } >> "$GITHUB_ENV"
           fi
-      - name: Сборка apk
+      - name: Сборка apk (все варианты)
         working-directory: android-app
         run: gradle --no-daemon --stacktrace assembleRelease
+      - name: Подготовить файлы и проверить состав процессоров
+        run: |
+          mkdir out
+          B=android-app/app/build/outputs/apk
+          cp "$B/universal/release/app-universal-release.apk" out/MoodleOffline.apk
+          cp "$B/arm64/release/app-arm64-release.apk"         out/MoodleOffline-arm64-v8a.apk
+          cp "$B/arm32/release/app-arm32-release.apk"         out/MoodleOffline-armeabi-v7a.apk
+          cp "$B/x64/release/app-x64-release.apk"             out/MoodleOffline-x86_64.apk
+          # в каждом файле должны лежать ровно те процессоры, что заявлены (иначе установка на нужный телефон не пойдёт)
+          fail=0
+          check() {  # файл, ожидаемый список папок lib/ через пробел
+            got=$(unzip -Z1 "out/$1" | grep -oE '^lib/[^/]+/' | sed 's#lib/##; s#/##' | sort -u | tr '\n' ' ' | sed 's/ $//')
+            if [ "$got" = "$2" ]; then echo "OK   $1: $got"; else echo "::error::$1: процессоры [$got], ожидались [$2]"; fail=1; fi
+          }
+          check MoodleOffline.apk "arm64-v8a armeabi-v7a x86 x86_64"
+          check MoodleOffline-arm64-v8a.apk "arm64-v8a"
+          check MoodleOffline-armeabi-v7a.apk "armeabi-v7a"
+          check MoodleOffline-x86_64.apk "x86_64"
+          [ "$fail" = 0 ] || exit 1
       - name: Проверка подписи apk
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-          "$APKSIGNER" verify --verbose --print-certs android-app/app/build/outputs/apk/release/app-release.apk | grep -E "Verifies|Verified using|certificate (DN|SHA-256)"
-          echo "Ключ: $KEY_KIND. Если ключ постоянный, отпечаток SHA-256 выше должен быть одним и тем же в каждой сборке — иначе обновление поверх не встанет."
-      - name: Подготовить файлы
+          for f in out/*.apk; do
+            echo "== $f"
+            "$APKSIGNER" verify --verbose --print-certs "$f" | grep -E "Verifies|Verified using|certificate (DN|SHA-256)"
+          done
+          echo "Ключ: $KEY_KIND. Отпечаток SHA-256 должен быть одним и тем же у всех файлов (и в каждой сборке, если ключ постоянный) — иначе один вариант не встанет поверх другого."
+          n=$(for f in out/*.apk; do "$APKSIGNER" verify --print-certs "$f" | grep 'certificate SHA-256'; done | sort -u | wc -l)
+          if [ "$n" != 1 ]; then echo "::error::у вариантов apk разные подписи"; exit 1; fi
+      - name: Контрольные суммы
         run: |
-          mkdir out
-          cp android-app/app/build/outputs/apk/release/app-release.apk out/MoodleOffline.apk
-          (cd out && sha256sum MoodleOffline.apk > MoodleOffline.apk.sha256 && cat MoodleOffline.apk.sha256 && ls -l)
+          cd out
+          for f in *.apk; do sha256sum "$f" > "$f.sha256"; done
+          cat *.sha256; ls -l
       - uses: actions/upload-artifact@v4
         with:
           name: MoodleOffline-apk
@@ -84,6 +116,14 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15   # обычно 3–5 минут; если эмулятор завис, не ждём 40 минут
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # x86_64-вариант: Python 3.13 (так же собран arm64-вариант, для которого эмулятор ARM недоступен)
+          - { name: x64, apk: MoodleOffline-x86_64.apk, py: "3.13" }
+          # универсальный: Python 3.11 — тот же Python и тот же код, что в 32-битном варианте armeabi-v7a
+          - { name: universal, apk: MoodleOffline.apk, py: "3.11" }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -103,11 +143,11 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash android-app/ci/smoke.sh out/MoodleOffline.apk
+          script: EXPECT_PY=${{ matrix.py }} bash android-app/ci/smoke.sh out/${{ matrix.apk }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: smoke-result
+          name: smoke-result-${{ matrix.name }}
           path: smoke-out/*
 
   release:
@@ -126,9 +166,9 @@ jobs:
         run: |
           cd out
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" MoodleOffline.apk MoodleOffline.apk.sha256 --clobber
+            gh release upload "$GITHUB_REF_NAME" *.apk *.sha256 --clobber
           else
             # релиз ещё не создан (его может создавать и сборка exe одновременно с этой): создаём или, если опередили, просто добавляем файлы
-            gh release create "$GITHUB_REF_NAME" MoodleOffline.apk MoodleOffline.apk.sha256 --title "Moodle Offline $GITHUB_REF_NAME" --generate-notes \
-              || gh release upload "$GITHUB_REF_NAME" MoodleOffline.apk MoodleOffline.apk.sha256 --clobber
+            gh release create "$GITHUB_REF_NAME" *.apk *.sha256 --title "Moodle Offline $GITHUB_REF_NAME" --generate-notes \
+              || gh release upload "$GITHUB_REF_NAME" *.apk *.sha256 --clobber
           fi

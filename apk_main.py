@@ -82,7 +82,9 @@ def _selftest() -> None:
         import bs4
         import requests
         assert bs4.BeautifulSoup("<p>да</p>", "html.parser").p.text == "да"
-        return f"requests {requests.__version__}, bs4 {bs4.__version__}"
+        import platform as _pf
+        # версия Python и процессор в журнале: по ним видно, какой вариант apk (arm64 / arm32 / универсальный) сейчас запущен
+        return f"Python {sys.version.split()[0]} ({_pf.machine()}), requests {requests.__version__}, bs4 {bs4.__version__}"
 
     def sqlite():
         import search
