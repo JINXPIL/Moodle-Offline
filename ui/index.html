@@ -2547,7 +2547,7 @@ async function updInstall(){
 async function updRestart(){
   if (!confirm("Программа закроется и сразу откроется новая версия. Идущая сейчас загрузка остановится и продолжится после запуска (нажмите «Скачать» ещё раз). Продолжить?")) return;
   const r = await api("/api/update/restart", {});
-  if (r.ok) { toast("Перезапускаюсь… откроется новое окно, это окно можно закрыть", "ok"); $("#updNew").innerHTML = "<b>Перезапуск…</b><div class=\"hint\">Откроется новое окно программы. Это окно можно закрыть.</div>"; }
+  if (r.ok) { toast("Перезапускаюсь… откроется новое окно, а это закроется само", "ok"); $("#updNew").innerHTML = "<b>Перезапуск…</b><div class=\"hint\">Откроется новое окно программы, а это закроется само.</div>"; }
   else { toast(r.error || "Не получилось обновить", "bad"); loadUpd(); }
 }
 async function loadUpd(){ try { renderUpd(await api("/api/update")); } catch (e) {} }
@@ -2583,10 +2583,22 @@ async function renderUpdBar(b){
 loadUpd();
 
 /* ── опрос сервера ── */
+// Эта копия программы закрывается, потому что её заменяет новая версия: окно закрываем само, не оставляем мёртвым.
+// (В окне-приложении window.close() работает; во вкладке обычного браузера может не сработать — тогда остаётся подпись.)
+let closingSeen = "";
+function closeSelf(){
+  const o = document.createElement("div");          // поверх окна, а не вместо содержимого: скрипты страницы продолжают работать без ошибок
+  o.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:16px system-ui;background:var(--bg,#15181d);color:var(--text,#e6e9ee)";
+  o.textContent = "Запущена новая версия программы. Это окно закрывается…";
+  document.body.appendChild(o);
+  try { window.close(); } catch (e) {}
+  setTimeout(() => { o.textContent = "Запущена новая версия программы. Это окно можно закрыть."; }, 900);
+}
 async function poll(){
   let delay = 1200;
   try {
     const st = await api("/api/state?since=" + seq + (dseqSeen >= 0 ? "&dsince=" + dseqSeen : "")); S = st; seq = st.job.seq;
+    if (st.closing) { closingSeen = st.closing; if (st.closing === "replaced") return closeSelf(); }
     const L = st.login;
     if (L.state !== lastLogin) {
       const ok = L.state === "ok" || L.state === "offline";
@@ -2607,6 +2619,7 @@ async function poll(){
     loadSettings(st); renderData(st.data); renderNet(st); renderJob(st.job); renderNewsBadge(st.news_unread || 0); renderSearchRun(st.search || {}); renderCalBadge(st.cal_badge || 0); calJobWatch(st.job); renderUpdBar(st.update);
     delay = st.job.state !== "idle" ? 600 : 1200;
   } catch (e) {
+    if (closingSeen) return closeSelf();          // сервер ушёл после «закрываюсь для новой версии» — это не сбой
     $("#net .dot").className = "dot down"; $("#net .txt").textContent = "Программа закрыта — перезапустите её";
     delay = 3000;
   }

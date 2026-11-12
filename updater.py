@@ -14,6 +14,7 @@ import hashlib
 import os
 import re
 import subprocess
+import threading
 import time
 
 REPO = "JINXPIL/Moodle-Offline"
@@ -387,14 +388,34 @@ def launch(exe) -> None:
         raise UpdateError(f"новая версия установлена, но не запустилась: {e.strerror or e}. Откройте программу сами.") from None
 
 
-def cleanup(exe) -> None:
-    """Убрать остатки обновления рядом с программой (прежняя копия, недокачанное). Занятое пока не трогаем."""
+def cleanup(exe) -> bool:
+    """Убрать остатки обновления рядом с программой (прежняя копия, недокачанное). Занятое пока не трогаем.
+    → True, если ничего не осталось."""
+    left = False
     for p in (old_path(exe), new_path(exe), part_path(exe), str(exe) + ".new.part"):
         try:
             if os.path.exists(p):
                 os.remove(p)
         except OSError:
-            pass
+            left = True
+    return not left
+
+
+def cleanup_later(exe, tries: int = 40, pause: float = 2.0, sleep=time.sleep):
+    """То же в фоне с повторами. Сразу после обновления прежняя копия ещё несколько секунд завершается, и Windows не отдаёт
+    её файл «….exe.old» — одной попытки при запуске мало, файл оставался рядом с программой до следующего запуска.
+    Пробуем каждые `pause` секунд, пока не уберём (по умолчанию до ~80 с). → поток (для тестов)."""
+    def run():
+        for _ in range(tries):
+            try:
+                if cleanup(exe):
+                    return
+            except Exception:                  # noqa: BLE001 — уборка не должна ничего ронять
+                return
+            sleep(pause)
+    th = threading.Thread(target=run, daemon=True, name="update-cleanup")
+    th.start()
+    return th
 
 
 def should_notify(cfg: dict, st: dict) -> bool:
