@@ -155,7 +155,17 @@ def _selftest() -> None:
                 f"уведомление {'показано' if shown else 'не показано (нет разрешения)'}, "
                 f"автозапуск {android.apk_autostart_set(True) and android.apk_autostart_get()}")
 
+    def folder():
+        # «Открыть папку»: есть ли на телефоне приложение, которое откроет папку общей памяти (ничего не запускаем,
+        # чтобы не перекрыть окно во время проверки). На эмуляторе google_apis это системные «Файлы».
+        import android
+        root = str(android._call("sharedRoot", default="") or "")
+        assert root and Path(root).is_dir(), f"мост не вернул общую память: {root!r}"
+        assert android.can_open_folder(root), "нет приложения, которое откроет папку (нужны «Файлы»: intent VIEW vnd.android.document/directory)"
+        return f"папку {root} откроет приложение «Файлы»"
+
     for name, fn in (("imports", imports), ("platform", platform), ("ui", ui), ("libs", libs), ("sqlite", sqlite),
-                     ("search", search_index), ("transfer", transfer_loop), ("https", https), ("bridge", bridge)):
+                     ("search", search_index), ("transfer", transfer_loop), ("https", https), ("bridge", bridge),
+                     ("folder", folder)):
         check(name, fn)
     print(f"SELFTEST DONE ok={sum(results)} fail={len(results) - sum(results)}", flush=True)

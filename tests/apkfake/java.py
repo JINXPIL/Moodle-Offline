@@ -18,6 +18,15 @@ class Bridge:
     @staticmethod
     def shareFile(p): _log("shareFile", p); return True
     @staticmethod
+    def _folder_ok(p):
+        # как настоящий мост: папка должна существовать и лежать в общей памяти (внутреннюю память приложения «Файлы» не открывают)
+        root = os.path.realpath(Bridge.sharedRoot()); q = os.path.realpath(p)
+        return os.path.isdir(q) and (q == root or q.startswith(root + os.sep))
+    @staticmethod
+    def openFolder(p): _log("openFolder", p); return Bridge._folder_ok(p)
+    @staticmethod
+    def canOpenFolder(p): return Bridge._folder_ok(p)
+    @staticmethod
     def notify(t, x): _log("notify", t, x); return True
     @staticmethod
     def setWakeLock(on): _log("setWakeLock", on); STATE["wake"] = on; return True

@@ -15,6 +15,22 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
 
+    <!-- Android 11+: без этого приложение не «видит», есть ли на телефоне «Файлы», и не может заранее проверить, откроется ли папка -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="vnd.android.document/directory" />
+        </intent>
+        <intent>
+            <action android:name="android.provider.action.BROWSE" />
+            <data android:mimeType="vnd.android.document/directory" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="resource/folder" />
+        </intent>
+    </queries>
+
     <application
         android:name=".MoodleApp"
         android:label="Moodle Offline"

@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
@@ -14,6 +15,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.os.PowerManager;
+import android.provider.DocumentsContract;
 import android.provider.Settings;
 import android.webkit.MimeTypeMap;
 
@@ -63,6 +65,66 @@ public final class Bridge {
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
             app.startActivity(i);
             return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    // ── открыть ПАПКУ в приложении «Файлы» (как «Открыть папку» на компьютере) ──────────────────────────
+    /** Адрес папки в системном провайдере общей памяти (content://com.android.externalstorage.documents/…).
+     *  null — если папка не в общей памяти (например, во внутренней памяти приложения): приложение «Файлы» её не откроет. */
+    static Uri folderUri(String path) {
+        try {
+            String root = Environment.getExternalStorageDirectory().getCanonicalPath();
+            String p = new File(path).getCanonicalPath();
+            if (p.equals(root)) return DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:");
+            if (!p.startsWith(root + "/")) return null;
+            return DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:" + p.substring(root.length() + 1));
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** Способы открыть папку, от самого общепринятого: «Файлы» от Google/AOSP понимают первые два, многие файловые менеджеры — третий. */
+    static Intent[] folderIntents(Uri uri) {
+        String dir = DocumentsContract.Document.MIME_TYPE_DIR;
+        Intent[] list = new Intent[] {
+            new Intent(Intent.ACTION_VIEW).setDataAndType(uri, dir),
+            new Intent("android.provider.action.BROWSE").setDataAndType(uri, dir),
+            new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "resource/folder"),
+        };
+        for (Intent i : list) i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        return list;
+    }
+
+    /** Есть ли на телефоне приложение, которое откроет эту папку (ничего не запускает). */
+    public static boolean canOpenFolder(String path) {
+        try {
+            Uri uri = folderUri(path);
+            if (uri == null || !new File(path).isDirectory()) return false;
+            PackageManager pm = app.getPackageManager();
+            for (Intent i : folderIntents(uri)) {
+                if (i.resolveActivity(pm) != null) return true;
+            }
+            return false;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    public static boolean openFolder(String path) {
+        try {
+            Uri uri = folderUri(path);
+            if (uri == null || !new File(path).isDirectory()) return false;
+            for (Intent i : folderIntents(uri)) {
+                try {
+                    app.startActivity(i);
+                    return true;
+                } catch (ActivityNotFoundException | SecurityException e) {
+                    // это приложение не подошло — пробуем следующий способ
+                }
+            }
+            return false;
         } catch (Throwable t) {
             return false;
         }

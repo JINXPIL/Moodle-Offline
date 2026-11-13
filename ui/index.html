@@ -510,7 +510,7 @@ body.android .no-android{display:none!important}
   .rules-body{padding:12px}
   .rules-foot{flex-wrap:wrap}
   .modgrid{grid-template-columns:1fr}
-  .toasts{left:12px;right:12px;bottom:12px}
+  .toasts{left:12px;right:12px;bottom:calc(var(--bnav-h,58px) + env(safe-area-inset-bottom,0px) + 10px)}   /* над нижними вкладками, а не поверх них */
   .updbar{margin:8px 12px 0;padding:8px 12px;gap:6px 10px}
   .updbar .ut{flex:1 1 100%}
   .updbar .s{display:none}
@@ -1065,14 +1065,26 @@ const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [..
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let ANDROID = false;   // окно открыто в браузере телефона (программа работает в Termux)
 const IS_APK = () => !!(S && S.android_info && S.android_info.kind === "apk");   // окно внутри приложения .apk (а не в браузере с Termux)
-function androidOpen(b){
+async function androidOpen(b){
   const p = b.path || "", AI = (S && S.android_info) || {}, base = AI.out || "";
+  const full = base ? base + (p ? "/" + p : "") : (p || "папка с материалами");
   if (p && !b.reveal && /\.[A-Za-z0-9]{1,6}$/.test(p)) { window.open(fileUrl(p), "_blank"); return {ok: true}; }
-  toast((b.reveal ? "Файл лежит здесь: " : "Папки открывает приложение «Файлы». Путь: ") + (base ? base + (p ? "/" + p : "") : p || "папка с материалами"));
+  if (IS_APK()) {          // папку открывает приложение «Файлы»: сервер → мост → Android (как проводник на компьютере)
+    try {
+      const r = await apiRaw("/api/open", b);
+      if (r && r.ok) return r;
+      toast((r && r.error) || ("Не удалось открыть «Файлы». Папка: " + full), "bad");
+    } catch (e) { toast("Не удалось открыть «Файлы». Папка: " + full, "bad"); }
+    return {ok: true};     // сообщение уже показано — вызывающему коду второй раз ругаться не нужно
+  }
+  toast((b.reveal ? "Файл лежит здесь: " : "Папки открывает приложение «Файлы». Путь: ") + full);
   return {ok: true};
 }
 async function api(path, body) {
   if (ANDROID && path === "/api/open") return androidOpen(body || {});
+  return apiRaw(path, body);
+}
+async function apiRaw(path, body) {
   const opt = {headers: {"X-Token": T}};
   if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
   const r = await fetch(path, opt);

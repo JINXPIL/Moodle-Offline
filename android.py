@@ -76,6 +76,17 @@ def open_file(path) -> bool:
     return _run(["termux-open", str(path)])
 
 
+def open_folder(path) -> bool:
+    """Открыть папку в приложении «Файлы» (как «Открыть папку» на компьютере). Только .apk и только папка в общей памяти
+    («Документы» и т. п.): внутреннюю память приложения «Файлы» не показывают. В Termux — False (окно покажет путь)."""
+    return bool(is_apk() and _call("openFolder", str(path)))
+
+
+def can_open_folder(path) -> bool:
+    """Есть ли приложение, которое откроет эту папку (ничего не запускает)."""
+    return bool(is_apk() and _call("canOpenFolder", str(path)))
+
+
 def share_file(path) -> bool:
     """«Поделиться» файлом (например, расписанием .zip): окно выбора приложения — мессенджер, почта и т. д."""
     if is_apk():
