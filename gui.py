@@ -40,6 +40,7 @@ import search
 import watch
 import electives as el
 import iotapi
+import mcp_server
 import qr
 import reader
 import reserve
@@ -298,6 +299,12 @@ class App:
         self.bye_at = 0.0             # когда окно сказало «закрываюсь» (0 — не говорило или уже вернулось)
         self._tick_at = self.started  # прошлый проход сторожа: по разрыву видно, что компьютер спал
         self.token = secrets.token_urlsafe(18)
+        self.mcp: mcp_server.McpServer | None = None      # доступ для внешних нейросетей (раздел 3ж README)
+        self.mcp_error = ""
+        self._mcp_busy = threading.Lock()                 # start/stop сервера — по одному (стартовый поток и окно)
+        self.mcp_log = mcp_server.AccessLog()
+        self.mcp_tools = mcp_server.Tools(lambda: Path(self.settings.get("out_dir") or mo.DEFAULT_OUT),
+                                          lambda: {k: v for k, v in self.mcp_cfg().items() if k in ("materials", "notes")})
         self.shutdown = threading.Event()
         self.closing_why = ""         # зачем: "restart" (кнопка) / "update" (новая версия) — чтобы окно написало верно, даже если пропустило промежуточное состояние
         self.closing = ""             # почему эта копия закрывается: "update" (ставит новую версию) / "replaced" (новая просит место); окна по этому закрываются сами
@@ -2074,6 +2081,102 @@ class App:
             t.start()
 
     # ── нейросеть ──
+    # ── доступ для внешних нейросетей (mcp_server.py) ──
+    def mcp_cfg(self) -> dict:
+        return mcp_server.normalize(self.settings.get("mcp"))
+
+    def mcp_token(self) -> str:
+        t = self.vault.load_mcp().get("token")
+        return t if isinstance(t, str) else ""
+
+    def mcp_apply(self, wait: float = 0.0):
+        """Приводит сервер в соответствие с настройками: включён — слушает 127.0.0.1:порт, выключен — закрыт.
+        wait — сколько секунд ждать, пока освободится порт (при перезапуске программы прежняя копия ещё уходит)."""
+        with self._mcp_busy:
+            self._mcp_apply(wait)
+
+    def _mcp_apply(self, wait: float):
+        with self.lock:
+            cfg = self.mcp_cfg()
+            if self.mcp and (not cfg["enabled"] or self.mcp.port != cfg["port"]):
+                self.mcp.stop()
+                self.mcp = None
+            if not cfg["enabled"]:
+                self.mcp_error = ""
+                return
+            if self.mcp and self.mcp.running:
+                return
+            if not self.mcp_token():                          # без токена сервер не открываем
+                self.mcp_error = "Нет токена — создайте его в окне."
+                return
+        end = time.monotonic() + max(0.0, wait)
+        while True:
+            srv = mcp_server.McpServer(cfg["port"], self.mcp_tools, self.mcp_token, self.mcp_log, mo.VERSION)
+            try:
+                srv.start()
+            except OSError as e:
+                if time.monotonic() < end:
+                    time.sleep(1.0)
+                    continue
+                with self.lock:
+                    self.mcp_error = f"Порт {cfg['port']} занят или недоступен ({getattr(e, 'strerror', '') or e}). Выберите другой порт."
+                return
+            with self.lock:
+                self.mcp, self.mcp_error = srv, ""
+            return
+
+    def mcp_stdio(self) -> dict | None:
+        """Как клиенту запустить stdio-вариант: только из исходников и Termux (у .exe нет консоли, у .apk нет python)."""
+        if getattr(sys, "frozen", False) or android.is_apk():
+            return None
+        return {"command": sys.executable or "python", "args": [str(Path(mo.__file__).resolve()), "--mcp"]}
+
+    def mcp_info(self) -> dict:
+        cfg, tok = self.mcp_cfg(), self.mcp_token()
+        return {"cfg": cfg, "running": bool(self.mcp and self.mcp.running), "error": self.mcp_error,
+                "url": f"http://127.0.0.1:{cfg['port']}/mcp", "has_token": bool(tok), "token_mask": mcp_server.mask(tok),
+                "log": self.mcp_log.tail(30), "total": self.mcp_log.total, "stdio": self.mcp_stdio(),
+                "tools": {"materials": [n for n, t in mcp_server.TOOLS.items() if t[0] == "materials"],
+                          "notes": [n for n, t in mcp_server.TOOLS.items() if t[0] == "notes"]}}
+
+    def mcp_settings_save(self, b) -> dict:
+        cur = self.mcp_cfg()
+        port = b.get("port", cur["port"])
+        try:
+            port_n = int(port)
+        except (TypeError, ValueError):
+            port_n = 0
+        if not (mcp_server.MIN_PORT <= port_n <= mcp_server.MAX_PORT):
+            return {"ok": False, "error": f"Порт — число от {mcp_server.MIN_PORT} до {mcp_server.MAX_PORT}."}
+        cfg = mcp_server.normalize({"enabled": b.get("enabled", cur["enabled"]), "port": port_n,
+                                    "materials": b.get("materials", cur["materials"]), "notes": b.get("notes", cur["notes"])})
+        with self.lock:
+            if cfg["enabled"] and not self.mcp_token():
+                try:
+                    self.vault.save_mcp({"token": mcp_server.new_token()})
+                except OSError as e:
+                    return {"ok": False, "error": "Не удалось сохранить токен: " + mo.describe_error(e)}
+            self.settings["mcp"] = cfg
+            self.save_settings()
+        self.mcp_apply()
+        return {"ok": True, **self.mcp_info()}
+
+    def mcp_token_action(self, b) -> dict:
+        """show — показать токен (в окне он не хранится); new — выпустить новый (старый перестаёт работать сразу)."""
+        with self.lock:
+            if b.get("action") == "new":
+                try:
+                    self.vault.save_mcp({"token": mcp_server.new_token()})
+                except OSError as e:
+                    return {"ok": False, "error": "Не удалось сохранить токен: " + mo.describe_error(e)}
+                self.mcp_error = "" if self.mcp_error.startswith("Нет токена") else self.mcp_error
+            tok = self.mcp_token()
+        if not tok:
+            return {"ok": False, "error": "Токена ещё нет — включите доступ."}
+        if b.get("action") == "new":
+            self.mcp_apply()
+        return {"ok": True, "token": tok, **self.mcp_info()}
+
     def ai_cfg(self) -> dict:
         return ai.normalize(self.settings.get("ai"))
 
@@ -2859,6 +2962,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.rules_info())
         if u.path == "/api/news":
             return self._send(200, APP.news_list(q))
+        if u.path == "/api/mcp":
+            return self._send(200, APP.mcp_info())
         if u.path == "/api/ai":
             return self._send(200, APP.ai_info())
         if u.path == "/api/ai/job":
@@ -2963,6 +3068,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.update_settings(b))
         if p == "/api/rules/save":
             return self._send(200, APP.rules_save(b))
+        if p == "/api/mcp/settings":
+            return self._send(200, APP.mcp_settings_save(b))
+        if p == "/api/mcp/token":
+            return self._send(200, APP.mcp_token_action(b))
+        if p == "/api/mcp/log_clear":
+            APP.mcp_log.clear()
+            return self._send(200, {"ok": True})
         if p == "/api/ai/settings":
             return self._send(200, APP.ai_settings_save(b))
         if p == "/api/ai/models":
@@ -3332,6 +3444,7 @@ def gui_main(no_window=False, port=0, keep_running=False, on_ready=None):
     (mo.DATA_DIR / "gui.json").write_text(json.dumps({"port": port, "token": APP.token, "pid": os.getpid()}), encoding="utf-8")
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     threading.Thread(target=APP.heartbeat_loop, daemon=True).start()
+    threading.Thread(target=lambda: APP.mcp_apply(wait=15.0 if restart else 5.0), daemon=True).start()
     if not APP.settings.get("no_geo_check"):
         threading.Thread(target=APP.check_geo, daemon=True).start()
     threading.Thread(target=APP.try_saved_login, daemon=True).start()

@@ -427,6 +427,13 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
 .ai-src a{cursor:pointer;color:var(--accent)}
 .ai-src.hl{background:color-mix(in srgb,var(--accent) 12%,transparent);border-radius:6px}
 .ai-meta{font-size:12px;color:var(--muted)}
+.mcp-pre{background:var(--bg2);border-radius:8px;padding:8px 10px;font:12.5px/1.45 ui-monospace,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;margin:0;user-select:all}
+.mcp-log{max-height:220px;overflow:auto;font-size:12.5px}
+.mcp-log .lr{display:flex;gap:8px;padding:4px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}
+.mcp-log .lr:first-child{border-top:0}
+.mcp-log .lr b{flex:none;font-weight:600}
+.mcp-log .lr .t{flex:none;color:var(--muted);min-width:4.2em}
+.mcp-log .lr.bad b{color:var(--bad)}
 .ai-consent{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.45;cursor:pointer}
 .ai-consent .sw-t{margin-top:1px}
 .ai-ans{border-top:1px dashed var(--line);padding-top:10px}
@@ -738,6 +745,11 @@ body.android .no-android{display:none!important}
             <div class="row no-android" style="flex-wrap:wrap"><div class="lbl">Данные программы<small id="dataInfo">вход, настройки и кэш лежат в папке пользователя</small></div>
                 <button class="btn" id="dataImport" title="Если при смене версии программа не нашла старые данные сама — укажите папку со старой версией">Перенести из старой версии…</button></div>
             </details>
+          </div>
+          <div class="panel" id="mcpPanel">
+            <h3>Доступ для нейросетей</h3>
+            <div class="row" style="border-top:0;padding-top:0"><div class="lbl"><span id="mcpState">Выключен</span><small>Claude Code, Cursor и другие программы смогут искать в скачанных материалах — только чтение, по токену, только на этом устройстве</small></div>
+              <button class="btn" id="mcpOpen">Настроить…</button></div>
           </div>
           <div class="panel" id="updPanel">
             <h3>Обновление программы</h3>
@@ -1152,6 +1164,42 @@ body.android .no-android{display:none!important}
     </div>
   </div>
   <div class="rules-foot"><span class="hint" id="aiSetMsg"></span><button class="btn" id="aiSetCancel">Отмена</button><button class="btn primary" id="aiSetSave">Сохранить</button></div>
+</div></div>
+<div class="modal hidden" id="mcpModal"><div class="modal-box rules-box">
+  <header><b>Доступ для нейросетей</b><button class="btn" id="mcpClose">Закрыть</button></header>
+  <div class="rules-body">
+    <div class="rsec"><h4>Что это</h4>
+      <p class="hint" style="margin:0">Другая программа с нейросетью — Claude Code, Cursor, VS Code и подобные — сможет искать в ваших скачанных материалах и читать их. Только чтение, только на этом устройстве, по токену. Сама программа ничего никуда не отправляет: что уйдёт в нейросеть, решает подключённая программа и её сервис.</p>
+    </div>
+    <div class="rsec"><h4>Включение</h4>
+      <label class="ai-consent"><span class="sw-t"><input type="checkbox" id="mcpOn"><span></span></span><span>Разрешить программам на этом устройстве читать мои материалы (пока запущен Moodle Offline)</span></label>
+      <div class="ai-acts"><span class="hint" style="flex:none;min-width:0">Порт</span><input class="txt" id="mcpPort" inputmode="numeric" maxlength="5" style="width:96px" autocomplete="off"><button class="btn" id="mcpPortSave">Применить</button></div>
+      <div class="hint" id="mcpStatus"></div>
+    </div>
+    <div class="rsec"><h4>Что открыть</h4>
+      <label class="ai-consent"><span class="sw-t"><input type="checkbox" id="mcpMat"><span></span></span><span>Материалы курсов: поиск и чтение скачанных файлов</span></label>
+      <label class="ai-consent" style="margin-top:10px"><span class="sw-t"><input type="checkbox" id="mcpNotes"><span></span></span><span>Заметки (в них бывает личное — по умолчанию закрыты)</span></label>
+      <div class="hint">Служебные папки программы — вход, настройки, ключи, расписание — недоступны никогда. Галочки действуют сразу.</div>
+    </div>
+    <div class="rsec" id="mcpTokBox"><h4>Токен</h4>
+      <div class="mcp-pre" id="mcpTok">—</div>
+      <div class="ai-acts"><button class="btn" id="mcpTokShow">Показать</button><button class="btn" id="mcpTokCopy">Копировать токен</button><button class="btn" id="mcpTokNew">Выпустить новый</button></div>
+      <div class="hint">Токен — как пароль к материалам: кто его знает и работает на этом устройстве, тот их читает. Он хранится в файле mcp.bin (на Windows зашифрован) и не попадает в «Перенос данных». Новый токен отключает старый сразу.</div>
+    </div>
+    <div class="rsec" id="mcpConn"><h4>Подключение</h4>
+      <select class="txt" id="mcpClient" aria-label="Какая программа подключается"></select>
+      <div class="mcp-pre" id="mcpSnip"></div>
+      <div class="ai-acts"><button class="btn primary" id="mcpCopyCfg">Копировать настройку с токеном</button></div>
+      <div class="hint" id="mcpClientHint"></div>
+    </div>
+    <div class="rsec"><h4>Кто и что читал</h4>
+      <div id="mcpLog" class="mcp-log"></div>
+      <div class="ai-acts"><span class="hint" id="mcpLogNote">Только последние обращения и только в памяти программы: тексты и токены сюда не попадают.</span><button class="btn" id="mcpLogClear">Очистить</button></div>
+    </div>
+    <div class="rsec"><h4>Осторожно</h4>
+      <p class="hint" style="margin:0">Материалы и заметки — чужой для нейросети текст: в файле может быть «вшитая» просьба. Программа напоминает об этом в каждом ответе, но надёжнее не давать подключённой программе лишних прав (запись файлов, выход в сеть без вашего подтверждения). Если подключённый сервис облачный, всё, что она прочитает, уйдёт к нему.</p>
+    </div>
+  </div>
 </div></div>
 <div class="modal hidden" id="trModal"><div class="modal-box rules-box">
   <header><b>Перенос данных</b><button class="btn" id="trClose">Закрыть</button></header>
@@ -2206,6 +2254,96 @@ $("#aiTest").onclick = async () => {
 $("#aiSetSave").onclick = aiSettingsSave;
 $("#aiSetCancel").onclick = $("#aiSetClose").onclick = aiSetHide;
 aiLoad();
+
+// ── Доступ для нейросетей (mcp_server.py): окно и панель в настройках ──
+let MCP = null, MCPT = "";
+async function mcpLoad(){ try { MCP = await api("/api/mcp"); } catch (e) { MCP = null; } mcpPanel(); return MCP; }
+function mcpPanel(){
+  const m = MCP, el = $("#mcpState"); if (!el) return;
+  if (!m) { el.textContent = "Нет связи с программой"; return; }
+  el.textContent = m.running ? `Включён · порт ${m.cfg.port}` : (m.cfg.enabled ? "Не запущен" : "Выключен");
+  el.style.color = m.cfg.enabled && !m.running ? "var(--bad)" : "";
+}
+const mcpHdr = tok => "Bearer " + tok;
+function mcpClients(){
+  const u = MCP.url, st = MCP.stdio, T = "<ТОКЕН>";
+  const j = o => JSON.stringify(o, null, 2);
+  const L = [
+    ["claude-code", "Claude Code", t => `claude mcp add --transport http moodle-offline ${u} --header "Authorization: ${mcpHdr(t)}"`, "Команду выполните в терминале, где работает Claude Code."],
+    ["cursor", "Cursor", t => j({mcpServers: {"moodle-offline": {url: u, headers: {Authorization: mcpHdr(t)}}}}), "Файл настроек MCP в Cursor (mcp.json)."],
+    ["vscode", "VS Code", t => j({servers: {"moodle-offline": {type: "http", url: u, headers: {Authorization: mcpHdr(t)}}}}), "Файл .vscode/mcp.json в рабочей папке."],
+    ["other", "Другая программа", t => `Адрес: ${u}\nТип: HTTP (Streamable HTTP), метод POST\nЗаголовок: Authorization: ${mcpHdr(t)}`, "Если программа умеет подключать MCP-серверы по HTTP — ей нужны адрес и заголовок."],
+  ];
+  if (st) L.push(["stdio", "Запуск программой (stdio)", t => j({mcpServers: {"moodle-offline": {command: st.command, args: st.args}}}), "Токен не нужен: клиент сам запускает программу. Работает и при закрытом окне; доступно только при запуске из исходников и в Termux."]);
+  return L;
+}
+function mcpSnip(){
+  const sel = $("#mcpClient").value, c = mcpClients().find(x => x[0] === sel) || mcpClients()[0];
+  $("#mcpSnip").textContent = c[2](MCPT || "<ТОКЕН>");
+  $("#mcpClientHint").textContent = c[3] + " Формат настройки зависит от версии программы-клиента: если не подошёл — возьмите адрес и токен отсюда и сверьтесь со справкой клиента.";
+}
+function mcpRender(){
+  const m = MCP; if (!m) return;
+  $("#mcpOn").checked = m.cfg.enabled; $("#mcpMat").checked = m.cfg.materials; $("#mcpNotes").checked = m.cfg.notes;
+  if (document.activeElement !== $("#mcpPort")) $("#mcpPort").value = m.cfg.port;
+  const st = $("#mcpStatus");
+  if (m.error) { st.textContent = m.error; st.style.color = "var(--bad)"; }
+  else { st.style.color = ""; st.textContent = m.running ? `Работает: ${m.url}. Доступ есть, пока программа запущена.` : (m.cfg.enabled ? "Не запущен." : "Выключено: порт закрыт."); }
+  $("#mcpTok").textContent = MCPT || (m.has_token ? m.token_mask + "  (нажмите «Показать»)" : "Токена ещё нет — он появится при включении.");
+  $("#mcpTokShow").textContent = MCPT ? "Скрыть" : "Показать";
+  ["mcpTokShow", "mcpTokCopy", "mcpTokNew"].forEach(i => $("#" + i).disabled = !m.has_token);
+  const cur = $("#mcpClient").value, cl = mcpClients();
+  $("#mcpClient").innerHTML = cl.map(c => `<option value="${c[0]}">${esc(c[1])}</option>`).join("");
+  $("#mcpClient").value = cl.some(c => c[0] === cur) ? cur : cl[0][0];
+  $("#mcpConn").classList.toggle("off", !m.cfg.enabled && $("#mcpClient").value !== "stdio");   // по HTTP подключиться можно только при включённом доступе
+  mcpSnip();
+  const ago = t => { const d = new Date(t * 1000); return d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"}); };
+  $("#mcpLog").innerHTML = m.log.length ? m.log.map(e => `<div class="lr${e.ok ? "" : " bad"}"><span class="t">${ago(e.t)}</span><span><b>${esc(e.tool)}</b>${e.arg ? " · " + esc(e.arg) : ""}${e.ok ? "" : " · отказ"}</span></div>`).join("")
+    : `<span class="hint">Пока никто не обращался.</span>`;
+  mcpPanel();
+}
+async function mcpOpen(){
+  await mcpLoad(); if (!MCP) return toast("Нет связи с программой.", "bad");
+  MCPT = ""; mcpRender(); $("#mcpModal").classList.remove("hidden");
+}
+function mcpHide(){ MCPT = ""; $("#mcpModal").classList.add("hidden"); }            // токен не живёт в странице дольше, чем нужно
+async function mcpSave(body){
+  let j; try { j = await api("/api/mcp/settings", body); } catch (e) { toast("Нет связи с программой.", "bad"); return mcpRender(); }
+  if (!j.ok) { toast(j.error || "Не удалось сохранить.", "bad"); return mcpLoad().then(mcpRender); }
+  MCP = j; mcpRender();
+}
+async function mcpToken(action){
+  let j; try { j = await api("/api/mcp/token", {action}); } catch (e) { toast("Нет связи с программой.", "bad"); return ""; }
+  if (!j.ok) { toast(j.error || "Токена нет.", "bad"); return ""; }
+  const t = j.token; MCP = j; delete MCP.token; return t;        // токен в состоянии окна не держим
+}
+async function mcpCopy(text, what){
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) { const t = document.createElement("textarea"); t.value = text; t.style.cssText = "position:fixed;opacity:0"; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e2) {} t.remove(); }
+  toast(what + " скопирован" + (what.endsWith("а") ? "а." : "."));
+}
+$("#mcpOpen").onclick = mcpOpen; $("#mcpClose").onclick = mcpHide;
+$("#mcpOn").onchange = () => mcpSave({enabled: $("#mcpOn").checked});
+$("#mcpMat").onchange = () => mcpSave({materials: $("#mcpMat").checked});
+$("#mcpNotes").onchange = () => mcpSave({notes: $("#mcpNotes").checked});
+$("#mcpPortSave").onclick = () => mcpSave({port: $("#mcpPort").value.trim()});
+$("#mcpPort").onkeydown = e => { if (e.key === "Enter") $("#mcpPortSave").click(); };
+$("#mcpClient").onchange = mcpSnip;
+$("#mcpTokShow").onclick = async () => { if (MCPT) { MCPT = ""; return mcpRender(); } MCPT = await mcpToken("show"); mcpRender(); };
+$("#mcpTokCopy").onclick = async () => { const t = await mcpToken("show"); if (t) mcpCopy(t, "Токен"); };
+$("#mcpCopyCfg").onclick = async () => {
+  const sel = $("#mcpClient").value, c = mcpClients().find(x => x[0] === sel); if (!c) return;
+  if (sel === "stdio") return mcpCopy(c[2](""), "Настройка");
+  const t = await mcpToken("show"); if (t) mcpCopy(c[2](t), "Настройка");
+};
+$("#mcpTokNew").onclick = async () => {
+  if (!confirm("Выпустить новый токен? Старый перестанет работать сразу — настройку в подключённых программах придётся обновить.")) return;
+  const t = await mcpToken("new"); if (!t) return;
+  MCPT = ""; mcpRender(); toast("Новый токен выпущен. Старый больше не работает.");
+};
+$("#mcpLogClear").onclick = async () => { try { await api("/api/mcp/log_clear", {}); } catch (e) {} mcpLoad().then(mcpRender); };
+setInterval(() => { if (!$("#mcpModal").classList.contains("hidden")) mcpLoad().then(mcpRender); }, 5000);   // пока окно открыто — журнал обновляется
+mcpLoad();
 
 /* ── вкладки ── */
 let view = "courses";

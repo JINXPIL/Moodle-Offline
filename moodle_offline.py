@@ -87,7 +87,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.20.0"
+VERSION = "1.21.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -971,6 +971,13 @@ class Vault:
 
     def save_ai(self, d: dict):
         self._write_secret(self.dir / "ai.bin", d)
+
+    # Токен доступа внешних нейросетей к материалам (раздел 3ж README) — отдельный файл: не в settings.json, не в переносе.
+    def load_mcp(self) -> dict:
+        return self._read_secret(self.dir / "mcp.bin")
+
+    def save_mcp(self, d: dict):
+        self._write_secret(self.dir / "mcp.bin", d)
 
     def forget(self):
         funlink(self.secret_path)
@@ -4600,6 +4607,25 @@ def extra_sync(settings, vault, client, out, rep, control, notify_on=True):
                     f"там можно ввести пароль и повторить.", "warn")
 
 
+def cli_mcp(args) -> int:
+    """`--mcp`: доступ для внешних нейросетей через stdin/stdout — клиент (Claude Code, Cursor…) сам запускает программу
+    и говорит с ней по строке JSON (раздел 3ж README). В stdout идут только ответы протокола, всё остальное — в stderr.
+    Общий выключатель окна здесь не нужен (запуск — уже явное действие), а какие данные открыты, решают те же галочки;
+    настройки читаются при каждом обращении, так что снятая галочка действует сразу."""
+    import mcp_server
+    vault = Vault()
+    proto_in, proto_out = sys.stdin.buffer, sys.stdout.buffer
+    sys.stdout = sys.stderr
+    cfg = lambda: mcp_server.normalize(vault.load_settings().get("mcp"))
+    out = lambda: Path(args.out or vault.load_settings().get("out_dir") or DEFAULT_OUT)
+    tools = mcp_server.Tools(out, lambda: {k: v for k, v in cfg().items() if k in ("materials", "notes")})
+    print(f"{APP_NAME} {VERSION}: MCP по stdio, материалы: {out()}", file=sys.stderr)
+    try:
+        return mcp_server.serve_stdio(tools, proto_in, proto_out, None, VERSION)
+    except KeyboardInterrupt:
+        return 0
+
+
 def cli_search(args, settings: dict, rep: Reporter) -> int:
     out = Path(args.out or settings.get("out_dir") or DEFAULT_OUT)
     if not out.is_dir():
@@ -4692,6 +4718,9 @@ def cli_main(argv=None) -> int:
     p.add_argument("--search-index", action="store_true", help="обновить поисковый индекс материалов и выйти")
     p.add_argument("--search-reindex", action="store_true", help="построить поисковый индекс заново и выйти")
     p.add_argument("--no-search-index", action="store_true", help="не обновлять поисковый индекс после загрузки")
+    p.add_argument("--mcp", action="store_true",
+                   help="доступ для внешних нейросетей по stdio (MCP, только чтение): так программу запускает сам клиент — "
+                        "Claude Code, Cursor и т. п.; из .exe недоступно")
     p.add_argument("--watch", action="store_true",
                    help="слежение без окна: проверять Moodle по таймеру из настроек и (если включено) докачивать недостающее; Ctrl+C — стоп")
     p.add_argument("--no-wakelock", action="store_true", help="Android: не включать termux-wake-lock при слежении (телефон сможет засыпать)")
@@ -4728,6 +4757,8 @@ def cli_main(argv=None) -> int:
         if info["out_dir"]:
             print(f"Материалы остались на месте: {info['out_dir']}")
         return 0
+    if args.mcp:      # до подготовки данных: она может печатать в stdout, а там должны быть только ответы протокола
+        return cli_mcp(args)
     prepare_data_dir(ConsoleReporter(verbose=args.verbose, notify_on_recover=False))
     vault = Vault()
     settings = vault.load_settings()
