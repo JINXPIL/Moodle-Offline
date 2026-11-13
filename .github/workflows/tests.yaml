@@ -1,0 +1,35 @@
+# Проверки кода (tests/) на серверах GitHub: Python 3.11 и 3.13 — обе версии нужны, потому что в универсальном apk Python 3.11,
+# а на компьютере и в других apk — 3.13 (см. CLAUDE.md).
+#  • Запускается в каждом pull request, при слиянии в main и вручную (Actions → tests → Run workflow).
+#  • От сборки apk и exe не зависит и на неё не влияет: упавшие тесты показываются красным крестом в pull request,
+#    но сборки идут как раньше. Секреты (подпись apk) задаче не передаются.
+#  • Локально то же самое: python tests/run_all.py (подробности — tests/README.md).
+name: tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit:
+    name: tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15   # обычно 2–3 минуты
+    strategy:
+      fail-fast: false      # если упала одна версия Python — вторая всё равно проверится
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Библиотеки проекта
+        run: pip install -r requirements.txt
+      - name: Имена тестовых сайтов (макеты на 127.0.0.1)
+        run: echo "127.0.0.1 schedule.sevsu.test timetable.sevsu.test iot.sevsu.test auth.sevsu.test" | sudo tee -a /etc/hosts
+      - name: Проверки
+        run: python tests/run_all.py
