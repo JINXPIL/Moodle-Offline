@@ -2152,6 +2152,17 @@ class App:
 def open_path(p: Path, reveal=False):
     p = Path(p)
     if ANDROID:
+        if p.is_dir() or reveal:            # «Открыть папку» / «Показать в папке» — как проводник на компьютере: открываем приложение «Файлы»
+            folder = p if p.is_dir() else p.parent
+            if not android.is_apk():
+                raise OSError("папки на телефоне открывает приложение «Файлы». Путь: " + str(folder))
+            if android.in_private_storage(folder, Path.home()):
+                how = ("нажмите «Положить в Документы»" if android.shared_storage(Path.home())
+                       else "нажмите «Разрешить доступ», а затем «Положить в Документы»")
+                raise OSError("Материалы лежат в памяти приложения — «Файлы» её не показывают. Под полем «Папка для сохранения» " + how + ".")
+            if not android.open_folder(folder):
+                raise OSError("не удалось открыть приложение «Файлы». Папка: " + str(folder))
+            return
         if not android.open_file(p):
             raise OSError("не удалось открыть файл приложением телефона (нужен пакет termux-tools); откройте его в приложении «Файлы»")
         return
