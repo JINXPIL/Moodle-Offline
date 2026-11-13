@@ -34,6 +34,7 @@ import moodle_offline as mo
 import datadir
 import deadlines
 import news
+import notes
 import search
 import watch
 import electives as el
@@ -1961,6 +1962,82 @@ class App:
             self.save_settings()
         return {"ok": True, "cfg": cfg}
 
+    # ── заметки ──
+    def notes_out(self) -> Path:
+        return Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
+
+    def notes_trash(self) -> Path:
+        return mo.DATA_DIR / "notes_trash"
+
+    def notes_list(self, q) -> dict:
+        try:
+            course = int(q["course"]) if q.get("course") not in (None, "") else None
+        except ValueError:
+            course = None
+        item = q.get("item") or None
+        lst = notes.list_notes(self.notes_out(), course=course, item=item if course is not None else None,
+                               general=q.get("general") == "1", q=q.get("q", ""))
+        return {"notes": lst[:500], "total": len(lst), "dir": notes.NOTES_DIR}
+
+    def notes_get(self, q) -> dict:
+        try:
+            return {"ok": True, "note": notes.get_note(self.notes_out(), q.get("id", ""))}
+        except notes.NoteError as e:
+            return {"ok": False, "error": str(e)}
+
+    def notes_save(self, b) -> dict:
+        try:
+            try:
+                course = int(b["course"]) if b.get("course") not in (None, "") else None
+            except (TypeError, ValueError):
+                course = None
+            n = notes.save_note(self.notes_out(), nid=b.get("id") or None, title=str(b.get("title") or ""),
+                                body=str(b.get("body") or ""), course=course, course_name=str(b.get("course_name") or ""),
+                                item=str(b.get("item") or "") or None, item_name=str(b.get("item_name") or ""),
+                                pinned=b.get("pinned") if isinstance(b.get("pinned"), bool) else None)
+        except notes.NoteError as e:
+            return {"ok": False, "error": str(e)}
+        except OSError as e:
+            return {"ok": False, "error": "не удалось записать заметку: " + mo.describe_error(e)}
+        self.notes_changed()
+        return {"ok": True, "note": n}
+
+    def notes_delete(self, b) -> dict:
+        try:
+            r = notes.delete_note(self.notes_out(), str(b.get("id") or ""), self.notes_trash())
+        except notes.NoteError as e:
+            return {"ok": False, "error": str(e)}
+        except OSError as e:
+            return {"ok": False, "error": "не удалось удалить заметку: " + mo.describe_error(e)}
+        self.notes_changed()
+        return {"ok": True, **r}
+
+    def notes_restore(self, b) -> dict:
+        try:
+            n = notes.restore_note(self.notes_out(), str(b.get("trash") or ""), self.notes_trash())
+        except notes.NoteError as e:
+            return {"ok": False, "error": str(e)}
+        except OSError as e:
+            return {"ok": False, "error": "не удалось вернуть заметку: " + mo.describe_error(e)}
+        self.notes_changed()
+        return {"ok": True, "note": n}
+
+    def notes_changed(self):
+        """После правки заметки обновляем индекс поиска — но только если им уже пользовались, и не чаще раза в несколько
+        секунд (пока человек печатает, заметка сохраняется часто)."""
+        try:
+            if not self.search_index().status().get("exists"):
+                return
+        except Exception:  # noqa: BLE001
+            return
+        with self.lock:
+            if getattr(self, "_notes_timer", None):
+                self._notes_timer.cancel()
+            t = threading.Timer(4.0, self.search_start)
+            t.daemon = True
+            self._notes_timer = t
+            t.start()
+
     # ── календарь и дедлайны ──
     def cal_out(self) -> Path:
         return Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
@@ -2540,6 +2617,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.rules_info())
         if u.path == "/api/news":
             return self._send(200, APP.news_list(q))
+        if u.path == "/api/notes":
+            return self._send(200, APP.notes_list(q))
+        if u.path == "/api/notes/get":
+            return self._send(200, APP.notes_get(q))
         if u.path == "/api/news/settings":
             return self._send(200, APP.news_settings_info())
         if u.path == "/api/calendar":
@@ -2636,6 +2717,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.update_settings(b))
         if p == "/api/rules/save":
             return self._send(200, APP.rules_save(b))
+        if p == "/api/notes/save":
+            return self._send(200, APP.notes_save(b))
+        if p == "/api/notes/delete":
+            return self._send(200, APP.notes_delete(b))
+        if p == "/api/notes/restore":
+            return self._send(200, APP.notes_restore(b))
         if p == "/api/news/read":
             return self._send(200, APP.news_read(b))
         if p == "/api/news/settings":
