@@ -231,6 +231,18 @@ def _title_from(title: str, body: str) -> str:
     return (t or time.strftime("Заметка %d.%m.%Y %H:%M"))[:MAX_TITLE]
 
 
+def _new_id(out, ts: int) -> str:
+    """Номер новой заметки: секунды + 3 случайных байта, и такого номера ещё нет ни у одной заметки. Раньше хвост был
+    в 2 байта без проверки: у 58 заметок за одну секунду совпадение ≈ 2,6 %, и две разные заметки получали один номер."""
+    used = {n["id"] for _p, n, _b in _all(out)}
+    base = "n" + format(ts, "x")
+    for _ in range(100):
+        cand = base + secrets.token_hex(3)
+        if cand not in used:
+            return cand
+    return "n" + format(time.time_ns(), "x")           # недостижимо на деле: 16 млн вариантов на секунду
+
+
 def save_note(out, *, nid: str | None = None, title: str = "", body: str = "", course=None, course_name: str = "",
               item=None, item_name: str = "", pinned=None, now: float | None = None) -> dict:
     """Создать заметку (nid не указан) или изменить существующую. Привязка к курсу задаётся при создании и дальше не меняется."""
@@ -254,7 +266,7 @@ def save_note(out, *, nid: str | None = None, title: str = "", body: str = "", c
         dest = path if path.stem.casefold() == stem.casefold() or re.fullmatch(re.escape(stem) + r" \(\d+\)", path.stem) else _unique(folder, stem, keep=path)
     else:
         cid = _int(course)
-        meta = {"id": "n" + format(ts, "x") + secrets.token_hex(2), "title": title, "course": cid,
+        meta = {"id": _new_id(out, ts), "title": title, "course": cid,
                 "course_name": str(course_name or "")[:200] if cid is not None else "",
                 "item": (str(item) if item not in (None, "") else None) if cid is not None else None,
                 "item_name": str(item_name or "")[:200] if cid is not None and item not in (None, "") else "",
