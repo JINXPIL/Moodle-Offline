@@ -726,6 +726,28 @@ def extract(path, ext: str, ctx: Ctx) -> list[tuple[str, str]]:
 READABLE = frozenset(EXT_GROUP)
 
 
+def read_blocks(path, max_pages: int = 500, max_mb: int = 50) -> list[tuple[str, str]]:
+    """Текст файла для других частей программы (нейросеть): [(место, текст)]. Нечитаемое — Unreadable с причиной."""
+    p = Path(path)
+    ext = p.suffix.lower()
+    if ext in LEGACY:
+        raise Unreadable("старый формат (" + ext + "): откройте файл в Word/Excel/PowerPoint и сохраните в новом формате")
+    if ext not in READABLE:
+        raise Unreadable("такой формат (" + (ext or "без расширения") + ") программа читать не умеет")
+    try:
+        if p.stat().st_size > max_mb * 2**20:
+            raise Unreadable(f"файл больше {max_mb} МБ")
+    except OSError as e:
+        raise Unreadable(f"файл недоступен: {e}") from e
+    try:
+        blocks = extract(p, ext, Ctx(max_pages=max_pages))
+    except Unreadable:
+        raise
+    except Exception as e:  # noqa: BLE001 — битый файл не должен ронять запрос
+        raise Unreadable(f"не удалось прочитать: {e}") from e
+    return [(loc, t) for loc, t in blocks if t and t.strip()]
+
+
 # ═══════════════════════════ индекс ═══════════════════════════
 def _fsp(p) -> str:
     """Путь для файловых операций; в Windows включает поддержку длинных путей (>260 символов)."""
@@ -1148,6 +1170,50 @@ class Index:
                     out.append((doc, cid, loc, blob, -sum(counts) / (1.0 + len(text) / 800.0)))
         out.sort(key=lambda r: r[4])
         return out[:RAW_LIMIT]
+
+    def passages(self, q: str, *, course: str | None = None, limit: int = 8, per_doc: int = 2) -> dict:
+        """Самые подходящие фрагменты целиком (для вопроса нейросети): [{path, course, loc, text}] — по одному куску на строку
+        результата, не больше per_doc с файла. Сначала то, где есть все слова вопроса, потом — где есть хоть какие-то."""
+        pq = parse_query(q)
+        if pq.empty:
+            return {"ok": False, "error": "Введите вопрос."}
+        try:
+            db = self._open()
+        except sqlite3.Error as e:
+            return {"ok": False, "error": f"Индекс не открывается: {e}"}
+        if db is None:
+            return {"ok": False, "no_index": True, "error": "Индекс поиска ещё не построен — откройте вкладку «Поиск» и нажмите «Обновить индекс»."}
+        try:
+            use_fts = self.fts and self._meta(db).get("fts") == "1"
+            rows = list(self._rows(db, pq, "and", course, [], use_fts))
+            relaxed = False
+            if len(rows) < limit * 2 and pq.count > 1:
+                seen = {r[1] for r in rows}
+                more = [r for r in self._rows(db, pq, "or", course, [], use_fts) if r[1] not in seen]
+                relaxed = bool(more)
+                rows += more
+            picked, per = [], {}
+            for doc_id, cid, loc, blob, _score in rows:
+                if loc == NAME_LOC or per.get(doc_id, 0) >= per_doc:
+                    continue
+                per[doc_id] = per.get(doc_id, 0) + 1
+                picked.append((doc_id, loc, _unpack(blob)))
+                if len(picked) >= limit:
+                    break
+            docs = {}
+            ids = sorted({d for d, _l, _t in picked})
+            for i in range(0, len(ids), 400):
+                part = ids[i:i + 400]
+                for r in db.execute("SELECT id, path, course FROM docs WHERE id IN (%s)" % ",".join("?" * len(part)), part):
+                    docs[r[0]] = r
+            out = [{"path": docs[d][1], "course": docs[d][2], "loc": loc, "text": text} for d, loc, text in picked if d in docs]
+            return {"ok": True, "passages": out, "relaxed": relaxed}
+        except sqlite3.OperationalError as e:
+            if "no such table" in str(e):
+                return {"ok": False, "no_index": True, "error": "Индекс сейчас создаётся заново — повторите через несколько секунд."}
+            return {"ok": False, "error": f"Не удалось выполнить запрос: {e}"}
+        finally:
+            db.close()
 
 
 RAW_LIMIT = 1500

@@ -28,6 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
+import ai
 import android
 import dl_rules
 import moodle_offline as mo
@@ -64,11 +65,12 @@ ERROR_LOG = "errors.log"            # сбои внутри программы (
 ERROR_LOG_MAX = 200_000
 _ERR_SEEN: dict = {}                # (где, что) → когда писали в последний раз: одинаковый сбой каждые 5 секунд журнал не засоряет
 _SECRET_RE = re.compile(r"(sesskey|token|moodlesession|password|passwd|secret|cookie|key)=([^&\s'\"]+)", re.I)
+_AIKEY_RE = re.compile(r"(sk-[A-Za-z0-9_\-]{8,}|AIza[0-9A-Za-z_\-]{20,}|Bearer\s+\S+)")     # ключи нейросетей
 
 
 def scrub(text, limit: int = 400) -> str:
     """Текст ошибки без значений вида «sesskey=…», «token=…», «password=…» (в сообщениях requests бывают адреса с параметрами)."""
-    return _SECRET_RE.sub(lambda m: m.group(1) + "=…", str(text))[:limit]
+    return _AIKEY_RE.sub("…", _SECRET_RE.sub(lambda m: m.group(1) + "=…", str(text)))[:limit]
 
 
 def log_error(where: str, exc: BaseException, rep=None) -> str:
@@ -322,6 +324,7 @@ class App:
         self.search_thread = None
         self.search_prog = {"running": False, "phase": "", "done": 0, "total": 0, "current": ""}
         self.search_last = None       # итог последней индексации: {"ok", "text", ...}
+        self.ai_jobs: dict = {}       # запросы к нейросети: номер → состояние (последние несколько)
         self.tr_sender = None         # раздача данных по Wi-Fi (transfer.Sender)
         self.tr_ip = None
         self.tr_last = None           # итог последнего переноса: {"ok", "kind", "text", ...}
@@ -2070,6 +2073,213 @@ class App:
             self._notes_timer = t
             t.start()
 
+    # ── нейросеть ──
+    def ai_cfg(self) -> dict:
+        return ai.normalize(self.settings.get("ai"))
+
+    def ai_keys(self) -> dict:
+        k = self.vault.load_ai().get("keys")
+        return {p: v for p, v in k.items() if p in ai.PROVIDERS and isinstance(v, str) and v} if isinstance(k, dict) else {}
+
+    def ai_info(self) -> dict:
+        cfg, keys = self.ai_cfg(), self.ai_keys()
+        pid = cfg["provider"]
+        why = ai.ready(cfg, keys.get(pid, ""))
+        return {"cfg": {"provider": pid, "model": ai.model_of(cfg), "base_url": cfg["base_url"], "proxy": cfg["proxy"], "models": cfg["models"]},
+                "providers": [{"id": i, **{k: v[k] for k in ("title", "model", "models", "key_url", "need_key", "hint")}, "host": urlparse(v["base"]).hostname or ""}
+                              for i, v in ai.PROVIDERS.items()],
+                "has_key": {i: i in keys for i in ai.PROVIDERS}, "ready": not why, "why": why, "consent": bool(pid) and ai.has_consent(cfg),
+                "provider_title": ai.PROVIDERS[pid]["title"] if pid else "", "host": self._ai_host(cfg),
+                "encrypted": self.vault.can_encrypt, "caps": {"ask": ai.ASK_CHARS, "doc": ai.DOC_CHARS},
+                "exts": sorted(search.READABLE)}      # какие файлы можно отправить на пересказ (то же, что читает поиск)
+
+    @staticmethod
+    def _ai_host(cfg) -> str:
+        try:
+            base = ai.check_base(cfg["base_url"]) if cfg["provider"] == "custom" else ai.PROVIDERS[cfg["provider"]]["base"]
+        except (ai.AiError, KeyError):
+            return ""
+        return urlparse(base).hostname or ""
+
+    def ai_form(self, b) -> tuple[dict, str]:
+        """Настройки из формы окна (ещё не сохранённые) + ключ: из формы или, если там пусто, сохранённый. Для «Проверить» и «Список моделей»."""
+        cur = self.ai_cfg()
+
+        def pick(k):
+            v = b.get(k)
+            return v if isinstance(v, str) else cur[k]
+        pid = b.get("provider") if b.get("provider") in ai.PROVIDERS else cur["provider"]
+        models = dict(cur["models"])
+        if isinstance(b.get("model"), str) and b["model"].strip():
+            models[pid] = b["model"]
+        cfg = ai.normalize({**cur, "provider": pid, "models": models, "base_url": pick("base_url"), "proxy": pick("proxy")})
+        key = b.get("key") if isinstance(b.get("key"), str) and b["key"].strip() else self.ai_keys().get(pid, "")
+        return cfg, key.strip()
+
+    def ai_settings_save(self, b) -> dict:
+        key = b.get("key").strip() if isinstance(b.get("key"), str) else ""
+        if key and re.search(r"\s", key):
+            return {"ok": False, "error": "В ключе есть пробелы или переносы строк — скопируйте его заново, целиком."}
+        cfg, _ = self.ai_form(b)
+        pid = cfg["provider"]
+        try:
+            cfg["proxy"] = ai.check_proxy(cfg["proxy"])
+            if pid == "custom" and cfg["base_url"]:
+                cfg["base_url"] = ai.check_base(cfg["base_url"])
+        except ai.AiError as e:
+            return {"ok": False, "error": str(e)}
+        if pid and b.get("consent") is True and ai.consent_token(cfg):
+            cfg["consent"][pid] = ai.consent_token(cfg)
+        elif pid and (b.get("consent") is False or b.get("clear_key")):
+            cfg["consent"].pop(pid, None)
+        with self.lock:
+            if pid and (key or b.get("clear_key")):
+                keys = self.ai_keys()
+                if b.get("clear_key"):
+                    keys.pop(pid, None)
+                else:
+                    keys[pid] = key
+                try:
+                    self.vault.save_ai({"keys": keys})
+                except OSError as e:
+                    return {"ok": False, "error": "Не удалось сохранить ключ: " + mo.describe_error(e)}
+            self.settings["ai"] = cfg
+            self.save_settings()
+        return {"ok": True, **self.ai_info()}
+
+    def _ai_client(self, b) -> tuple[ai.Client | None, str]:
+        cfg, key = self.ai_form(b)
+        try:
+            return ai.Client(cfg, key), ""
+        except ai.AiError as e:
+            return None, str(e)
+
+    def ai_models(self, b) -> dict:
+        cl, why = self._ai_client(b)
+        if not cl:
+            return {"ok": False, "error": why}
+        try:
+            return {"ok": True, "models": cl.list_models()}
+        except ai.AiError as e:
+            return {"ok": False, "error": str(e)}
+
+    def ai_test(self, b) -> dict:
+        cl, why = self._ai_client(b)
+        if not cl:
+            return {"ok": False, "error": why}
+        t0 = time.perf_counter()
+        try:
+            r = cl.complete("Отвечай одним словом.", "Скажи: ок", 256)
+        except ai.AiError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "ms": int((time.perf_counter() - t0) * 1000), "model": r["model"], "text": r["text"][:80]}
+
+    def ai_run(self, b) -> dict:
+        task = b.get("task")
+        if task not in ("ask", "summary", "quiz"):
+            return {"ok": False, "error": "Неизвестное действие."}
+        cfg = self.ai_cfg()
+        key = self.ai_keys().get(cfg["provider"], "")
+        why = ai.ready(cfg, key)
+        if why:
+            return {"ok": False, "need_setup": True, "error": why}
+        if not ai.has_consent(cfg):
+            return {"ok": False, "need_consent": True, "error": "Сначала подтвердите отправку текста в настройках нейросети."}
+        with self.lock:
+            if any(j["state"] == "run" for j in self.ai_jobs.values()):
+                return {"ok": False, "error": "Предыдущий запрос ещё выполняется — дождитесь ответа или отмените его."}
+            jid = secrets.token_hex(4)
+            job = {"id": jid, "task": task, "state": "run", "phase": "готовлю текст", "started": time.time(), "result": None, "error": ""}
+            self.ai_jobs[jid] = job
+            for old in list(self.ai_jobs)[:-6]:
+                self.ai_jobs.pop(old, None)
+        threading.Thread(target=self._ai_job, args=(job, cfg, key, dict(b)), daemon=True).start()
+        return {"ok": True, "id": jid}
+
+    def _ai_job(self, job, cfg, key, b):
+        out = self._out()
+        try:
+            cl = ai.Client(cfg, key)
+            if job["task"] == "ask":
+                res = self._ai_ask(job, cl, out, b)
+            else:
+                res = self._ai_docs(job, cl, cfg, out, b)
+            if job["state"] == "run":
+                job["result"], job["state"] = res, "done"
+                self.rep.log(f"Нейросеть ({ai.PROVIDERS[cfg['provider']]['title']}, {cl.model}): {job['task']}, отправлено ~{res.get('sent', 0)} символов.")
+        except ai.AiError as e:
+            if job["state"] == "run":
+                job["error"], job["state"] = str(e), "error"
+        except Exception as e:  # noqa: BLE001 — любой сбой — понятное сообщение в окне, а не обрыв
+            log_error("нейросеть", e, self.rep)
+            if job["state"] == "run":
+                job["error"], job["state"] = "Внутренняя ошибка программы: " + scrub(e, 200), "error"
+
+    def _ai_ask(self, job, cl, out, b) -> dict:
+        q = str(b.get("question") or "").strip()
+        if not q:
+            raise ai.AiError("Введите вопрос.")
+        got = self.search_index().passages(q, course=str(b.get("course") or "") or None, limit=8)
+        if not got.get("ok"):
+            raise ai.AiError(got.get("error") or "Поиск по материалам недоступен.")
+        if not got["passages"]:
+            return {"text": "", "sources": [], "nothing": True, "sent": 0}
+        system, user, used = ai.build_ask(q, got["passages"])
+        job["phase"] = f"жду ответ ({cl.host})"
+        r = cl.complete(system, user, 1800)
+        return {"text": r["text"], "truncated": r["truncated"], "model": r["model"], "sent": len(user),
+                "sources": [{"n": i, "path": p["path"], "loc": p.get("loc", ""), "course": p.get("course", "")} for i, p in enumerate(used, 1)]}
+
+    def _ai_docs(self, job, cl, cfg, out, b) -> dict:
+        paths = [str(x) for x in (b.get("paths") or []) if isinstance(x, str)][:8]
+        if not paths:
+            raise ai.AiError("Не выбраны файлы.")
+        scfg = search.normalize(self.settings.get("search"))
+        files, skipped = [], []
+        for rel in paths:
+            t = out / rel
+            if not inside(out, t) or not t.is_file():
+                skipped.append({"path": rel, "why": "файл не найден"})
+                continue
+            try:
+                blocks = search.read_blocks(t, max_pages=scfg["max_pages"], max_mb=scfg["max_mb"])
+            except search.Unreadable as e:
+                skipped.append({"path": rel, "why": str(e)})
+                continue
+            if blocks:
+                files.append((rel, blocks))
+            else:
+                skipped.append({"path": rel, "why": "в файле нет текста (возможно, это скан — распознавать картинки программа не умеет)"})
+        if not files:
+            raise ai.AiError("Нечего отправлять: " + "; ".join(f"«{s['path'].rsplit('/', 1)[-1]}» — {s['why']}" for s in skipped[:3]))
+        text, used, total = ai.pack_files(files)
+        title = str(b.get("title") or files[0][0].rsplit("/", 1)[-1])[:200]
+        job["phase"] = f"жду ответ ({cl.host})"
+        if job["task"] == "summary":
+            system, user = ai.build_summary(title, text)
+            r = cl.complete(system, user, 2500)
+            res = {"text": r["text"]}
+        else:
+            system, user = ai.build_quiz(title, text, b.get("count"))
+            r = cl.complete(system, user, 4096)
+            qs, ans = ai.split_quiz(r["text"])
+            res = {"text": r["text"], "questions": qs, "answers": ans}
+        res.update({"truncated": r["truncated"], "model": r["model"], "sent": len(user), "files": [f[0] for f in files], "skipped": skipped,
+                    "used_chars": used, "total_chars": total})
+        return res
+
+    def ai_job_state(self, q) -> dict:
+        j = self.ai_jobs.get(q.get("id", ""))
+        if not j:
+            return {"ok": False, "error": "Запрос не найден (программу перезапускали?)."}
+        return {"ok": True, "id": j["id"], "state": j["state"], "phase": j["phase"], "secs": int(time.time() - j["started"]), "result": j["result"], "error": j["error"]}
+
+    def ai_cancel(self, b) -> dict:
+        j = self.ai_jobs.get(str(b.get("id") or ""))
+        if j and j["state"] == "run":
+            j["state"] = "cancelled"
+        return {"ok": True}
+
     # ── календарь и дедлайны ──
     def cal_out(self) -> Path:
         return Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
@@ -2649,6 +2859,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.rules_info())
         if u.path == "/api/news":
             return self._send(200, APP.news_list(q))
+        if u.path == "/api/ai":
+            return self._send(200, APP.ai_info())
+        if u.path == "/api/ai/job":
+            return self._send(200, APP.ai_job_state(q))
         if u.path == "/api/notes":
             return self._send(200, APP.notes_list(q))
         if u.path == "/api/notes/get":
@@ -2749,6 +2963,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.update_settings(b))
         if p == "/api/rules/save":
             return self._send(200, APP.rules_save(b))
+        if p == "/api/ai/settings":
+            return self._send(200, APP.ai_settings_save(b))
+        if p == "/api/ai/models":
+            return self._send(200, APP.ai_models(b))
+        if p == "/api/ai/test":
+            return self._send(200, APP.ai_test(b))
+        if p == "/api/ai/run":
+            return self._send(200, APP.ai_run(b))
+        if p == "/api/ai/cancel":
+            return self._send(200, APP.ai_cancel(b))
         if p == "/api/notes/save":
             return self._send(200, APP.notes_save(b))
         if p == "/api/notes/delete":

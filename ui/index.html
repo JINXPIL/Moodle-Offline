@@ -400,6 +400,36 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
 .ntc-p{font-size:13px;margin-top:4px;line-height:1.4;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .nt-box textarea.txt{flex:1;min-height:220px;resize:none;line-height:1.5}
 .nt-bind{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.ai-stat{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px}
+.ai-stat .grow{flex:1;min-width:180px;overflow-wrap:anywhere}
+.ai-stat.warn{border-color:var(--accent)}
+.ai-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.ai-acts .hint{margin:0;flex:1;min-width:160px}
+.ai-acts .btn{max-width:100%;white-space:normal;height:auto;min-height:36px;line-height:1.25;text-align:center}
+.ai-files{display:flex;flex-direction:column;gap:6px}
+.ai-file{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:7px 10px;background:var(--surface);font-size:13px}
+.ai-file span{flex:1;min-width:0;overflow-wrap:anywhere}
+.ai-out{display:flex;flex-direction:column;gap:12px}
+.ai-run{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px}
+.ai-run .btn{margin-left:auto}
+.ai-card{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--surface)}
+.ai-card h4{margin:0 0 8px;font:600 13px var(--font-display)}
+.ai-err{border-color:var(--bad);color:var(--bad)}
+.ai-md{line-height:1.55;font-size:14px;overflow-wrap:anywhere}
+.ai-md p{margin:0 0 .6em}
+.ai-md h4{margin:.9em 0 .3em;font:600 14px var(--font-display)}
+.ai-md ul,.ai-md ol{margin:0 0 .6em;padding-left:1.4em}
+.ai-md code{background:var(--bg2);border-radius:5px;padding:0 4px;font-size:12.5px}
+.ai-md pre{background:var(--bg2);border-radius:8px;padding:8px 10px;overflow:auto;font-size:12.5px;margin:0 0 .6em;white-space:pre-wrap}
+.ai-md sup.aic{color:var(--accent);cursor:pointer;font-weight:600}
+.ai-src{display:flex;gap:8px;font-size:13px;padding:4px 0;overflow-wrap:anywhere}
+.ai-src b{color:var(--accent);flex:none;min-width:1.6em}
+.ai-src a{cursor:pointer;color:var(--accent)}
+.ai-src.hl{background:color-mix(in srgb,var(--accent) 12%,transparent);border-radius:6px}
+.ai-meta{font-size:12px;color:var(--muted)}
+.ai-consent{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.45;cursor:pointer}
+.ai-consent .sw-t{margin-top:1px}
+.ai-ans{border-top:1px dashed var(--line);padding-top:10px}
 .mnotes{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .mnote{max-width:100%;height:26px;padding:0 10px;border-radius:999px;border:1px dashed var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mnote:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
@@ -862,7 +892,7 @@ body.android .no-android{display:none!important}
     <section class="view hidden" id="searchView">
       <div class="layout">
         <div class="content">
-          <div class="sqbox"><input class="txt" id="sqIn" placeholder="Поиск по скачанным материалам" autocomplete="off" spellcheck="false"><button class="btn primary" id="sqGo">Найти</button></div>
+          <div class="sqbox"><input class="txt" id="sqIn" placeholder="Поиск по скачанным материалам" autocomplete="off" spellcheck="false"><button class="btn primary" id="sqGo">Найти</button><button class="btn" id="sqAi" title="Задать вопрос нейросети: она ответит по найденным в ваших материалах местам">Спросить ИИ</button></div>
           <div class="sqf"><select class="txt" id="sqCourse" style="width:auto;max-width:260px"></select>
             <span id="sqTypes" style="display:contents"></span>
             <div class="spacer"></div>
@@ -1070,6 +1100,58 @@ body.android .no-android{display:none!important}
     <textarea class="txt" id="noteBody" placeholder="Текст заметки…" spellcheck="true"></textarea>
   </div>
   <div class="rules-foot"><span class="hint" id="noteSt"></span><button class="btn no-android" id="noteFolder" title="Показать файл заметки в папке">В папке</button><button class="btn" id="notePin">Закрепить</button><button class="btn" id="noteDel">Удалить</button></div>
+</div></div>
+<div class="modal hidden" id="aiModal"><div class="modal-box rules-box ai-box">
+  <header><b>Нейросеть</b><button class="btn" id="aiClose">Закрыть</button></header>
+  <div class="rules-body">
+    <div class="rsec ai-stat" id="aiStat"></div>
+    <div class="seg" id="aiTabs"><button data-t="ask" class="on">Вопрос по материалам</button><button data-t="doc">Пересказ и вопросы по файлу</button></div>
+    <div id="aiAsk">
+      <div class="ai-acts" style="margin:0 0 8px"><span class="hint" style="flex:none;margin:0">Где искать:</span><select class="txt" id="aiCourse" style="width:auto;max-width:100%;flex:1"></select></div>
+      <textarea class="txt" id="aiQ" maxlength="600" placeholder="Например: чем отличается симметричное шифрование от асимметричного?" spellcheck="true"></textarea>
+      <div class="ai-acts"><button class="btn primary" id="aiGo">Спросить</button>
+        <span class="hint">Программа сначала ищет нужные места в скачанных материалах (без интернета) и отправляет нейросети только найденные фрагменты, а не весь курс.</span></div>
+    </div>
+    <div id="aiDoc" class="hidden">
+      <div class="ai-files" id="aiFiles"></div>
+      <div class="ai-acts"><button class="btn primary" id="aiSum">Пересказать</button><button class="btn" id="aiQuiz">Вопросы для подготовки</button>
+        <span class="hint" style="flex:none">Вопросов: <select class="txt" id="aiCount" style="width:auto;display:inline-block"><option>5</option><option selected>8</option><option>10</option><option>15</option><option>20</option></select></span></div>
+      <div class="hint">Из файла уходит текст целиком (до ~60 тысяч знаков). Картинки и сканы программа читать не умеет.</div>
+    </div>
+    <div class="ai-out" id="aiOut"></div>
+  </div>
+</div></div>
+<div class="modal hidden" id="aiSetModal"><div class="modal-box rules-box">
+  <header><b>Нейросеть: настройки</b><button class="btn" id="aiSetClose">Закрыть</button></header>
+  <div class="rules-body">
+    <div class="rsec"><h4>Сервис</h4>
+      <select class="txt" id="aiProv"></select>
+      <div class="hint" id="aiProvHint"></div>
+      <div id="aiBaseRow" class="hidden" style="margin-top:10px"><div class="hint" style="margin:0 0 4px">Адрес сервиса (до /v1 включительно, если он есть)</div>
+        <input class="txt" id="aiBase" placeholder="https://openrouter.ai/api или http://localhost:11434" autocomplete="off" spellcheck="false"></div>
+    </div>
+    <div class="rsec"><h4>Ключ доступа</h4>
+      <input class="txt" id="aiKey" type="password" autocomplete="off" spellcheck="false">
+      <div class="hint" id="aiKeyHint"></div>
+      <div class="ai-acts"><button class="btn" id="aiKeyLink">Где взять ключ</button><button class="btn" id="aiKeyDrop">Забыть ключ</button></div>
+    </div>
+    <div class="rsec"><h4>Модель</h4>
+      <input class="txt" id="aiModel" list="aiModels" autocomplete="off" spellcheck="false"><datalist id="aiModels"></datalist>
+      <div class="ai-acts"><button class="btn" id="aiModList" title="Спросить у сервиса, какие модели доступны с вашим ключом">Обновить список</button></div>
+      <div class="hint" id="aiModOut"></div>
+    </div>
+    <div class="rsec"><h4>Если сервис недоступен из вашей сети</h4>
+      <input class="txt" id="aiProxy" placeholder="http://127.0.0.1:10809 (необязательно)" autocomplete="off" spellcheck="false">
+      <div class="hint">Часть сервисов (Gemini, ChatGPT, Claude) закрыта для некоторых стран и сетей. Включите VPN на этом устройстве или укажите здесь HTTP-порт вашего VPN-клиента. Прокси SOCKS программа не поддерживает. Касается только запросов к нейросети, остальное (Moodle, сайты СевГУ) идёт напрямую.</div>
+    </div>
+    <div class="rsec"><h4>Согласие на отправку</h4>
+      <label class="ai-consent"><span class="sw-t"><input type="checkbox" id="aiConsent"><span></span></span><span id="aiConsentTxt"></span></label>
+    </div>
+    <div class="rsec"><h4>Проверка</h4>
+      <div class="ai-acts" style="margin-top:0"><button class="btn" id="aiTest">Проверить связь</button></div><div class="hint" id="aiTestOut"></div>
+    </div>
+  </div>
+  <div class="rules-foot"><span class="hint" id="aiSetMsg"></span><button class="btn" id="aiSetCancel">Отмена</button><button class="btn primary" id="aiSetSave">Сохранить</button></div>
 </div></div>
 <div class="modal hidden" id="trModal"><div class="modal-box rules-box">
   <header><b>Перенос данных</b><button class="btn" id="trClose">Закрыть</button></header>
@@ -1588,7 +1670,7 @@ function preview(p, hash = ""){ mPath = p; $("#mTitle").textContent = p.split("/
 $("#mClose").onclick = () => { $("#modal").classList.add("hidden"); $("#mFrame").src = "about:blank"; };
 // Системная кнопка «Назад» на Android (MainActivity.onBackPressed): закрывает верхнее открытое окно, затем курс. true — что-то закрыто, false — закрывать нечего (тогда приложение сворачивается).
 window.moBack = () => {
-  const open = [...document.querySelectorAll(".modal:not(.hidden)")].pop();
+  const open = [...document.querySelectorAll(".modal:not(.hidden)")].sort((a, b) => (+getComputedStyle(a).zIndex || 0) - (+getComputedStyle(b).zIndex || 0)).pop();   // верхнее по z-index (окно файла, открытое из ответа нейросети, выше); при равенстве — позднее в разметке
   if (open) { const b = open.querySelector('[id$="Close"]') || open.querySelector('[id$="Cancel"]'); if (b) { b.click(); return true; } open.classList.add("hidden"); return true; }
   if (NARROW.matches && dockOpen()) { closeDock(); return true; }
   if ($("#scheduleView").classList.contains("side-open")) { schSide(false); return true; }
@@ -1877,6 +1959,254 @@ async function cvNotesRefresh(){
 }
 const cvNoteChips = it => ((CV.notes || []).filter(n => n.item === it.key).map(n => `<button class="mnote" data-nt="${esc(n.id)}" title="${esc(n.preview || n.title)}">📝 ${esc(n.title)}</button>`).join(""));
 
+/* ── нейросеть: вопросы по материалам, пересказ, вопросы для подготовки ── */
+let AI = null;                                  // ответ /api/ai: настройки, готовность, согласие
+const AIR = {tab: "ask", files: [], title: "", bind: null, job: null, task: "", timer: 0, res: null, q: "", seen: 0};
+async function aiLoad(){ try { AI = await api("/api/ai"); } catch (e) { AI = null; } return AI; }
+const aiOn = () => !!(AI && AI.ready && AI.consent);
+const aiReadable = path => !AI || !AI.exts || AI.exts.includes((/\.[^./]+$/.exec(path) || [""])[0].toLowerCase());
+function aiInline(s, n){
+  s = esc(s).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[^*\w])\*([^*\s][^*\n]*?)\*(?![*\w])/g, "$1<i>$2</i>");
+  return n ? s.replace(/\[(\d{1,2})\]/g, (m, k) => +k >= 1 && +k <= n ? `<sup class="aic" data-n="${k}">[${k}]</sup>` : m) : s;
+}
+// Ответ нейросети — чужой текст: сначала экранируем всё, потом из разметки допускаем только заголовки, списки, **жирный**, *курсив*, `код` и ```блоки```. Ссылок и картинок нет.
+function aiMd(text, n){
+  let html = "";
+  String(text || "").replace(/\r\n?/g, "\n").split("```").forEach((part, i) => {
+    if (i % 2) { html += `<pre>${esc(part.replace(/^[^\n]*\n/, "").replace(/\n$/, ""))}</pre>`; return; }
+    let list = "", para = [];
+    const flush = () => { if (para.length) { html += `<p>${para.map(l => aiInline(l, n)).join("<br>")}</p>`; para = []; } };
+    const close = () => { if (list) { html += `</${list}>`; list = ""; } };
+    const open = t => { if (list !== t) { close(); html += `<${t}>`; list = t; } };
+    for (const line of part.split("\n")) {
+      let m;
+      if (!line.trim()) { flush(); close(); }
+      else if ((m = /^\s{0,3}#{1,6}\s+(.*)$/.exec(line))) { flush(); close(); html += `<h4>${aiInline(m[1], n)}</h4>`; }
+      else if ((m = /^\s*[-*•]\s+(.*)$/.exec(line))) { flush(); open("ul"); html += `<li>${aiInline(m[1], n)}</li>`; }
+      else if ((m = /^\s*(\d{1,2})[.)]\s+(.*)$/.exec(line))) { flush(); open("ol"); html += `<li value="${+m[1]}">${aiInline(m[2], n)}</li>`; }
+      else { close(); para.push(line); }
+    }
+    flush(); close();
+  });
+  return html;
+}
+function aiStat(){
+  const el = $("#aiStat"); if (!AI) { el.innerHTML = `<span class="grow">Нет связи с программой.</span>`; return; }
+  const c = AI.cfg, ok = aiOn();
+  let msg;
+  if (!c.provider) msg = esc("Нейросеть не выбрана. Нужен ключ доступа к одному из сервисов — без него окно не работает.");
+  else if (!AI.ready) msg = esc(AI.why);
+  else if (!AI.consent) msg = `Нужно ваше согласие на отправку текстов на <b>${esc(AI.host)}</b> — оно даётся в настройках.`;
+  else msg = `${esc(AI.provider_title)} · ${esc(c.model)} · тексты уходят на <b>${esc(AI.host)}</b>`;
+  el.classList.toggle("warn", !ok);
+  el.innerHTML = `<span class="grow">${msg}</span><button class="btn ${ok ? "" : "primary"}" id="aiCfg">${ok ? "Настройки" : "Настроить"}</button>`;
+  $("#aiCfg").onclick = openAiSettings;
+}
+function aiTab(t){
+  AIR.tab = t;
+  $$("#aiTabs button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  $("#aiAsk").classList.toggle("hidden", t !== "ask"); $("#aiDoc").classList.toggle("hidden", t !== "doc");
+}
+function aiFilesRender(){
+  $("#aiFiles").innerHTML = AIR.files.length ? AIR.files.map(p => `<div class="ai-file"><span>${esc(p.split("/").pop())}<div class="ai-meta">${esc(p.split("/").slice(0, -1).join(" › "))}</div></span></div>`).join("")
+    : `<div class="hint">Файл не выбран. Откройте курс и нажмите «ИИ» рядом с файлом или найдите файл через поиск.</div>`;
+  $("#aiSum").disabled = $("#aiQuiz").disabled = !AIR.files.length;
+}
+async function aiCourses(want){
+  try { await loadSearchInfo(); } catch (e) {}
+  const sel = $("#aiCourse"); sel.innerHTML = $("#sqCourse").innerHTML;
+  if (want && ![...sel.options].some(o => o.value === want)) sel.insertAdjacentHTML("beforeend", `<option value="${esc(want)}">${esc(want)}</option>`);
+  sel.value = want || "";
+}
+async function openAi(o = {}){
+  await aiLoad();
+  if (!AIR.job && (o.files || o.course !== undefined || o.q !== undefined)) { $("#aiOut").innerHTML = ""; AIR.res = null; }
+  if (o.files) { AIR.files = o.files; AIR.title = o.title || ""; aiFilesRender(); }
+  AIR.bind = o.bind || null;
+  if (o.q !== undefined) $("#aiQ").value = o.q;
+  aiTab(o.tab || AIR.tab); aiStat();
+  $("#aiModal").classList.remove("hidden");
+  await aiCourses(o.course !== undefined ? o.course : $("#aiCourse").value);
+  setTimeout(() => (AIR.tab === "ask" ? $("#aiQ") : $("#aiSum")).focus(), 30);
+}
+function aiGate(){ toast(AI && AI.cfg.provider ? "Сначала завершите настройку нейросети." : "Сначала выберите нейросеть и введите ключ.", "bad"); aiStat(); openAiSettings(); }
+async function aiRun(task){
+  if (AIR.job) return toast("Предыдущий запрос ещё выполняется.", "bad");
+  if (!AI) await aiLoad();
+  if (!aiOn()) return aiGate();
+  const b = {task};
+  if (task === "ask") {
+    b.question = $("#aiQ").value.trim(); b.course = $("#aiCourse").value;
+    if (!b.question) { $("#aiQ").focus(); return toast("Введите вопрос.", "bad"); }
+  } else {
+    b.paths = AIR.files; b.title = AIR.title; if (task === "quiz") b.count = +$("#aiCount").value;
+  }
+  let r; try { r = await api("/api/ai/run", b); } catch (e) { return toast("Нет связи с программой.", "bad"); }
+  if (!r.ok) { if (r.need_setup || r.need_consent) { await aiLoad(); aiStat(); } return toast(r.error || "Не получилось начать.", "bad"); }
+  AIR.job = r.id; AIR.task = task; AIR.res = null; AIR.q = b.question || ""; AIR.seen = Date.now();
+  $("#aiOut").innerHTML = `<div class="ai-run"><span class="spin"></span><span id="aiPhase">готовлю текст</span><button class="btn" id="aiCancel">Отмена</button></div>`;
+  $("#aiCancel").onclick = aiCancel;
+  aiPoll();
+}
+async function aiCancel(){
+  const id = AIR.job; AIR.job = null; clearTimeout(AIR.timer);
+  try { await api("/api/ai/cancel", {id}); } catch (e) {}
+  $("#aiOut").innerHTML = `<div class="ai-card"><div class="hint" style="margin:0">Отменено. Запрос мог уже уйти нейросети, но её ответ программа отбросит.</div></div>`;
+}
+async function aiPoll(){
+  clearTimeout(AIR.timer);
+  const id = AIR.job; if (!id) return;
+  let j; try { j = await api("/api/ai/job?id=" + encodeURIComponent(id)); } catch (e) { AIR.timer = setTimeout(aiPoll, 2000); return; }
+  if (AIR.job !== id) return;
+  if (j.ok && j.state === "run") {
+    const ph = $("#aiPhase"); if (ph) ph.textContent = `${j.phase} · ${j.secs} с`;
+    AIR.timer = setTimeout(aiPoll, 700); return;
+  }
+  AIR.job = null;
+  if (!j.ok || j.state === "error") { $("#aiOut").innerHTML = `<div class="ai-card ai-err">${esc(j.error || "Запрос не выполнен.")}</div>`; return; }
+  if (j.state !== "done") { $("#aiOut").innerHTML = ""; return; }
+  AIR.res = j.result; aiShow(j.result);
+  if ($("#aiModal").classList.contains("hidden")) toast("Ответ нейросети готов — он ждёт в окне «Нейросеть».");
+}
+function aiSrcHtml(src){
+  return src.map(s => `<div class="ai-src" data-n="${s.n}"><b>[${s.n}]</b><span><a data-p="${esc(s.path)}" data-l="${esc(s.loc || "")}">${esc(s.path.split("/").pop())}</a>${s.loc ? " · " + esc(s.loc) : ""}<div class="ai-meta">${esc(s.path.split("/").slice(0, -1).join(" › "))}</div></span></div>`).join("");
+}
+function aiShow(r){
+  const t = AIR.task, quiz = t === "quiz", src = r.sources || [];
+  let h = "";
+  if (r.nothing) { $("#aiOut").innerHTML = `<div class="ai-card">В скачанных материалах ничего не нашлось по этому вопросу. Нейросеть не вызывалась, ничего не отправлялось. Попробуйте другие слова или обновите индекс на вкладке «Поиск».</div>`; return; }
+  h += `<div class="ai-card"><h4>${t === "ask" ? "Ответ" : quiz ? "Вопросы для подготовки" : "Пересказ"}</h4><div class="ai-md" id="aiMd">${aiMd(quiz ? r.questions : r.text, src.length)}</div>`;
+  if (quiz && r.answers) h += `<div class="ai-acts"><button class="btn" id="aiAnsBtn">Показать ответы</button></div><div class="ai-ans ai-md hidden" id="aiAns">${aiMd(r.answers)}</div>`;
+  if (r.truncated) h += `<div class="hint" style="color:var(--bad)">Нейросеть остановилась на пределе длины — ответ оборван. Задайте вопрос уже или выберите файл поменьше.</div>`;
+  h += `</div>`;
+  if (src.length) h += `<div class="ai-card"><h4>Откуда взято</h4>${aiSrcHtml(src)}<div class="hint">Нажмите на название — файл откроется в программе (PDF — на нужной странице).</div></div>`;
+  if (r.skipped && r.skipped.length) h += `<div class="ai-card"><h4>Не отправлено</h4>${r.skipped.map(s => `<div class="ai-meta">«${esc(s.path.split("/").pop())}» — ${esc(s.why)}</div>`).join("")}</div>`;
+  if (r.total_chars && r.used_chars < r.total_chars) h += `<div class="ai-card"><div class="hint" style="margin:0">Файл длиннее лимита одного запроса: нейросети ушло ${r.used_chars} из ${r.total_chars} знаков (начало). Остальное она не видела.</div></div>`;
+  h += `<div class="ai-meta">Отправлено примерно ${r.sent} знаков · модель ${esc(r.model)}. Ответ написала нейросеть: она может ошибаться — сверяйте с материалами.</div>`;
+  h += `<div class="ai-acts" style="margin-top:0"><button class="btn" id="aiCopy">Копировать</button><button class="btn primary" id="aiSave">Сохранить в заметки</button></div>`;
+  $("#aiOut").innerHTML = h;
+}
+function aiPlain(){
+  const r = AIR.res; if (!r) return "";
+  const t = AIR.task, src = (r.sources || []).map(s => `[${s.n}] ${s.path}${s.loc ? " (" + s.loc + ")" : ""}`).join("\n");
+  let s = t === "ask" ? `Вопрос: ${AIR.q}\n\n${r.text}` : t === "quiz" ? `${r.questions}${r.answers ? "\n\n## Ответы\n\n" + r.answers : ""}` : r.text;
+  if (src) s += `\n\nОткуда взято:\n${src}`;
+  return s.trim();
+}
+function aiNote(){
+  const t = AIR.task, r = AIR.res, nm = AIR.title || (AIR.files[0] || "").split("/").pop();
+  const head = t === "ask" ? "Вопрос: " + AIR.q.replace(/\s+/g, " ").slice(0, 70) : (t === "quiz" ? "Вопросы: " : "Пересказ: ") + nm;
+  return {title: head.slice(0, 120), body: aiPlain() + `\n\n— ответ нейросети (${r.model}), ${new Date().toLocaleDateString("ru-RU")}; проверяйте по материалам.`};
+}
+async function aiSave(){
+  if (!AIR.res) return;
+  const n = aiNote(), b = {id: null, title: n.title, body: n.body, pinned: false, course: null, course_name: "", item: null, item_name: ""};
+  if (AIR.bind) { b.course = AIR.bind.course; b.course_name = AIR.bind.course_name || ""; }
+  let j; try { j = await api("/api/notes/save", b); } catch (e) { return toast("Нет связи с программой.", "bad"); }
+  if (!j.ok) return toast(j.error || "Не удалось сохранить заметку.", "bad");
+  toast(AIR.bind ? "Сохранено в заметки этого курса." : "Сохранено в общий блокнот.");
+  if (typeof loadNotes === "function") loadNotes();
+}
+async function aiCopy(){
+  const text = aiPlain();
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) { const t = document.createElement("textarea"); t.value = text; t.style.cssText = "position:fixed;opacity:0"; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e2) {} t.remove(); }
+  toast("Скопировано.");
+}
+$("#aiOut").onclick = e => {
+  const a = e.target.closest("a[data-p]"), c = e.target.closest("sup.aic");
+  if (a) { $("#modal").style.zIndex = "52"; return sOpen(a.dataset.p, a.dataset.l); }
+  if (c) { const row = $(`#aiOut .ai-src[data-n="${c.dataset.n}"]`); if (row) { row.scrollIntoView({block: "center", behavior: "smooth"}); row.classList.add("hl"); setTimeout(() => row.classList.remove("hl"), 1500); } return; }
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.id === "aiCopy") aiCopy();
+  if (b.id === "aiSave") aiSave();
+  if (b.id === "aiAnsBtn") { const x = $("#aiAns"); x.classList.toggle("hidden"); b.textContent = x.classList.contains("hidden") ? "Показать ответы" : "Скрыть ответы"; }
+};
+$("#mClose").addEventListener("click", () => { $("#modal").style.zIndex = ""; });
+$("#aiTabs").onclick = e => { const b = e.target.closest("button[data-t]"); if (b) aiTab(b.dataset.t); };
+$("#aiGo").onclick = () => aiRun("ask");
+$("#aiSum").onclick = () => aiRun("summary");
+$("#aiQuiz").onclick = () => aiRun("quiz");
+$("#aiQ").onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); aiRun("ask"); } };
+$("#aiClose").onclick = () => $("#aiModal").classList.add("hidden");
+
+/* настройки нейросети */
+const AIS = {};
+const aiHostOf = v => { try { return new URL(/^[a-z]+:\/\//i.test(v) ? v : "https://" + v).hostname; } catch (e) { return ""; } };
+function aiSetProv(changed){
+  const id = $("#aiProv").value, p = (AI.providers || []).find(x => x.id === id);
+  $("#aiProvHint").textContent = p ? p.hint : "Выберите сервис, ключ от которого у вас есть.";
+  $("#aiBaseRow").classList.toggle("hidden", id !== "custom");
+  if (changed) $("#aiModel").value = (AI.cfg.models && AI.cfg.models[id]) || (p && p.model) || "";
+  $("#aiModels").innerHTML = ((p && p.models) || []).map(m => `<option value="${esc(m)}">`).join("");
+  const has = id && AI.has_key[id];
+  $("#aiKey").placeholder = has ? "Ключ сохранён (пусто — не менять)" : (p && p.need_key ? "Вставьте ключ целиком" : "Ключ (не всем сервисам нужен)");
+  $("#aiKeyHint").textContent = (AI.encrypted ? "Ключ хранится в зашифрованном виде (Windows DPAPI): прочитать его сможет только ваша учётная запись Windows. "
+    : "На этом устройстве программа не шифрует ключ: он лежит в файле ai.bin в папке данных программы, доступном только вашему пользователю. ")
+    + "Ключ не попадает в «Перенос данных», архивы и журналы.";
+  $("#aiKeyLink").classList.toggle("hidden", !(p && p.key_url)); $("#aiKeyDrop").classList.toggle("hidden", !has);
+  $("#aiModList").disabled = !id; $("#aiTest").disabled = !id; $("#aiConsent").disabled = !id;
+  aiConsentTxt();
+}
+function aiConsentTxt(){
+  const id = $("#aiProv").value, p = (AI.providers || []).find(x => x.id === id);
+  const host = id === "custom" ? aiHostOf($("#aiBase").value.trim()) : (p ? p.host : "");
+  $("#aiConsentTxt").innerHTML = id ? `Разрешаю программе отправлять на <b>${esc(host || "указанный адрес")}</b> мои вопросы и фрагменты текста из скачанных материалов — только когда я сам нажимаю «Спросить», «Пересказать» или «Вопросы для подготовки». Сервис получит эти тексты и вправе обработать их по своим правилам.`
+    : "Сначала выберите сервис.";
+}
+async function openAiSettings(){
+  await aiLoad(); if (!AI) return toast("Нет связи с программой.", "bad");
+  const c = AI.cfg;
+  $("#aiProv").innerHTML = (c.provider ? "" : `<option value="">— выберите сервис —</option>`) + AI.providers.map(p => `<option value="${p.id}">${esc(p.title)}</option>`).join("");
+  $("#aiProv").value = c.provider || "";
+  $("#aiBase").value = c.base_url || ""; $("#aiProxy").value = c.proxy || ""; $("#aiKey").value = "";
+  $("#aiModel").value = c.provider ? c.model : ""; $("#aiConsent").checked = !!AI.consent;
+  ["aiTestOut", "aiModOut", "aiSetMsg"].forEach(i => $("#" + i).textContent = "");
+  aiSetProv(false);
+  $("#aiSetModal").classList.remove("hidden");
+}
+function aiSetHide(){ $("#aiKey").value = ""; $("#aiSetModal").classList.add("hidden"); }          // введённый ключ не живёт в странице дольше, чем нужно
+const aiForm = () => ({provider: $("#aiProv").value, model: $("#aiModel").value.trim(), base_url: $("#aiBase").value.trim(), proxy: $("#aiProxy").value.trim(), key: $("#aiKey").value.trim()});
+async function aiSettingsSave(){
+  const f = aiForm(), msg = $("#aiSetMsg"); msg.style.color = "";
+  if (f.provider && /\s/.test(f.key)) { msg.style.color = "var(--bad)"; msg.textContent = "В ключе есть пробелы или переносы строк — скопируйте его заново."; return; }
+  let j; try { j = await api("/api/ai/settings", {...f, consent: !!f.provider && $("#aiConsent").checked}); } catch (e) { msg.style.color = "var(--bad)"; msg.textContent = "Нет связи с программой."; return; }
+  if (!j.ok) { msg.style.color = "var(--bad)"; msg.textContent = j.error || "Не сохранено."; return; }
+  AI = j; aiSetHide(); aiStat();
+  toast(j.ready && j.consent ? "Нейросеть настроена." : j.ready ? "Сохранено. Чтобы отправлять запросы, нужно согласие." : "Сохранено. " + (j.why || ""));
+  if (CV) renderCourse();
+  if (typeof SQres !== "undefined" && SQres && SQres.ok) renderSearchResults(SQres);
+}
+$("#aiProv").onchange = () => aiSetProv(true);
+$("#aiBase").oninput = aiConsentTxt;
+$("#aiKeyLink").onclick = () => { const p = AI.providers.find(x => x.id === $("#aiProv").value); if (p && p.key_url) openUrl(p.key_url); };
+$("#aiKeyDrop").onclick = async () => {
+  if (!confirm("Забыть сохранённый ключ этого сервиса? Согласие на отправку тоже будет снято.")) return;
+  let j; try { j = await api("/api/ai/settings", {...aiForm(), key: "", clear_key: true}); } catch (e) { return toast("Нет связи с программой.", "bad"); }
+  if (!j.ok) return toast(j.error || "Не получилось.", "bad");
+  AI = j; $("#aiKey").value = ""; $("#aiConsent").checked = false; aiSetProv(false); aiStat(); toast("Ключ удалён.");
+};
+$("#aiModList").onclick = async () => {
+  const out = $("#aiModOut"); out.style.color = ""; out.textContent = "Запрашиваю список…";
+  let j; try { j = await api("/api/ai/models", aiForm()); } catch (e) { out.textContent = "Нет связи с программой."; return; }
+  if (!j.ok) { out.style.color = "var(--bad)"; out.textContent = j.error || "Не получилось."; return; }
+  $("#aiModels").innerHTML = j.models.map(m => `<option value="${esc(m)}">`).join("");
+  out.textContent = j.models.length ? `Моделей: ${j.models.length}. Нажмите на поле «Модель» и выберите из списка.` : "Сервис не вернул список — введите название модели вручную.";
+};
+$("#aiTest").onclick = async () => {
+  const out = $("#aiTestOut"); out.style.color = ""; out.textContent = "Проверяю…"; $("#aiTest").disabled = true;
+  try {
+    const j = await api("/api/ai/test", aiForm());
+    out.style.color = j.ok ? "" : "var(--bad)";
+    out.textContent = j.ok ? `Связь есть: ${j.model}, ответ за ${j.ms} мс.` : (j.error || "Не получилось.");
+  } catch (e) { out.style.color = "var(--bad)"; out.textContent = "Нет связи с программой."; }
+  $("#aiTest").disabled = !$("#aiProv").value;
+};
+$("#aiSetSave").onclick = aiSettingsSave;
+$("#aiSetCancel").onclick = $("#aiSetClose").onclick = aiSetHide;
+aiLoad();
+
 /* ── вкладки ── */
 let view = "courses";
 function showView(v){
@@ -2070,7 +2400,7 @@ function sResCard(r, i){
   const dups = r.dups.length ? `<div class="sn">Такой же файл есть ещё в: ${r.dups.slice(0, 3).map((d, k) => `<a data-i="${i}" data-d="${k}">${esc(d.split("/").slice(0, -1).join(" › "))}</a>`).join(", ")}${r.dups.length > 3 ? ` и ещё ${r.dups.length - 3}` : ""}</div>` : "";
   return `<div class="sr" data-i="${i}"><div class="st"><span class="nk" style="background:${col}" title="${esc(gt)}">${esc(ext)}</span>${hl(r.name)}<span class="sx">${hsize(r.size)}</span></div>
     <div class="sm">${esc(r.course)}${r.where ? " › " + hl(r.where) : ""}${r.by_name ? " · совпало название" : ""}</div>${hits}${more}${dups}
-    <div class="na"><button class="btn" data-a="open">Открыть</button><button class="btn" data-a="reveal">Показать в папке</button></div></div>`;
+    <div class="na"><button class="btn" data-a="open">Открыть</button><button class="btn" data-a="reveal">Показать в папке</button>${aiOn() && aiReadable(r.path) ? `<button class="btn" data-a="ai" title="Пересказать или составить вопросы по этому файлу">ИИ</button>` : ""}</div></div>`;
 }
 function renderSearchResults(r){
   if (!r.ok) {
@@ -2118,7 +2448,9 @@ $("#sqList").onclick = e => {
   if (hit) return sOpen(r.path, r.hits[+hit.dataset.j].loc);
   if (b && b.dataset.a === "open") sOpen(r.path, r.hits[0] ? r.hits[0].loc : "");
   if (b && b.dataset.a === "reveal") api("/api/open", {path: r.path, reveal: true}).then(x => x.ok || toast(x.error || "Файл не найден", "bad"));
+  if (b && b.dataset.a === "ai") openAi({tab: "doc", files: [r.path], title: r.name});
 };
+$("#sqAi").onclick = () => openAi({tab: "ask", q: $("#sqIn").value.trim(), course: $("#sqCourse").value});
 
 let SS0 = null;
 async function openSearchSettings(){
@@ -2405,7 +2737,7 @@ function renderCourse(){
       <div class="mmeta">${d.error ? "" : d.downloaded ? `Сохранено на этом устройстве · обновлено ${esc(d.updated)}` : "Ещё не скачан — показана структура с сайта, файлы откроются после загрузки"}</div>
       ${c.grade ? `<div class="mmeta" style="margin-top:4px">Оценка на сайте: <b>${esc(c.grade)}</b> (на момент последней загрузки)</div>` : ""}${doneSummary(d)}${c.progress != null ? `<div class="prog" style="margin-top:8px;max-width:340px"><i style="width:${Math.round(c.progress)}%"></i></div>` : ""}</div>
     <div class="cv-acts"><button class="btn primary" id="cvDl">${d.downloaded ? "Обновить курс" : "Скачать курс"}</button>
-      ${(d.url || c.url) ? `<button class="btn" id="cvSite">Открыть на сайте</button><button class="btn" id="cvGrades" title="Оценки по заданиям и тестам этого курса — страница сайта в читалке">Оценки курса</button>` : ""}<button class="btn" id="cvNotes" title="Ваши заметки к этому курсу">Заметки${(CV.notes || []).length ? " (" + CV.notes.length + ")" : ""}</button>${d.dir ? `<button class="btn" id="cvDir">Папка курса</button>` : ""}
+      ${(d.url || c.url) ? `<button class="btn" id="cvSite">Открыть на сайте</button><button class="btn" id="cvGrades" title="Оценки по заданиям и тестам этого курса — страница сайта в читалке">Оценки курса</button>` : ""}<button class="btn" id="cvAi" title="Задать вопрос нейросети по материалам этого курса">Спросить ИИ</button><button class="btn" id="cvNotes" title="Ваши заметки к этому курсу">Заметки${(CV.notes || []).length ? " (" + CV.notes.length + ")" : ""}</button>${d.dir ? `<button class="btn" id="cvDir">Папка курса</button>` : ""}
       <button class="btn ghost" id="cvLive" title="Перечитать разделы и элементы с сайта">↻ С сайта</button></div></div></div>`;
   if (d.error) { el.innerHTML = html + `<div class="empty">${esc(d.error)}</div>`; bindCV(); return; }
   html += `<div class="toolbar"><div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="cvQ" placeholder="Поиск в курсе" value="${esc(cvQ)}"></div>
@@ -2417,7 +2749,7 @@ function renderCourse(){
     html += `<section class="msec" id="msec-${s.number}"><h3>${esc(s.name)}</h3>${s.restriction ? `<div class="restr" style="padding:0 16px 6px">Ограничение на сайте: ${esc(s.restriction)}</div>` : ""}`;
     for (const it of s.items) {
       const files = (it.files || []).map(f => { const p = (d.dir ? d.dir + "/" : "") + f.path, e = extOf(p);
-        return `<div class="mf"><span class="fn" title="${esc(f.title)}">${esc(f.title)}</span><span class="mmeta">${hsize(f.size)}</span>${PREVIEW.has(e) ? `<button data-prev="${esc(p)}">Просмотр</button>` : ""}<button data-ext="${esc(p)}">Открыть</button><button data-rev="${esc(p)}">В папке</button></div>` + reserveHtml(d, f); }).join("");
+        return `<div class="mf"><span class="fn" title="${esc(f.title)}">${esc(f.title)}</span><span class="mmeta">${hsize(f.size)}</span>${PREVIEW.has(e) ? `<button data-prev="${esc(p)}">Просмотр</button>` : ""}<button data-ext="${esc(p)}">Открыть</button><button data-rev="${esc(p)}">В папке</button>${aiOn() && aiReadable(p) ? `<button data-ai="${esc(p)}" title="Пересказать или составить вопросы по этому файлу">ИИ</button>` : ""}</div>` + reserveHtml(d, f); }).join("");
       const site = (it.url ? `<button data-rd="${esc(it.url)}" data-rdn="${esc(it.name)}" class="rdb">Открыть здесь</button>` : "") + (it.url ? `<button data-url="${esc(it.url)}">На сайте</button>` : "");
       const extl = it.external ? `<button data-url="${esc(it.external)}">Ссылка</button>` : "";
       const note = it.online_only ? `<div class="mmeta">только онлайн${it.url ? "" : " · недоступно"}</div>` : it.error ? `<div class="mmeta" style="color:var(--bad)">${esc(it.error)}</div>` : (!d.downloaded ? `<div class="mmeta">не скачано</div>` : "");
@@ -2435,6 +2767,8 @@ function bindCV(){
   on("cvBack", closeCourse); on("cvSite", () => openUrl(d.url || c.url));
   on("cvGrades", () => { try { rdOpen(new URL(d.url || c.url).origin + "/grade/report/user/index.php?id=" + c.id, "Оценки: " + (d.fullname || c.fullname)); } catch (e) {} }); on("cvDir", () => api("/api/open", {path: d.dir}));
   on("cvLive", () => openCourse(c.id, true));
+  on("cvAi", () => openAi({tab: "ask", q: "", course: (d.dir || "").split("/")[0], bind: {course: c.id, course_name: d.fullname || c.fullname || ""}}));
+  $$("#courseView [data-ai]").forEach(b => b.onclick = () => openAi({tab: "doc", files: [b.dataset.ai], title: b.dataset.ai.split("/").pop(), bind: {course: c.id, course_name: d.fullname || c.fullname || ""}}));
   on("cvNotes", () => { NT.filter = String(c.id); NT.q = ""; $("#ntQ").value = ""; NT.cnames.set(c.id, d.fullname || c.fullname || ""); showView("notes"); });
   $$("#courseView [data-nta]").forEach(b => b.onclick = () => openNote(null, {course: c.id, course_name: d.fullname || c.fullname || "", item: b.dataset.nta, item_name: b.dataset.ntn}));
   $$("#courseView [data-nt]").forEach(b => b.onclick = () => openNote(b.dataset.nt));
