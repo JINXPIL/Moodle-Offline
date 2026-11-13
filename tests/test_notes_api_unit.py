@@ -62,6 +62,26 @@ check("«Вернуть»: заметка на месте с тем же ном�
 check("удалить несуществующую — ошибка, не падение", call("/api/notes/delete", {"id": "n0123456789ab"})[1]["ok"] is False)
 check("вернуть с чужим именем файла — отказ", call("/api/notes/restore", {"trash": "../settings.json"})[1]["ok"] is False)
 
+# закрепление, пачка (галочки в списке) и её отмена
+j = call("/api/notes/pin", {"id": nid, "pinned": True})[1]
+check("закрепление из списка: флаг стоит, текст прежний", j["ok"] and j["note"]["pinned"] and call("/api/notes/get?id=" + nid)[1]["note"]["body"] == "Про сети\n", str(j))
+check("закреплённая — первая в списке", call("/api/notes")[1]["notes"][0]["id"] == nid)
+check("открепить", call("/api/notes/pin", {"id": nid, "pinned": False})[1]["note"]["pinned"] is False)
+check("закрепить несуществующую — ошибка, не падение", call("/api/notes/pin", {"id": "n0123456789ab", "pinned": True})[1]["ok"] is False)
+mk = [call("/api/notes/save", {"title": f"Пачка {i}", "body": f"текст {i}", "course": (55 if i % 2 else None), "course_name": ("Курс Сети" if i % 2 else "")})[1]["note"]["id"] for i in range(4)]
+before = call("/api/notes")[1]["total"]
+j = call("/api/notes/delete_many", {"ids": mk[:3] + ["n0123456789ab"]})[1]
+check("удаление пачкой: 3 удалено, 1 не найдена, имена для отмены", j["ok"] and j["deleted"] == 3 and j["missing"] == 1 and len(j["trash"]) == 3, str(j))
+check("в списке осталось на 3 меньше, четвёртая цела", call("/api/notes")[1]["total"] == before - 3 and call("/api/notes/get?id=" + mk[3])[1]["ok"])
+check("файлы пачки — в корзине программы", all((BASE / "data" / "notes_trash" / n).exists() for n in j["trash"]))
+j2 = call("/api/notes/restore_many", {"trash": j["trash"]})[1]
+check("«Вернуть» пачку: все три на месте", j2["ok"] and j2["restored"] == 3 and j2["failed"] == 0 and call("/api/notes")[1]["total"] == before, str(j2))
+check("после возврата заметки с привязкой к курсу — по-прежнему в своей папке", call("/api/notes/get?id=" + mk[1])[1]["note"]["course"] == 55)
+check("пустой список и не список — понятная ошибка", call("/api/notes/delete_many", {"ids": []})[1]["ok"] is False and call("/api/notes/delete_many", {"ids": "abc"})[1]["ok"] is False
+      and call("/api/notes/restore_many", {"trash": []})[1]["ok"] is False)
+check("чужие имена при возврате пачкой — отказ без падения", call("/api/notes/restore_many", {"trash": ["../settings.json", "x.md"]})[1]["restored"] == 0)
+check("без ключа доступа — 403", call("/api/notes/delete_many", {"ids": mk}, token="wrong")[0] == 403 and call("/api/notes/pin", {"id": nid, "pinned": True}, token="wrong")[0] == 403)
+
 # поиск: индекса ещё нет — правка заметки его не создаёт; после первой индексации новая заметка находится сама
 check("индекса нет — после правки он не появился", not (BASE / "out" / ".moodle_search.sqlite").exists())
 r = call("/api/search/index", {})[1]

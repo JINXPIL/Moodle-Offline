@@ -378,9 +378,23 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
 .nw .nf{font-size:12px;color:var(--muted);margin-top:4px}
 .nw .na{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .nw .na .btn{height:30px;font-size:12px;padding:0 10px}
-.ntc{display:block;width:100%;text-align:left;font:inherit;color:inherit;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);margin-bottom:8px;box-shadow:var(--shadow);cursor:pointer}
-.ntc:hover,.ntc:focus-visible{border-color:var(--accent);outline:0}
+.ntbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;min-height:46px;margin:0 0 10px;padding:6px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+.ntbar.on{border-color:var(--accent)}
+.ntbar label{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.ntbar input[type=checkbox],.ntc-ck input{width:18px;height:18px;margin:0;accent-color:var(--accent);cursor:pointer}
+.ntbar .ntsel{font-size:13px;color:var(--muted)}
+.ntbar .btn{height:32px;padding:0 12px}
+.ntbar .ntq{font-weight:600}
+.ntc{display:flex;align-items:flex-start;gap:8px;padding:10px 10px 10px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);margin-bottom:8px;box-shadow:var(--shadow)}
+.ntc:hover{border-color:var(--accent)}
+.ntc.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
 .ntc.pin{border-left:4px solid var(--accent)}
+.ntc-ck{flex:none;display:grid;place-items:center;width:30px;height:30px;cursor:pointer}
+.ntc-main{flex:1;min-width:0;display:block;text-align:left;font:inherit;color:inherit;background:none;border:0;padding:3px 0;cursor:pointer;border-radius:8px}
+.ntc-main:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ntc-act{flex:none;display:flex;gap:2px}
+.ntc-act .icon-btn.on{color:var(--accent)}
+.ntc-act .icon-btn.del:hover{color:var(--bad)}
 .ntc-t{font-weight:600;line-height:1.35;overflow-wrap:anywhere}
 .ntc-m{font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
 .ntc-p{font-size:13px;margin-top:4px;line-height:1.4;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -556,6 +570,8 @@ body.android .no-android{display:none!important}
   .now{border-right:0;border-bottom:1px solid var(--line)}
   .btn,.chip,select.txt,input.txt,.seg button,.tab{min-height:40px}
   .icon-btn{width:40px;height:40px}
+  .ntc-act{flex-direction:column}.ntc-act .icon-btn{width:36px;height:36px}
+  .ntc{padding-right:6px}.ntbar .btn{height:36px}
   .cv-info{padding:12px}
   .cv-acts{margin-left:0;width:100%}
   .schedframe{flex:none}
@@ -837,6 +853,7 @@ body.android .no-android{display:none!important}
             <button class="btn primary" id="ntNew">+ Новая заметка</button></div>
           <div class="toolbar"><div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="ntQ" placeholder="Поиск по заметкам" autocomplete="off"></div>
             <select class="txt" id="ntCourse" style="width:auto;max-width:260px" aria-label="Где искать"></select></div>
+          <div class="ntbar hidden" id="ntBar"></div>
           <div id="ntList"></div>
           <p class="hint" id="ntHint">Заметки — обычные файлы .md в папке «Заметки» рядом с материалами: их видно в поиске, они переносятся на телефон вместе с остальным и открываются любым редактором. Заметку к занятию можно оставить прямо в окне курса.</p>
         </div>
@@ -1671,7 +1688,7 @@ function renderNet(st){
 }
 
 /* ── заметки ── */
-const NT = {list: [], cur: null, timer: 0, saving: null, again: false, dirty: false, filter: "", q: "", qTimer: 0, cnames: new Map()};
+const NT = {list: [], cur: null, timer: 0, saving: null, again: false, dirty: false, filter: "", q: "", qTimer: 0, cnames: new Map(), sel: new Set(), last: null, confirm: false};
 const ntWhen = ts => { const d = new Date(ts * 1000), n = new Date(); return d.toLocaleDateString("ru-RU", {day: "numeric", month: "short", ...(d.getFullYear() !== n.getFullYear() ? {year: "numeric"} : {})}); };
 const ntBindText = n => n.course == null ? "Общий блокнот" : (n.course_name || "Курс " + n.course) + (n.item ? " › " + (n.item_name || "элемент курса") : "");
 function ntCourseOptions(){
@@ -1687,17 +1704,104 @@ async function loadNotes(){
   if (!NT.q) { NT.cnames = new Map(NT.list.filter(n => n.course != null).map(n => [n.course, n.course_name || "Курс " + n.course])); }
   ntCourseOptions(); renderNotes(j.total);
 }
+const ntN = n => { const m = n % 100, d = n % 10; return n + " " + (m > 10 && m < 20 ? "заметок" : d === 1 ? "заметка" : d >= 2 && d <= 4 ? "заметки" : "заметок"); };
+const ntIco = {
+  pin: f => `<svg width="17" height="17" viewBox="0 0 24 24" fill="${f ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>`,
+  folder: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`,
+  del: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 11v6M14 11v6"/></svg>`};
+function ntVisible(){ const f = NT.filter; return NT.list.filter(n => f === "" || (f === "g" ? n.course == null : String(n.course) === f)); }
+function ntCard(n){
+  const id = esc(n.id), on = NT.sel.has(n.id);
+  return `<div class="ntc${n.pinned ? " pin" : ""}${on ? " sel" : ""}" data-id="${id}">
+    <label class="ntc-ck" title="Выбрать"><input type="checkbox" data-ck="${id}"${on ? " checked" : ""} aria-label="Выбрать заметку «${esc(n.title)}»"></label>
+    <button class="ntc-main" data-nt="${id}"><div class="ntc-t">${n.pinned ? "📌 " : ""}${esc(n.title)}</div>
+      <div class="ntc-m">${esc(ntBindText(n))} · ${esc(ntWhen(n.updated))}</div>${n.preview ? `<div class="ntc-p">${esc(n.preview)}</div>` : ""}</button>
+    <div class="ntc-act">
+      <button class="icon-btn${n.pinned ? " on" : ""}" data-act="pin" title="${n.pinned ? "Открепить" : "Закрепить"}" aria-label="${n.pinned ? "Открепить" : "Закрепить"}" aria-pressed="${!!n.pinned}">${ntIco.pin(n.pinned)}</button>
+      <button class="icon-btn no-android" data-act="folder" title="Показать файл в папке" aria-label="Показать файл в папке">${ntIco.folder}</button>
+      <button class="icon-btn del" data-act="del" title="Удалить" aria-label="Удалить">${ntIco.del}</button>
+    </div></div>`;
+}
 function renderNotes(total){
-  const f = NT.filter, list = NT.list.filter(n => f === "" || (f === "g" ? n.course == null : String(n.course) === f));
+  const f = NT.filter, list = ntVisible(), vis = new Set(list.map(n => n.id));
+  for (const id of [...NT.sel]) if (!vis.has(id)) NT.sel.delete(id);      // выбранное, но сейчас не видное (другой курс, поиск) не трогаем и не удаляем
+  NT.confirm = false;
   $("#ntInfo").textContent = NT.list.length ? `${list.length}${list.length !== NT.list.length ? " из " + NT.list.length : ""}` : "";
   $("#ntHint").classList.toggle("hidden", !!NT.q);
-  $("#ntList").innerHTML = list.length ? list.map(n => `<button class="ntc ${n.pinned ? "pin" : ""}" data-nt="${esc(n.id)}"><div class="ntc-t">${n.pinned ? "📌 " : ""}${esc(n.title)}</div>
-      <div class="ntc-m">${esc(ntBindText(n))} · ${esc(ntWhen(n.updated))}</div>${n.preview ? `<div class="ntc-p">${esc(n.preview)}</div>` : ""}</button>`).join("")
+  $("#ntList").innerHTML = list.length ? list.map(ntCard).join("")
     : `<div class="empty">${NT.q ? "Ничего не найдено." : f && f !== "g" ? "К этому курсу заметок пока нет." : "Заметок пока нет. Нажмите «+ Новая заметка» — или откройте курс и добавьте заметку к занятию."}</div>`;
   if (total > NT.list.length) $("#ntList").insertAdjacentHTML("beforeend", `<div class="hint">Показаны первые ${NT.list.length} из ${total} — уточните поиск.</div>`);
+  ntBar();
 }
-$("#ntList").onclick = e => { const b = e.target.closest("[data-nt]"); if (b) openNote(b.dataset.nt); };
+/* панель над списком: «Выбрать все», сколько выбрано, «Удалить выбранные» (с вопросом «точно?» на месте) */
+function ntBar(){
+  const list = ntVisible(), n = NT.sel.size, bar = $("#ntBar");
+  bar.classList.toggle("hidden", !list.length); bar.classList.toggle("on", n > 0);
+  if (!list.length) { bar.innerHTML = ""; return; }
+  if (NT.confirm && n) {
+    bar.innerHTML = `<span class="ntq">Удалить ${esc(ntN(n))}?</span><span class="ntsel">Сразу после удаления их можно вернуть.</span><div class="spacer"></div>
+      <button class="btn" id="ntNo">Отмена</button><button class="btn danger" id="ntYes">Удалить</button>`;
+    const y = $("#ntYes"); y.onclick = () => ntDelSelected(); $("#ntNo").onclick = () => { NT.confirm = false; ntBar(); }; y.focus(); return;
+  }
+  bar.innerHTML = `<label><input type="checkbox" id="ntAll"> <span>Выбрать все</span></label><span class="ntsel">${n ? `Выбрано: ${n} из ${list.length}` : ""}</span><div class="spacer"></div>
+    ${n ? `<button class="btn" id="ntClear">Снять выбор</button><button class="btn danger" id="ntDelSel">Удалить выбранные (${n})</button>` : ""}`;
+  const all = $("#ntAll"); all.checked = n > 0 && n === list.length; all.indeterminate = n > 0 && n < list.length;
+  all.onchange = () => { list.forEach(x => all.checked ? NT.sel.add(x.id) : NT.sel.delete(x.id)); NT.last = null; ntSyncSel(); };
+  const c = $("#ntClear"); if (c) c.onclick = () => { NT.sel.clear(); NT.last = null; ntSyncSel(); };
+  const d = $("#ntDelSel"); if (d) d.onclick = () => { NT.confirm = true; ntBar(); };
+}
+function ntSyncSel(){                       // отметки в карточках — без перерисовки списка (не теряется прокрутка и фокус)
+  NT.confirm = false;
+  for (const c of $("#ntList").querySelectorAll(".ntc")) { const on = NT.sel.has(c.dataset.id); c.classList.toggle("sel", on); const k = c.querySelector("[data-ck]"); if (k) k.checked = on; }
+  ntBar();
+}
+function ntToggle(id, on, range){
+  const list = ntVisible();
+  if (range && NT.last && NT.last !== id) {                 // Shift + галочка — отметить всё от прежней до этой
+    const a = list.findIndex(n => n.id === NT.last), b = list.findIndex(n => n.id === id);
+    if (a >= 0 && b >= 0) for (let i = Math.min(a, b); i <= Math.max(a, b); i++) on ? NT.sel.add(list[i].id) : NT.sel.delete(list[i].id);
+    else on ? NT.sel.add(id) : NT.sel.delete(id);
+  } else on ? NT.sel.add(id) : NT.sel.delete(id);
+  NT.last = id; ntSyncSel();
+}
+function ntUndoToast(text, undo, ms = 9000){
+  const d = document.createElement("div"); d.className = "toast"; d.append(text);
+  const gone = setTimeout(() => d.remove(), ms);
+  if (undo) { const u = document.createElement("button"); u.className = "tundo"; u.textContent = "Вернуть"; d.append(u); u.onclick = async () => { clearTimeout(gone); d.remove(); await undo(); }; }
+  $("#toasts").appendChild(d);
+}
+const ntAfter = () => { loadNotes(); if (CV) cvNotesRefresh(); };
+async function ntDelOne(id){
+  const j = await api("/api/notes/delete", {id});
+  if (!j.ok) { toast(j.error || "Не удалось удалить", "bad"); ntAfter(); return false; }
+  NT.sel.delete(id);
+  ntUndoToast("Заметка удалена", j.trash && (async () => { const r = await api("/api/notes/restore", {trash: j.trash}); toast(r.ok ? "Заметка возвращена" : (r.error || "Не удалось вернуть"), r.ok ? "" : "bad"); ntAfter(); }));
+  ntAfter(); return true;
+}
+async function ntDelSelected(){
+  const ids = ntVisible().map(n => n.id).filter(id => NT.sel.has(id));
+  NT.confirm = false; if (!ids.length) { ntBar(); return; }
+  const j = await api("/api/notes/delete_many", {ids});
+  if (!j.ok) { toast(j.error || "Не удалось удалить", "bad"); ntAfter(); return; }
+  ids.forEach(id => NT.sel.delete(id));
+  const lost = j.deleted - (j.kept || 0);
+  ntUndoToast(`Удалено: ${ntN(j.deleted)}.` + (j.missing ? ` Не нашлось: ${j.missing}.` : "") + (lost > 0 ? ` Вернуть можно только последние ${j.kept}.` : ""),
+    j.trash && j.trash.length && (async () => { const r = await api("/api/notes/restore_many", {trash: j.trash}); toast(r.ok ? `Возвращено: ${ntN(r.restored)}` + (r.failed ? `, не удалось: ${r.failed}` : "") : (r.error || "Не удалось вернуть"), r.ok && !r.failed ? "" : "bad"); ntAfter(); }), 12000);
+  ntAfter();
+}
+async function ntAct(act, id){
+  const n = NT.list.find(x => x.id === id); if (!n) return;
+  if (act === "pin") { const r = await api("/api/notes/pin", {id, pinned: !n.pinned}); if (!r.ok) toast(r.error || "Не удалось", "bad"); ntAfter(); }
+  else if (act === "folder") { const r = await api("/api/open", {path: n.path, reveal: true}); if (!r.ok) toast(r.error, "bad"); }
+  else if (act === "del") await ntDelOne(id);
+}
+$("#ntList").onclick = e => {
+  const ck = e.target.closest("[data-ck]"); if (ck) { ntToggle(ck.dataset.ck, ck.checked, e.shiftKey); return; }
+  const a = e.target.closest("[data-act]"); if (a) { ntAct(a.dataset.act, a.closest("[data-id]").dataset.id); return; }
+  const b = e.target.closest("[data-nt]"); if (b) openNote(b.dataset.nt);
+};
 $("#ntCourse").onchange = e => { NT.filter = e.target.value; renderNotes(NT.list.length); };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && NT.confirm && $("#noteModal").classList.contains("hidden")) { NT.confirm = false; ntBar(); } });
 $("#ntQ").oninput = e => { clearTimeout(NT.qTimer); NT.qTimer = setTimeout(() => { NT.q = e.target.value.trim(); loadNotes(); }, 250); };
 $("#ntNew").onclick = () => {
   const f = NT.filter;
@@ -1754,14 +1858,8 @@ $("#notePin").onclick = () => { if (!NT.cur) return; NT.cur.pinned = !NT.cur.pin
 $("#noteFolder").onclick = async () => { await ntFlush(); if (NT.cur && NT.cur.path) api("/api/open", {path: NT.cur.path, reveal: true}).then(r => { if (!r.ok) toast(r.error, "bad"); }); };
 $("#noteDel").onclick = async () => {
   if (!NT.cur || !NT.cur.id) return; await ntFlush();
-  const j = await api("/api/notes/delete", {id: NT.cur.id});
-  if (!j.ok) { toast(j.error || "Не удалось удалить", "bad"); return; }
-  NT.cur = null; $("#noteModal").classList.add("hidden");
-  const d = document.createElement("div"); d.className = "toast"; d.append("Заметка удалена");
-  const u = document.createElement("button"); u.className = "tundo"; u.textContent = "Вернуть"; d.append(u); $("#toasts").appendChild(d);
-  const gone = setTimeout(() => d.remove(), 9000);
-  u.onclick = async () => { clearTimeout(gone); d.remove(); if (!j.trash) return; const r = await api("/api/notes/restore", {trash: j.trash}); toast(r.ok ? "Заметка возвращена" : (r.error || "Не удалось вернуть"), r.ok ? "" : "bad"); loadNotes(); if (CV) cvNotesRefresh(); };
-  loadNotes(); if (CV) cvNotesRefresh();
+  const id = NT.cur.id;
+  if (await ntDelOne(id)) { NT.cur = null; $("#noteModal").classList.add("hidden"); }
 };
 document.addEventListener("keydown", e => {
   if ($("#noteModal").classList.contains("hidden")) return;

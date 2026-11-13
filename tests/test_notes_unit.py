@@ -146,4 +146,49 @@ dup = notes.get_note(PH / "out", [i for i in ids if i != n1["id"]][0])
 notes.save_note(PH / "out", nid=dup["id"], title=dup["title"], body="правка копии")
 check("правка попала в нужный файл, второй цел", notes.get_note(PH / "out", n1["id"])["body"] == "с ПК v2\n" and "правка копии" in (PH / "out" / "Заметки" / "Блокнот" / (Path(dup["path"]).name)).read_text(encoding="utf-8"))
 
+# 10. заметки, которые положили руками: корзина должна уметь их вернуть; в корзине «последние» — по времени удаления, а не правки
+(N / "Блокнот").mkdir(exist_ok=True)
+(N / "Блокнот" / "ручная.md").write_bytes("Привет, это cp1251\nвторая строка".encode("cp1251"))
+hx = [n for n in notes.list_notes(OUT) if n["title"] == "ручная"][0]
+rd = notes.delete_note(OUT, hx["id"], TRASH)
+check("ручная заметка (без служебной строки) удалена в корзину", notes.find(OUT, hx["id"]) is None and (TRASH / rd["trash"]).exists())
+try: bk = notes.restore_note(OUT, rd["trash"], TRASH)
+except notes.NoteError as ex: bk = None; print("restore error:", ex)
+check("…и возвращается: тот же номер и текст", bk is not None and bk["id"] == hx["id"] and "Привет, это cp1251\nвторая строка" in notes.get_note(OUT, hx["id"])["body"], str(bk))
+for f in TRASH.glob("*.md"): f.unlink()
+filler = [notes.save_note(OUT, title=f"ф{i}", body="x") for i in range(notes.TRASH_KEEP)]
+for m in filler: notes.delete_note(OUT, m["id"], TRASH)
+old = notes.save_note(OUT, title="Старая заметка", body="давно писал"); op = OUT / old["path"]; os.utime(op, (1_000_000_000, 1_000_000_000))
+ro = notes.delete_note(OUT, old["id"], TRASH)
+check("только что удалённая старая заметка остаётся в корзине (даже если файл давно не правили)", (TRASH / ro["trash"]).exists(), str(sorted(p.name for p in TRASH.glob("*.md"))[:3]))
+check("и возвращается", notes.restore_note(OUT, ro["trash"], TRASH)["id"] == old["id"])
+
+# 11. закрепление без правки текста
+pp = notes.save_note(OUT, title="Для закрепа", body="текст", now=1_700_000_000); ppath = OUT / pp["path"]; os.utime(ppath, (1_700_000_000, 1_700_000_000))
+r = notes.set_pinned(OUT, pp["id"], True)
+check("закрепление: флаг стоит, текст прежний, дата правки не ушла вперёд (разница ≤ 1 с)", r["pinned"] is True and r["updated"] in (1_700_000_000, 1_700_000_001) and notes.get_note(OUT, pp["id"])["body"] == "текст\n", str(r))
+check("файл при закреплении чуть новее (иначе перенос данных не донесёт закреп до другого устройства)", int(os.stat(ppath).st_mtime) == 1_700_000_001)
+check("открепление", notes.set_pinned(OUT, pp["id"], False)["pinned"] is False)
+hp = [n for n in notes.list_notes(OUT) if n["title"] == "из блокнота"][0]
+check("ручной файл можно закрепить (в нём появляется служебная строка)", notes.set_pinned(OUT, hp["id"], True)["pinned"] and (N / "Блокнот" / "из блокнота.md").read_text(encoding="utf-8").startswith("<!--mo-note "))
+try: notes.set_pinned(OUT, "n0123456789ab", True); gone = False
+except notes.NoteError: gone = True
+check("закрепить несуществующую — NoteError", gone)
+
+# 12. удаление и возврат пачкой
+for f in TRASH.glob("*.md"): f.unlink()
+grp = [notes.save_note(OUT, title=f"пачка {i}", body=f"т{i}", course=(7 if i % 2 else None), course_name=("Курс Семь" if i % 2 else "")) for i in range(5)]
+ids = [g["id"] for g in grp]
+rm = notes.delete_many(OUT, ids + ["n0123456789ab", "../x", ids[0]], TRASH)
+check("пачка: удалено 5, несуществующие посчитаны, повтор — один раз", rm["deleted"] == 5 and rm["missing"] == 2 and len(rm["trash"]) == 5, str(rm))
+check("пачка: заметок нет, пустая папка курса убрана", all(notes.find(OUT, i) is None for i in ids) and not (N / "Курс Семь").exists())
+rr = notes.restore_many(OUT, rm["trash"] + ["../evil.md", "n123.md"], TRASH)
+check("пачка: возвращены все 5, чужие имена отклонены", rr["restored"] == 5 and rr["failed"] == 2 and all(notes.find(OUT, i) for i in ids), str(rr))
+check("пачка: привязка к курсу сохранилась", notes.get_note(OUT, ids[1])["course"] == 7 and notes.get_note(OUT, ids[0])["course"] is None)
+big = [notes.save_note(OUT, title=f"много {i}", body="x") for i in range(notes.TRASH_KEEP + 8)]
+rb = notes.delete_many(OUT, [b["id"] for b in big], TRASH)
+check("много заметок сразу: в корзине не больше предела, последние удалённые вернуть можно", rb["deleted"] == len(big) and len(list(TRASH.glob("*.md"))) <= notes.TRASH_KEEP and rb["kept"] == notes.TRASH_KEEP, str(rb["kept"]))
+rn = notes.delete_many(OUT, [], TRASH); check("пустой список — ничего не делает", rn["deleted"] == 0 and rn["missing"] == 0)
+r2 = notes.delete_many(OUT, [notes.save_note(OUT, title="без корзины", body="x")["id"]]); check("пачкой без корзины — просто удаляет", r2["deleted"] == 1 and r2["trash"] == [])
+
 print("FAILS:", FAILS); sys.exit(1 if FAILS else 0)

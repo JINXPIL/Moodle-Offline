@@ -2022,6 +2022,38 @@ class App:
         self.notes_changed()
         return {"ok": True, "note": n}
 
+    def notes_pin(self, b) -> dict:
+        try:
+            n = notes.set_pinned(self.notes_out(), str(b.get("id") or ""), bool(b.get("pinned")))
+        except notes.NoteError as e:
+            return {"ok": False, "error": str(e)}
+        except OSError as e:
+            return {"ok": False, "error": "не удалось записать заметку: " + mo.describe_error(e)}
+        self.notes_changed()
+        return {"ok": True, "note": n}
+
+    def notes_delete_many(self, b) -> dict:
+        ids = b.get("ids")
+        if not isinstance(ids, list) or not ids:
+            return {"ok": False, "error": "Не выбрано ни одной заметки."}
+        try:
+            r = notes.delete_many(self.notes_out(), [str(i) for i in ids[:2000]], self.notes_trash())
+        except OSError as e:
+            return {"ok": False, "error": "не удалось удалить заметки: " + mo.describe_error(e)}
+        self.notes_changed()
+        return {"ok": True, **r}
+
+    def notes_restore_many(self, b) -> dict:
+        names = b.get("trash")
+        if not isinstance(names, list) or not names:
+            return {"ok": False, "error": "Нечего возвращать."}
+        try:
+            r = notes.restore_many(self.notes_out(), [str(i) for i in names[:2000]], self.notes_trash())
+        except OSError as e:
+            return {"ok": False, "error": "не удалось вернуть заметки: " + mo.describe_error(e)}
+        self.notes_changed()
+        return {"ok": True, **r}
+
     def notes_changed(self):
         """После правки заметки обновляем индекс поиска — но только если им уже пользовались, и не чаще раза в несколько
         секунд (пока человек печатает, заметка сохраняется часто)."""
@@ -2723,6 +2755,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.notes_delete(b))
         if p == "/api/notes/restore":
             return self._send(200, APP.notes_restore(b))
+        if p == "/api/notes/pin":
+            return self._send(200, APP.notes_pin(b))
+        if p == "/api/notes/delete_many":
+            return self._send(200, APP.notes_delete_many(b))
+        if p == "/api/notes/restore_many":
+            return self._send(200, APP.notes_restore_many(b))
         if p == "/api/news/read":
             return self._send(200, APP.news_read(b))
         if p == "/api/news/settings":
