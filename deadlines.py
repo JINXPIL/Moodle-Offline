@@ -43,6 +43,7 @@ GROUPS = {
     "events": ("События календаря", "ваши записи и события, которые добавили преподаватели или университет", True),
     "open": ("Открытие", "когда задание или тест открывается для выполнения", False),
     "completion": ("Ожидаемое завершение", "срок завершения элемента по настройкам курса (отметка прогресса)", False),
+    "sessions": ("Занятия из «Посещаемости»", "время занятий, которые преподаватель завёл в журнале посещаемости (их на сайте много, срока сдачи у них нет)", False),
 }
 DEFAULTS = {
     "auto": True,                          # обновлять календарь после каждого скачивания
@@ -64,7 +65,8 @@ ETYPE_GROUP = {"due": "deadline", "close": "deadline", "open": "open", "expectco
 ETYPE_LABEL = {"due": "срок сдачи", "close": "закрывается", "open": "открывается", "expectcompletionon": "ожидаемое завершение",
                "course": "событие курса", "category": "событие", "site": "событие университета", "group": "событие группы",
                "user": "личное событие"}
-ICON = {"deadline": "⏰", "events": "📌", "open": "🔓", "completion": "☑️"}
+ICON = {"deadline": "⏰", "events": "📌", "open": "🔓", "completion": "☑️", "sessions": "👥"}
+SESSION_MODULES = ("attendance",)                   # элементы курса, чьи события — время занятия, а не срок
 SUFFIXES = re.compile(r"\s*[-–—:]?\s*\b(должен быть выполнен|должна быть выполнена|должно быть выполнено|срок сдачи|срок выполнения|"
                       r"закрывается|открывается|is due|closes|opens|due)\s*$", re.I)
 MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]
@@ -184,6 +186,8 @@ def _safe_url(u) -> str:
 def group_of(etype: str, module: str = "") -> str | None:
     """Вид события для настроек; None — событие не нужно студенту (проверка работ — для преподавателя)."""
     et = (etype or "").lower()
+    if et == "attendance" or (module or "").lower() in SESSION_MODULES:
+        return "sessions"           # «Посещаемость (Группа …)» — занятие по журналу, а не срок сдачи
     if et in ETYPE_GROUP:
         return ETYPE_GROUP[et]
     return "deadline" if module else "events"
@@ -221,7 +225,7 @@ def from_ajax(ev) -> dict | None:
         "id": f"m{eid}", "title": title[:200], "name": name[:200], "course_id": cid,
         "course": _clean(course.get("fullname"))[:200], "cshort": _clean(course.get("shortname"))[:60],
         "module": module, "etype": etype, "kind": group,
-        "label": _clean(ev.get("normalisedeventtypetext")).lower() or ETYPE_LABEL.get(etype, "событие"),
+        "label": "занятие" if group == "sessions" else (_clean(ev.get("normalisedeventtypetext")).lower() or ETYPE_LABEL.get(etype, "событие")),
         "due": due, "end": due + dur if dur else 0,
         "url": _safe_url(action.get("url") or ev.get("viewurl") or ev.get("url")),
         "action": _clean(action.get("name"))[:80], "desc": _plain(ev.get("description")),
