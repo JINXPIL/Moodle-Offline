@@ -55,7 +55,7 @@ DEFAULTS = {
     "mute": [],                                                # id курсов без уведомлений (в ленте они остаются)
     "share_grades": False,                                     # показывать значения оценок в Telegram/webhook
     "forum_words": ["объявлен", "новост", "announce", "news"],  # какие форумы считать «Объявлениями»
-    "backfill": 3,                                             # сколько последних объявлений сохранить при первом запуске
+    "backfill": 10,                                            # сколько последних объявлений сохранить при первом запуске
     "max_lines": 12,                                           # строк в одном уведомлении
 }
 EMPTY_GRADE = {"", "-", "—", "–"}
@@ -95,7 +95,7 @@ def normalize(cfg) -> dict:
         except (TypeError, ValueError):
             pass
     out["mute"] = sorted(set(mute))
-    for k, lo, hi in (("backfill", 0, 20), ("max_lines", 3, 50)):
+    for k, lo, hi in (("backfill", 0, 50), ("max_lines", 3, 50)):
         try:
             out[k] = min(hi, max(lo, int(cfg.get(k, DEFAULTS[k]))))
         except (TypeError, ValueError):
@@ -349,6 +349,36 @@ def parse_discussions(soup, base_url, limit=30) -> list[dict]:
         if len(text) > len(best[d]["title"]):
             best[d]["title"] = _short(text, 200)
     return [best[d] for d in order][:limit]
+
+
+ANN_PER_RUN = 10        # не больше стольких страниц объявлений за один проход (вежливость к серверу)
+ANN_KNOWN_KEEP = 300    # сколько номеров тем помним
+ANN_PEND_KEEP = 100     # сколько тем ждёт очереди на сохранение
+
+
+def plan_announcements(found, known, pend, backfill, per_run=ANN_PER_RUN) -> dict:
+    """Что делать с темами форума-объявлений на этом проходе.
+    found — темы со страницы форума (новые сверху); known — номера тем, о которых уже знаем (None — первый раз для форума);
+    pend — темы, которые собирались сохранить молча, но не успели из-за лимита страниц за проход; backfill — сколько
+    последних тем сохранить молча при первом разе.
+    → {"todo": [(тема, молча)…]: новые идут с сообщением (молча=False), темы из очереди и «последние при первом разе» — молча;
+       "fetch": у первых стольких из todo сохраняем страницу, у остальных (новые сверх лимита) только сообщение;
+       "known": обновлённый список известных; "pend": что осталось сохранить в следующий раз}."""
+    found = list(found or [])
+    byid = {d["id"]: d for d in found}
+    per_run = max(1, int(per_run))
+    if known is None:
+        new, queue = [], [d["id"] for d in found[:max(0, int(backfill or 0))]]
+    else:
+        seen = set(known)
+        new = [d for d in found if d["id"] not in seen]
+        queue = [i for i in (pend or []) if i in byid]        # тема уже могла уйти с сайта — тогда сохранять нечего
+    fetch = min(per_run, len(new))
+    room = queue[:per_run - fetch]
+    todo = [(d, False) for d in new] + [(byid[i], True) for i in room]
+    rest = queue[len(room):] + [d["id"] for d in new[per_run:]]
+    keep = sorted({*(known or []), *byid})[-ANN_KNOWN_KEEP:]
+    return {"todo": todo, "fetch": fetch + len(room), "known": keep, "pend": rest[:ANN_PEND_KEEP]}
 
 
 def parse_post(soup) -> dict:

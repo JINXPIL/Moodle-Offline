@@ -28,6 +28,7 @@ OUTAGE_LEN = int(os.environ.get("OUTAGE_LEN", "4") or 4)
 EXPIRE_AFTER = int(os.environ.get("EXPIRE_AFTER", "0") or 0)
 random.seed(int(os.environ.get("SEED", "7")))
 PATHLOG = []   # все пути запросов (для проверки, что именно запрашивали): /__paths, /__paths?reset=1
+ANN = {"n": 0}   # сколько «лишних» объявлений в форуме курса: /__ann?n=25 (номера тем 1001…1000+n, новые сверху)
 CAL = {"n": 0, "fail": "", "extra": 0, "now": 0}   # календарь: /__cal?n=1&fail=timeline&extra=120&now=<unix>
 
 
@@ -351,6 +352,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/__step":
             STEP["n"] = int(q.get("n", 0))
             return self.send(200, json.dumps(STEP), "application/json")
+        if path == "/__ann":
+            ANN["n"] = int(q.get("n", 0))
+            return self.send(200, json.dumps(ANN), "application/json")
         if path == "/__cal":
             for k in ("n", "extra", "now"):
                 if k in q:
@@ -493,6 +497,8 @@ class Handler(BaseHTTPRequestHandler):
                 disc = [(11, "Добро пожаловать на курс"), (10, "Правила курса и аттестации")]
                 if STEP["n"] >= 1:
                     disc.insert(0, (12, "Перенос лекции на пятницу"))
+                if cmid == 1002 and ANN["n"]:
+                    disc = [(1000 + i, f"Объявление {i}") for i in range(ANN["n"], 0, -1)] + disc
                 if cmid == 1003:
                     disc = [(30, "Как оформлять отчёты?")]
                 rows = "".join(f'<tr class="discussion r0"><td class="topic starter"><a href="{H}/mod/forum/discuss.php?d={d}">{t}</a></td>'
@@ -544,6 +550,8 @@ class Handler(BaseHTTPRequestHandler):
                      11: ("Добро пожаловать на курс", "Здравствуйте! Материалы курса будут появляться по мере изучения тем."),
                      10: ("Правила курса и аттестации", "Аттестация — по результатам тестов и лабораторных работ. Пересдачи по графику."),
                      30: ("Как оформлять отчёты?", "Вопрос студента.")}
+            if 1000 < d <= 1000 + ANN["n"]:
+                texts[d] = (f"Объявление {d - 1000}", f"Текст объявления номер {d - 1000}.")
             if d not in texts:
                 return self.send(404, "no discussion")
             sub, body = texts[d]
