@@ -55,7 +55,7 @@ check("настройка save_grades переносится", T.safe_settings({
 st = man["settings"]
 check("настройки: только разрешённые, без секретов", set(st) <= set(T.SETTINGS_KEYS) and "password" not in json.dumps(st) and "username" not in st
       and "out_dir" not in st and "telegram_chat" not in json.dumps(st) and "webhook" not in json.dumps(st) and st["news"]["track"] == {"files": True}, st)
-check("дефолт — все категории", set(T.DEFAULT_CATS) == set(T.CAT_IDS) and len(T.DEFAULT_CATS) == 7)
+check("дефолт — все категории", set(T.DEFAULT_CATS) == set(T.CAT_IDS) and len(T.DEFAULT_CATS) == 8)
 
 # 2. архив → телефон
 arc = BASE/"перенос.zip"

@@ -369,6 +369,10 @@ def read_text_file(path, ctx: Ctx) -> list[tuple[str, str]]:
             s = raw.decode("utf-8")
         except UnicodeDecodeError:
             s = raw.decode("cp1251", errors="replace")
+    if s.startswith("<!--mo-note "):                      # заметка программы (notes.py): служебную строку в поиске не показываем
+        j = s.find("-->")
+        if 0 < j < 4096:
+            s = s[j + 3:]
     out, line_no = [], 1
     for blk in split_blocks(s):
         n = blk.count("\n") + 1

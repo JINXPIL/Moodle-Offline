@@ -378,6 +378,18 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
 .nw .nf{font-size:12px;color:var(--muted);margin-top:4px}
 .nw .na{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .nw .na .btn{height:30px;font-size:12px;padding:0 10px}
+.ntc{display:block;width:100%;text-align:left;font:inherit;color:inherit;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);margin-bottom:8px;box-shadow:var(--shadow);cursor:pointer}
+.ntc:hover,.ntc:focus-visible{border-color:var(--accent);outline:0}
+.ntc.pin{border-left:4px solid var(--accent)}
+.ntc-t{font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.ntc-m{font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.ntc-p{font-size:13px;margin-top:4px;line-height:1.4;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.nt-box textarea.txt{flex:1;min-height:220px;resize:none;line-height:1.5}
+.nt-bind{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.mnotes{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.mnote{max-width:100%;height:26px;padding:0 10px;border-radius:999px;border:1px dashed var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mnote:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.toast .tundo{margin-left:12px;border:0;border-bottom:1px solid currentColor;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:0}
 .nk{font-size:11px;font-weight:700;letter-spacing:.02em;padding:2px 8px;border-radius:999px;color:#fff;margin-right:6px;white-space:nowrap}
 .nsk{display:grid;grid-template-columns:1fr 70px 70px;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .nsk.h{border-top:0;font-size:12px;color:var(--muted);padding-top:0}
@@ -467,8 +479,9 @@ body.android .no-android{display:none!important}
   body{padding-bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom))}
   .mtabs{position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;border-radius:0;border:0;border-top:1px solid var(--line);
     background:var(--surface);backdrop-filter:blur(18px) saturate(1.4);padding:4px 4px calc(4px + env(safe-area-inset-bottom));gap:0;
-    overflow:hidden}
-  .mtabs button{position:relative;flex:1 1 0;min-width:0;min-height:50px;padding:4px 1px;border-radius:10px;font-size:clamp(8.5px,2.3vw,10.5px);line-height:1.15;
+    overflow-x:auto;overflow-y:hidden;scrollbar-width:none}   /* вкладок семь: на самых узких экранах (≤ 360 px) панель чуть прокручивается, подписи не обрезаются */
+  .mtabs::-webkit-scrollbar{display:none}
+  .mtabs button{position:relative;flex:1 0 50px;min-width:0;min-height:50px;padding:4px 1px;border-radius:10px;font-size:clamp(8.5px,2.3vw,10.5px);line-height:1.15;
     flex-direction:column;gap:3px;white-space:nowrap;overflow:hidden}
   .mtabs .tl{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em}
   .mtabs .tic{display:block}
@@ -569,7 +582,7 @@ body.android .no-android{display:none!important}
 <div id="app">
   <header class="top">
     <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>Moodle Offline</div>
-    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/></svg><span class="tl">Курсы</span></button><button data-view="search"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg><span class="tl">Поиск</span></button><button data-view="calendar"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="tl">Календарь</span><span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="tl">Расписание</span></button><button data-view="electives"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="tl">Элективы</span></button><button data-view="news"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="tl">Что нового</span><span class="nbadge hidden" id="newsBadge"></span></button></div>
+    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/></svg><span class="tl">Курсы</span></button><button data-view="search"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg><span class="tl">Поиск</span></button><button data-view="notes"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 11h8M8 15h5"/></svg><span class="tl">Заметки</span></button><button data-view="calendar"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="tl">Календарь</span><span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="tl">Расписание</span></button><button data-view="electives"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="tl">Элективы</span></button><button data-view="news"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="tl">Что нового</span><span class="nbadge hidden" id="newsBadge"></span></button></div>
     <div class="pill" id="net" title="Проверка доступности Moodle (частоту можно изменить: «Таймер и автообновление»)"><span class="dot"></span><span class="txt">Проверяю сервер…</span></div>
     <div class="pill hidden" id="ip"></div>
     <button class="icon-btn dlbtn hidden" id="dlBtn" title="Загрузки" aria-label="Загрузки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg><span class="dlpct" id="dlPct"></span><span class="dlmark" id="dlMark"></span></button>
@@ -817,6 +830,18 @@ body.android .no-android{display:none!important}
         </aside>
       </div>
     </section>
+    <section class="view hidden" id="notesView">
+      <div class="layout" style="grid-template-columns:1fr">
+        <div class="content">
+          <div class="toolbar"><h2>Заметки</h2><span class="hint" id="ntInfo" style="margin:0"></span><div class="spacer"></div>
+            <button class="btn primary" id="ntNew">+ Новая заметка</button></div>
+          <div class="toolbar"><div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="ntQ" placeholder="Поиск по заметкам" autocomplete="off"></div>
+            <select class="txt" id="ntCourse" style="width:auto;max-width:260px" aria-label="Где искать"></select></div>
+          <div id="ntList"></div>
+          <p class="hint" id="ntHint">Заметки — обычные файлы .md в папке «Заметки» рядом с материалами: их видно в поиске, они переносятся на телефон вместе с остальным и открываются любым редактором. Заметку к занятию можно оставить прямо в окне курса.</p>
+        </div>
+      </div>
+    </section>
     <section class="view hidden" id="searchView">
       <div class="layout">
         <div class="content">
@@ -1019,6 +1044,15 @@ body.android .no-android{display:none!important}
     <div class="rsec" id="wtBgSec"><h4>Работать без окна</h4><div id="wtBg"></div></div>
   </div>
   <div class="rules-foot"><span class="hint" id="wtMsg"></span><button class="btn" id="wtCancel">Отмена</button><button class="btn primary" id="wtSave">Сохранить</button></div>
+</div></div>
+<div class="modal hidden" id="noteModal"><div class="modal-box rules-box nt-box">
+  <header><b id="noteHead">Заметка</b><button class="btn" id="noteClose">Закрыть</button></header>
+  <div class="rules-body">
+    <div class="nt-bind" id="noteBind"></div>
+    <input class="txt" id="noteTitle" placeholder="Название (если пусто — первая строка текста)" maxlength="120" autocomplete="off">
+    <textarea class="txt" id="noteBody" placeholder="Текст заметки…" spellcheck="true"></textarea>
+  </div>
+  <div class="rules-foot"><span class="hint" id="noteSt"></span><button class="btn no-android" id="noteFolder" title="Показать файл заметки в папке">В папке</button><button class="btn" id="notePin">Закрепить</button><button class="btn" id="noteDel">Удалить</button></div>
 </div></div>
 <div class="modal hidden" id="trModal"><div class="modal-box rules-box">
   <header><b>Перенос данных</b><button class="btn" id="trClose">Закрыть</button></header>
@@ -1636,13 +1670,125 @@ function renderNet(st){
   }
 }
 
+/* ── заметки ── */
+const NT = {list: [], cur: null, timer: 0, saving: null, again: false, dirty: false, filter: "", q: "", qTimer: 0, cnames: new Map()};
+const ntWhen = ts => { const d = new Date(ts * 1000), n = new Date(); return d.toLocaleDateString("ru-RU", {day: "numeric", month: "short", ...(d.getFullYear() !== n.getFullYear() ? {year: "numeric"} : {})}); };
+const ntBindText = n => n.course == null ? "Общий блокнот" : (n.course_name || "Курс " + n.course) + (n.item ? " › " + (n.item_name || "элемент курса") : "");
+function ntCourseOptions(){
+  const m = new Map(NT.cnames);
+  for (const c of (typeof courses !== "undefined" ? courses : [])) if (!m.has(c.id)) m.set(c.id, c.fullname || "Курс " + c.id);
+  const sel = $("#ntCourse"), keep = NT.filter;
+  sel.innerHTML = `<option value="">Все заметки</option><option value="g">Общий блокнот</option>` + [...m].sort((a, b) => a[1].localeCompare(b[1], "ru")).map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join("");
+  sel.value = [...sel.options].some(o => o.value === keep) ? keep : ""; NT.filter = sel.value;
+}
+async function loadNotes(){
+  let j; try { j = await api("/api/notes" + (NT.q ? "?q=" + encodeURIComponent(NT.q) : "")); } catch (e) { return; }
+  NT.list = j.notes || [];
+  if (!NT.q) { NT.cnames = new Map(NT.list.filter(n => n.course != null).map(n => [n.course, n.course_name || "Курс " + n.course])); }
+  ntCourseOptions(); renderNotes(j.total);
+}
+function renderNotes(total){
+  const f = NT.filter, list = NT.list.filter(n => f === "" || (f === "g" ? n.course == null : String(n.course) === f));
+  $("#ntInfo").textContent = NT.list.length ? `${list.length}${list.length !== NT.list.length ? " из " + NT.list.length : ""}` : "";
+  $("#ntHint").classList.toggle("hidden", !!NT.q);
+  $("#ntList").innerHTML = list.length ? list.map(n => `<button class="ntc ${n.pinned ? "pin" : ""}" data-nt="${esc(n.id)}"><div class="ntc-t">${n.pinned ? "📌 " : ""}${esc(n.title)}</div>
+      <div class="ntc-m">${esc(ntBindText(n))} · ${esc(ntWhen(n.updated))}</div>${n.preview ? `<div class="ntc-p">${esc(n.preview)}</div>` : ""}</button>`).join("")
+    : `<div class="empty">${NT.q ? "Ничего не найдено." : f && f !== "g" ? "К этому курсу заметок пока нет." : "Заметок пока нет. Нажмите «+ Новая заметка» — или откройте курс и добавьте заметку к занятию."}</div>`;
+  if (total > NT.list.length) $("#ntList").insertAdjacentHTML("beforeend", `<div class="hint">Показаны первые ${NT.list.length} из ${total} — уточните поиск.</div>`);
+}
+$("#ntList").onclick = e => { const b = e.target.closest("[data-nt]"); if (b) openNote(b.dataset.nt); };
+$("#ntCourse").onchange = e => { NT.filter = e.target.value; renderNotes(NT.list.length); };
+$("#ntQ").oninput = e => { clearTimeout(NT.qTimer); NT.qTimer = setTimeout(() => { NT.q = e.target.value.trim(); loadNotes(); }, 250); };
+$("#ntNew").onclick = () => {
+  const f = NT.filter;
+  if (f && f !== "g") { const id = +f, c = (typeof courses !== "undefined" ? courses : []).find(x => x.id === id); openNote(null, {course: id, course_name: (c && c.fullname) || NT.cnames.get(id) || ""}); }
+  else openNote(null, null);
+};
+function ntFields(){ return {title: $("#noteTitle").value, body: $("#noteBody").value}; }
+async function openNote(id, bind){
+  await ntFlush();
+  let n;
+  if (id) {
+    const j = await api("/api/notes/get?id=" + encodeURIComponent(id));
+    if (!j.ok) { toast(j.error || "Заметка не найдена", "bad"); loadNotes(); return; }
+    n = j.note;
+  } else n = {id: null, title: "", body: "", pinned: false, course: bind ? bind.course : null, course_name: bind ? bind.course_name : "", item: bind ? bind.item || null : null, item_name: bind ? bind.item_name || "" : "", path: ""};
+  NT.cur = {id: n.id, pinned: !!n.pinned, course: n.course, course_name: n.course_name, item: n.item, item_name: n.item_name, path: n.path};
+  $("#noteHead").textContent = id ? "Заметка" : "Новая заметка"; $("#noteBind").textContent = ntBindText(n);
+  $("#noteTitle").value = n.title || ""; $("#noteBody").value = n.body || "";
+  $("#notePin").textContent = n.pinned ? "Открепить" : "Закрепить"; $("#noteDel").classList.toggle("hidden", !n.id); $("#noteFolder").classList.toggle("hidden", !n.id);
+  $("#noteSt").textContent = ""; NT.dirty = false; $("#noteModal").classList.remove("hidden");
+  setTimeout(() => (id ? $("#noteBody") : $("#noteTitle")).focus(), 30);
+}
+function ntBody(){
+  const c = NT.cur, f = ntFields();
+  return {id: c.id, title: f.title, body: f.body, pinned: c.pinned, course: c.course, course_name: c.course_name, item: c.item, item_name: c.item_name};
+}
+function ntEdited(){ NT.dirty = true; $("#noteSt").textContent = "…"; clearTimeout(NT.timer); NT.timer = setTimeout(ntSave, 1200); }
+async function ntSaveOnce(){
+  if (!NT.cur) return;
+  const b = ntBody(); NT.dirty = false;
+  if (!b.id && !b.title.trim() && !b.body.trim()) { $("#noteSt").textContent = ""; return; }          // пустую новую заметку не создаём
+  let j; try { j = await api("/api/notes/save", b); } catch (e) { NT.dirty = true; $("#noteSt").textContent = "Не сохранено: нет связи с программой"; return; }
+  if (!j.ok) { NT.dirty = true; $("#noteSt").textContent = j.error || "Не сохранено"; return; }
+  if (NT.cur && !NT.cur.id) { NT.cur.id = j.note.id; $("#noteDel").classList.remove("hidden"); $("#noteFolder").classList.remove("hidden"); $("#noteHead").textContent = "Заметка"; }
+  if (NT.cur) NT.cur.path = j.note.path;
+  $("#noteSt").textContent = "Сохранено ✓";
+}
+async function ntSave(){
+  clearTimeout(NT.timer);
+  if (NT.saving) { NT.again = true; return NT.saving; }
+  NT.saving = (async () => { do { NT.again = false; await ntSaveOnce(); } while (NT.again); })();
+  try { await NT.saving; } finally { NT.saving = null; }
+}
+async function ntFlush(){ if (NT.cur && (NT.dirty || NT.saving)) await ntSave(); }
+async function ntClose(){
+  await ntFlush();
+  const had = NT.cur; NT.cur = null; $("#noteModal").classList.add("hidden");
+  if (had && !$("#notesView").classList.contains("hidden")) loadNotes();
+  if (had && CV) cvNotesRefresh();
+}
+$("#noteClose").onclick = ntClose;
+$("#noteTitle").oninput = ntEdited; $("#noteBody").oninput = ntEdited;
+$("#notePin").onclick = () => { if (!NT.cur) return; NT.cur.pinned = !NT.cur.pinned; $("#notePin").textContent = NT.cur.pinned ? "Открепить" : "Закрепить"; if (NT.cur.id || ntFields().body.trim() || ntFields().title.trim()) ntEdited(); };
+$("#noteFolder").onclick = async () => { await ntFlush(); if (NT.cur && NT.cur.path) api("/api/open", {path: NT.cur.path, reveal: true}).then(r => { if (!r.ok) toast(r.error, "bad"); }); };
+$("#noteDel").onclick = async () => {
+  if (!NT.cur || !NT.cur.id) return; await ntFlush();
+  const j = await api("/api/notes/delete", {id: NT.cur.id});
+  if (!j.ok) { toast(j.error || "Не удалось удалить", "bad"); return; }
+  NT.cur = null; $("#noteModal").classList.add("hidden");
+  const d = document.createElement("div"); d.className = "toast"; d.append("Заметка удалена");
+  const u = document.createElement("button"); u.className = "tundo"; u.textContent = "Вернуть"; d.append(u); $("#toasts").appendChild(d);
+  const gone = setTimeout(() => d.remove(), 9000);
+  u.onclick = async () => { clearTimeout(gone); d.remove(); if (!j.trash) return; const r = await api("/api/notes/restore", {trash: j.trash}); toast(r.ok ? "Заметка возвращена" : (r.error || "Не удалось вернуть"), r.ok ? "" : "bad"); loadNotes(); if (CV) cvNotesRefresh(); };
+  loadNotes(); if (CV) cvNotesRefresh();
+};
+document.addEventListener("keydown", e => {
+  if ($("#noteModal").classList.contains("hidden")) return;
+  if (e.key === "Escape") { e.preventDefault(); ntClose(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); ntSave(); }
+});
+addEventListener("pagehide", () => {          // окно закрывают, пока заметка не сохранилась: отправляем последнюю версию «напоследок»
+  if (!NT.cur || !NT.dirty) return;
+  try { fetch("/api/notes/save", {method: "POST", keepalive: true, headers: {"X-Token": T, "Content-Type": "application/json"}, body: JSON.stringify(ntBody())}); } catch (e) {}
+});
+/* заметки в окне курса */
+async function cvNotesRefresh(){
+  if (!CV) return; const id = CV.c.id;
+  try { const j = await api("/api/notes?course=" + id); if (CV && CV.c.id === id) { CV.notes = j.notes || []; renderCourse(); } } catch (e) {}
+}
+const cvNoteChips = it => ((CV.notes || []).filter(n => n.item === it.key).map(n => `<button class="mnote" data-nt="${esc(n.id)}" title="${esc(n.preview || n.title)}">📝 ${esc(n.title)}</button>`).join(""));
+
 /* ── вкладки ── */
 let view = "courses";
 function showView(v){
   view = v; schSide(false); lockPage(); $$("#mainTabs button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+  if (NARROW.matches) { const on = $('#mainTabs button.on'); if (on) on.scrollIntoView({inline: "center", block: "nearest"}); }
   $("#coursesView").classList.toggle("hidden", v !== "courses"); $("#scheduleView").classList.toggle("hidden", v !== "schedule");
   $("#electivesView").classList.toggle("hidden", v !== "electives"); $("#newsView").classList.toggle("hidden", v !== "news");
   $("#searchView").classList.toggle("hidden", v !== "search"); $("#calView").classList.toggle("hidden", v !== "calendar");
+  $("#notesView").classList.toggle("hidden", v !== "notes");
+  if (v === "notes") loadNotes();
   if (v === "calendar") openCalTab();
   if (v === "schedule") loadSchedule(); if (v === "electives") loadElectives(); if (v === "news") loadNews(); if (v === "search") openSearchTab();
 }
@@ -2124,8 +2270,8 @@ async function openCourse(id, live = false){
   $("#grid").classList.add("hidden"); $(".content .toolbar").classList.add("hidden"); $("#courseView").classList.remove("hidden");
   $("#courseView").innerHTML = `<div class="empty"><span class="spin" style="display:inline-block;vertical-align:-3px"></span> ${live || !c.downloaded ? "Открываю курс на сайте (несколько секунд — бережные паузы)…" : "Открываю курс…"}</div>`;
   $(".content").scrollTop = 0;
-  const d = await api("/api/course?id=" + id + (live ? "&live=1" : ""));
-  CV = {c, d}; cvQ = ""; cvK = ""; renderCourse();
+  const [d, nj] = await Promise.all([api("/api/course?id=" + id + (live ? "&live=1" : "")), api("/api/notes?course=" + id).catch(() => ({notes: []}))]);
+  CV = {c, d, notes: nj.notes || []}; cvQ = ""; cvK = ""; renderCourse();
 }
 function closeCourse(){ CV = null; $("#courseView").classList.add("hidden"); $("#grid").classList.remove("hidden"); $(".content .toolbar").classList.remove("hidden"); }
 /* резерв: прежние версии файла, который преподаватель заменил на сайте */
@@ -2161,7 +2307,7 @@ function renderCourse(){
       <div class="mmeta">${d.error ? "" : d.downloaded ? `Сохранено на этом устройстве · обновлено ${esc(d.updated)}` : "Ещё не скачан — показана структура с сайта, файлы откроются после загрузки"}</div>
       ${c.grade ? `<div class="mmeta" style="margin-top:4px">Оценка на сайте: <b>${esc(c.grade)}</b> (на момент последней загрузки)</div>` : ""}${doneSummary(d)}${c.progress != null ? `<div class="prog" style="margin-top:8px;max-width:340px"><i style="width:${Math.round(c.progress)}%"></i></div>` : ""}</div>
     <div class="cv-acts"><button class="btn primary" id="cvDl">${d.downloaded ? "Обновить курс" : "Скачать курс"}</button>
-      ${(d.url || c.url) ? `<button class="btn" id="cvSite">Открыть на сайте</button><button class="btn" id="cvGrades" title="Оценки по заданиям и тестам этого курса — страница сайта в читалке">Оценки курса</button>` : ""}${d.dir ? `<button class="btn" id="cvDir">Папка курса</button>` : ""}
+      ${(d.url || c.url) ? `<button class="btn" id="cvSite">Открыть на сайте</button><button class="btn" id="cvGrades" title="Оценки по заданиям и тестам этого курса — страница сайта в читалке">Оценки курса</button>` : ""}<button class="btn" id="cvNotes" title="Ваши заметки к этому курсу">Заметки${(CV.notes || []).length ? " (" + CV.notes.length + ")" : ""}</button>${d.dir ? `<button class="btn" id="cvDir">Папка курса</button>` : ""}
       <button class="btn ghost" id="cvLive" title="Перечитать разделы и элементы с сайта">↻ С сайта</button></div></div></div>`;
   if (d.error) { el.innerHTML = html + `<div class="empty">${esc(d.error)}</div>`; bindCV(); return; }
   html += `<div class="toolbar"><div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="cvQ" placeholder="Поиск в курсе" value="${esc(cvQ)}"></div>
@@ -2179,7 +2325,7 @@ function renderCourse(){
       const note = it.online_only ? `<div class="mmeta">только онлайн${it.url ? "" : " · недоступно"}</div>` : it.error ? `<div class="mmeta" style="color:var(--bad)">${esc(it.error)}</div>` : (!d.downloaded ? `<div class="mmeta">не скачано</div>` : "");
       html += `<div class="mi ${it.online_only && !it.url ? "dim" : ""}">${icon(it.modtype)}<div style="min-width:0"><div class="mname"><span class="kb ${KC[it.kind] || "ДР"}">${KC[it.kind] || "ДР"}</span>${esc(it.name)}</div>
         <div class="mmeta">${esc(MODT[it.modtype] || it.modtype)}${it.context && it.context !== it.name ? " · из блока «" + esc(it.context) + "»" : ""}${it.done && DONE_UI[it.done] ? ` · <span class="dn ${DONE_UI[it.done][1]}">${DONE_UI[it.done][0]}</span>` : ""}</div>
-        ${it.restriction ? `<div class="restr">Ограничение на сайте: ${esc(it.restriction)}</div>` : ""}${attHtml(it.attendance)}${it.description ? `<div class="mdesc">${esc(it.description)}</div>` : ""}${files ? `<div class="mfiles">${files}</div>` : ""}${note}</div><div class="side-b" style="display:flex;gap:4px">${extl}${site}</div></div>`;
+        ${it.restriction ? `<div class="restr">Ограничение на сайте: ${esc(it.restriction)}</div>` : ""}${attHtml(it.attendance)}${it.description ? `<div class="mdesc">${esc(it.description)}</div>` : ""}${files ? `<div class="mfiles">${files}</div>` : ""}${note}${(CV.notes || []).some(n => n.item === it.key) ? `<div class="mnotes">${cvNoteChips(it)}</div>` : ""}</div><div class="side-b" style="display:flex;gap:4px">${extl}${site}<button data-nta="${esc(it.key)}" data-ntn="${esc(it.name)}" title="Добавить заметку к этому элементу">Заметка</button></div></div>`;
     }
     html += `</section>`;
   }
@@ -2191,6 +2337,9 @@ function bindCV(){
   on("cvBack", closeCourse); on("cvSite", () => openUrl(d.url || c.url));
   on("cvGrades", () => { try { rdOpen(new URL(d.url || c.url).origin + "/grade/report/user/index.php?id=" + c.id, "Оценки: " + (d.fullname || c.fullname)); } catch (e) {} }); on("cvDir", () => api("/api/open", {path: d.dir}));
   on("cvLive", () => openCourse(c.id, true));
+  on("cvNotes", () => { NT.filter = String(c.id); NT.q = ""; $("#ntQ").value = ""; NT.cnames.set(c.id, d.fullname || c.fullname || ""); showView("notes"); });
+  $$("#courseView [data-nta]").forEach(b => b.onclick = () => openNote(null, {course: c.id, course_name: d.fullname || c.fullname || "", item: b.dataset.nta, item_name: b.dataset.ntn}));
+  $$("#courseView [data-nt]").forEach(b => b.onclick = () => openNote(b.dataset.nt));
   on("cvDl", () => { selected.add(c.id); saveSel(); start(false, false, [c.id]); });
   const q = $("#cvQ"); if (q) q.oninput = e => { cvQ = e.target.value.trim().toLowerCase(); const pos = e.target.selectionStart; renderCourse(); const n = $("#cvQ"); n.focus(); n.setSelectionRange(pos, pos); };
   $$("#courseView .chip").forEach(b => b.onclick = () => { cvK = b.dataset.k; renderCourse(); });
@@ -2778,7 +2927,7 @@ async function poll(){
       $("#loginView").classList.toggle("hidden", ok); $("#coursesView").classList.toggle("hidden", !ok); $("#user").classList.toggle("hidden", !ok);
       $("#dock").classList.toggle("hidden", !ok && st.job.state === "idle"); $("#dlBtn").classList.toggle("hidden", !ok && st.job.state === "idle");
       $("#mainTabs").classList.toggle("hidden", !ok);
-      if (!ok) { $("#scheduleView").classList.add("hidden"); $("#electivesView").classList.add("hidden"); $("#newsView").classList.add("hidden"); $("#searchView").classList.add("hidden"); }
+      if (!ok) { $("#scheduleView").classList.add("hidden"); $("#electivesView").classList.add("hidden"); $("#newsView").classList.add("hidden"); $("#searchView").classList.add("hidden"); $("#notesView").classList.add("hidden"); }
       else showView(view);
       if (ok) loadCourses();
       if (!ok && lastLogin === null) { $("#lUrl").value = L.base || "https://do.sevsu.ru"; $("#lUser").value = L.username || ""; $("#lRemember").checked = L.remember; }

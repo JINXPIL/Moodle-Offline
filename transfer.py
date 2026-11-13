@@ -53,9 +53,11 @@ CATS = [
     ("calendar", "Календарь и сроки", "сроки из календаря Moodle и отметки «сделано»"),
     ("news", "Лента «Что нового»", ""),
     ("electives", "Элективы", "сохранённый список вариантов"),
+    ("notes", "Заметки", "ваши заметки к курсам и общий блокнот (сливаются: берётся более новая копия каждой)"),
     ("materials", "Материалы курсов", "все скачанные курсы — файлов может быть очень много"),
 ]
 CAT_IDS = [c[0] for c in CATS]
+FILE_LEVEL = ("materials", "notes")   # эти виды сливаются по файлам («новее побеждает»), остальные — целиком по самому свежему файлу
 DEFAULT_CATS = list(CAT_IDS)   # материалов может быть много, но это главное, что носят на телефон; размер виден в окне до начала
 
 # Из settings.json переносится только это (остальное — вход, пути, прокси, токены — остаётся на своём устройстве).
@@ -64,7 +66,7 @@ SETTINGS_KEYS = ("rules", "layout_dir", "layout_file", "mode", "original_names",
                  "schedule_auto_range", "schedule_excel", "news", "calendar", "electives_url", "keep_versions", "save_grades")
 _SECRET_KEY = re.compile(r"token|secret|passw|webhook|telegram|cookie|chat_id|bot_|api_?key", re.I)
 
-SERVICE_TOP = {"_бэкапы", "_debug", "Расписание", "Календарь", "Элективы", "снимки", "Перенос"}   # в корне папки сохранения — не курсы
+SERVICE_TOP = {"_бэкапы", "_debug", "Расписание", "Календарь", "Элективы", "Заметки", "снимки", "Перенос"}   # в корне папки сохранения — не курсы
 SKIP_NAMES = {"desktop.ini", "Thumbs.db", ".DS_Store"}
 SKIP_SUFFIX = (".tmp", ".part")
 
@@ -151,6 +153,9 @@ def iter_cat(cat: str, out: Path, data: Path):
             yield "out", rel, full
     elif cat == "electives":
         for rel, full in _walk(out / "Элективы", "Элективы/"):
+            yield "out", rel, full
+    elif cat == "notes":
+        for rel, full in _walk(out / "Заметки", "Заметки/"):
             yield "out", rel, full
     elif cat == "materials":
         try:
@@ -322,14 +327,14 @@ def make_plan(man: dict, cats, out: Path, data: Path, force: bool = False) -> di
             newest_local = max(newest_local, _mtime(p))
             if not _differs(f, p):
                 continue
-            if cat == "materials":
+            if cat in FILE_LEVEL:
                 if os.path.exists(mo.fsp(p)) and not force and _mtime(p) >= int(f.get("m") or 0):
                     notes.append(f"{title}: «{f['p']}» на этом устройстве новее — оставил как есть")
                     continue
             todo.append(f)
         if not todo:
             continue
-        if cat != "materials" and not force and newest_local and newest_local >= newest_remote:
+        if cat not in FILE_LEVEL and not force and newest_local and newest_local >= newest_remote:
             notes.append(f"{title}: на этом устройстве данные такие же или свежее — не трогаю")
             continue
         items += todo
