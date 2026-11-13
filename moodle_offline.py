@@ -87,7 +87,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.19.3"
+VERSION = "1.20.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -964,6 +964,13 @@ class Vault:
 
     def save_notify(self, d: dict):
         self._write_secret(self.dir / "notify.bin", d)
+
+    # Ключи доступа к нейросетям (раздел 3е README) — тоже отдельный файл: «Выйти и забыть вход» их не стирает, при переносе данных они не едут.
+    def load_ai(self) -> dict:
+        return self._read_secret(self.dir / "ai.bin")
+
+    def save_ai(self, d: dict):
+        self._write_secret(self.dir / "ai.bin", d)
 
     def forget(self):
         funlink(self.secret_path)
