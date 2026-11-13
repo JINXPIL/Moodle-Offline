@@ -191,4 +191,23 @@ check("много заметок сразу: в корзине не больше
 rn = notes.delete_many(OUT, [], TRASH); check("пустой список — ничего не делает", rn["deleted"] == 0 and rn["missing"] == 0)
 r2 = notes.delete_many(OUT, [notes.save_note(OUT, title="без корзины", body="x")["id"]]); check("пачкой без корзины — просто удаляет", r2["deleted"] == 1 and r2["trash"] == [])
 
+# 13. номер новой заметки не совпадает с чужим (раньше: секунды + 2 случайных байта — при 58 заметках в секунду
+# совпадение ≈ 2,6 %, и две разные заметки получали один номер; окно правило бы не ту)
+import secrets as _secrets
+_real_hex = _secrets.token_hex
+_seq = iter(["aaaaaa", "aaaaaa", "aaaaaa", "bbbbbb", "cccccc"])
+_secrets.token_hex = lambda n=None: next(_seq)
+try:
+    t1 = notes.save_note(OUT, title="Совпадение 1", body="первая", now=1_800_000_000)
+    t2 = notes.save_note(OUT, title="Совпадение 2", body="вторая", now=1_800_000_000)
+    t3 = notes.save_note(OUT, title="Совпадение 3", body="третья", now=1_800_000_000)
+finally:
+    _secrets.token_hex = _real_hex
+check("совпал случайный хвост в ту же секунду: номера разные", len({t1["id"], t2["id"], t3["id"]}) == 3, str([t1["id"], t2["id"], t3["id"]]))
+check("каждая заметка находится по своему номеру (не подменяется соседней)",
+      [notes.get_note(OUT, t["id"])["body"] for t in (t1, t2, t3)] == ["первая\n", "вторая\n", "третья\n"])
+check("номера подходят под правило проверки (_ID)", all(notes._ID.match(t["id"]) for t in (t1, t2, t3)))
+_ids_all = [n["id"] for n in notes.list_notes(OUT)]
+check("во всём списке заметок номера не повторяются", len(_ids_all) == len(set(_ids_all)))
+
 print("FAILS:", FAILS); sys.exit(1 if FAILS else 0)

@@ -87,7 +87,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.19.2"
+VERSION = "1.19.3"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -2797,21 +2797,18 @@ class Processor:
         if not forums:
             return []
         disc = rec.setdefault("disc", {})
+        pend = rec.setdefault("pend", {})      # темы, которые сохраним молча в следующий раз (лимит страниц за проход)
         events = []
         for f in forums:
             self.control.checkpoint()
             soup, r = self.client.page(f.url, referer=course.url)
-            found = news.parse_discussions(soup, r.url)
+            found = news.parse_discussions(soup, r.url, limit=100)
             if not found:
                 continue
-            known = disc.get(f.key)
-            if known is None:   # первый раз: запоминаем все, а несколько последних сохраняем молча — чтобы были под рукой офлайн
-                todo, silent = found[: cfg["backfill"]], True
-            else:
-                todo, silent = [d for d in found if d["id"] not in set(known)], False
-            for n, d in enumerate(todo):
+            plan = news.plan_announcements(found, disc.get(f.key), pend.get(f.key), cfg["backfill"])
+            for n, (d, silent) in enumerate(plan["todo"]):
                 post, rel = None, ""
-                if n < 10:   # не больше десяти страниц за раз; остальные — просто строкой в «Что нового»
+                if n < plan["fetch"]:   # страницы — не больше десяти за проход; остальные новые идут строкой в «Что нового», страницу возьмём в следующий раз
                     try:
                         soup2, r2 = self.client.page(d["url"], referer=r.url)
                         post = news.parse_post(soup2)
@@ -2826,7 +2823,12 @@ class Processor:
                                                   (post or {}).get("title") or d["title"] or f"Объявление {d['id']}",
                                                   detail=short((post or {}).get("text", ""), 220), url=d["url"], path=rel,
                                                   section=f.name, key=f"{f.key}|{d['id']}"))
-            disc[f.key] = sorted({*(known or []), *(d["id"] for d in found)})[-300:]
+            disc[f.key] = plan["known"]
+            if plan["pend"]:
+                pend[f.key] = plan["pend"]
+                self.rep.log(f"  объявлений в очереди на сохранение: {len(plan['pend'])} (по {news.ANN_PER_RUN} за проход)", "debug")
+            else:
+                pend.pop(f.key, None)
         return events
 
     def _write_announcement(self, course: Course, layout: Layout, d: dict, post: dict, page_url: str) -> str:

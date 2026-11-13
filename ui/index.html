@@ -991,7 +991,7 @@ body.android .no-android{display:none!important}
     <div class="rsec"><h4>Объявления преподавателей</h4>
       <textarea class="txt" id="nsWords" placeholder="по одному слову в строке" spellcheck="false"></textarea>
       <p class="hint">Форумы, в названии которых есть одно из слов, считаются «Объявлениями»: новые темы сохраняю в папку курса «Объявления» вместе с вложениями.</p>
-      <div class="path"><input class="txt" id="nsBack" type="number" min="0" max="20" style="max-width:90px"><span class="hint" style="margin:auto 0">сколько последних объявлений сохранить при первом запуске (0 — не сохранять)</span></div></div>
+      <div class="path"><input class="txt" id="nsBack" type="number" min="0" max="50" style="max-width:90px"><span class="hint" style="margin:auto 0">сколько последних объявлений сохранить при первом запуске, до 50 (0 — не сохранять); берётся по 10 страниц за проход, остальные — в следующие разы</span></div></div>
     <div class="rsec"><h4>Приватность и размер сообщения</h4>
       <label class="row" style="border:0;padding:0 0 10px;cursor:pointer"><span class="lbl">Показывать значения оценок в Telegram и webhook<small>по умолчанию выключено: туда уйдёт только «пришла новая оценка по …», а число вы увидите в ленте</small></span><span class="sw-t"><input type="checkbox" id="nsShare"><span></span></span></label>
       <div class="path"><input class="txt" id="nsLines" type="number" min="3" max="50" style="max-width:90px"><span class="hint" style="margin:auto 0">строк в одном уведомлении (остальное свернётся в «…и ещё N»)</span></div></div>

@@ -15,6 +15,7 @@ n = news.normalize({"track": {"item_renamed": 1, "bogus": True}, "mute": ["5", "
                     "forum_words": "а\nб, в", "backfill": -3, "toast": 0})
 check("normalize coerces", n["track"]["item_renamed"] is True and "bogus" not in n["track"] and n["mute"] == [5, 7] and n["max_lines"] == 50
       and n["webhook_format"] == "json" and n["forum_words"] == ["а", "б", "в"] and n["backfill"] == 0 and n["toast"] is False, n)
+check("backfill: по умолчанию 10, не больше 50", news.normalize(None)["backfill"] == 10 and news.normalize({"backfill": 999})["backfill"] == 50)
 check("validate chat", news.validate({"telegram_chat": "abc"}) and not news.validate({"telegram_chat": "-1001234567"}) and not news.validate({"telegram_chat": "@my_chan"}))
 check("webhook url check", news.check_webhook_url("ftp://x") and news.check_webhook_url("") and not news.check_webhook_url("https://h/x"))
 
