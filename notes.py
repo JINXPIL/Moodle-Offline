@@ -273,50 +273,188 @@ def save_note(out, *, nid: str | None = None, title: str = "", body: str = "", c
     return {**got[0], "body": got[1]}
 
 
+def _meta_of(info: dict) -> dict:
+    return {"id": info["id"], "title": info["title"], "course": info["course"], "course_name": info["course_name"],
+            "item": info["item"], "item_name": info["item_name"], "pinned": info["pinned"],
+            "created": info["created"], "updated": info["updated"]}
+
+
+def set_pinned(out, nid: str, pinned: bool) -> dict:
+    """Закрепить или открепить, не меняя текста и не поднимая заметку наверх по дате правки. Файл без служебной строки
+    (его положили руками) получает её — название и текст остаются как были."""
+    f = find(out, nid)
+    if not f:
+        raise NoteError("Заметка не найдена — возможно, её удалили или переместили.")
+    path, info, body = f
+    if bool(info["pinned"]) == bool(pinned):
+        return info
+    try:
+        before = int(os.stat(_fsp(path)).st_mtime)
+    except OSError:
+        before = int(time.time())
+    meta = {**_meta_of(info), "pinned": bool(pinned)}
+    _write(path, _head(meta) + body)
+    # Файл переписан, но дата правки заметки не меняется. Дата файла — на секунду новее: при «Переносе данных» побеждает
+    # более новый файл, и без этого закрепление не дошло бы до другого устройства.
+    try:
+        os.utime(_fsp(path), (before + 1, before + 1))
+    except OSError:
+        pass
+    got = _load(out, path)
+    return {**got[0], "body": got[1]}
+
+
+def _trim_trash(td: Path, keep_names: list[str]):
+    """Корзина не растёт: хранятся последние TRASH_KEEP. Только что удалённые (keep_names, по порядку) не трогаем —
+    дата файла у них от последней правки заметки, а не от удаления, и по ней «последние» определить нельзя."""
+    try:
+        protected = set(keep_names[-TRASH_KEEP:])
+        others = sorted((p for p in os.listdir(_fsp(td)) if p.endswith(".md") and p not in protected),
+                        key=lambda n: os.stat(_fsp(td / n)).st_mtime)
+        for n in others[:max(0, len(others) + len(protected) - TRASH_KEEP)]:
+            os.remove(_fsp(td / n))
+        for n in keep_names[:-TRASH_KEEP]:
+            if n not in protected:
+                try:
+                    os.remove(_fsp(td / n))
+                except OSError:
+                    pass
+    except OSError:
+        pass
+
+
+def _to_trash(path: Path, info: dict, body: str, td: Path, stamp_ns: int) -> str:
+    """Файл заметки → корзина. Заметку без служебной строки кладём с ней: иначе вернуть её было бы нельзя."""
+    name = f"{info['id']}.md"
+    dst = td / name
+    meta, _b = _read(path)
+    if meta:
+        shutil.move(_fsp(path), _fsp(dst))               # папка данных может быть на другом диске
+    else:
+        _write(dst, _head(_meta_of(info)) + body)
+        os.remove(_fsp(path))
+    try:
+        os.utime(_fsp(dst), ns=(stamp_ns, stamp_ns))     # время удаления: по нему корзина решает, что старое
+    except OSError:
+        pass
+    return name
+
+
+def _drop_empty(folder: Path):
+    try:
+        os.rmdir(_fsp(folder))                          # пустая папка курса не нужна (непустая — не удалится)
+    except OSError:
+        pass
+
+
 def delete_note(out, nid: str, trash_dir=None) -> dict:
     """Убрать заметку в «корзину» (trash_dir). → {"id", "trash"}: по trash её можно вернуть (restore_note)."""
     f = find(out, nid)
     if not f:
         raise NoteError("Заметка не найдена — возможно, её уже удалили.")
-    path, info, _b = f
+    path, info, body = f
     trash = None
     if trash_dir is not None:
         td = Path(trash_dir)
         os.makedirs(_fsp(td), exist_ok=True)
-        trash = f"{info['id']}.md"
-        shutil.move(_fsp(path), _fsp(td / trash))      # папка данных может быть на другом диске
-        try:                                            # корзина не растёт: хранятся последние TRASH_KEEP
-            olds = sorted((p for p in os.listdir(_fsp(td)) if p.endswith(".md")), key=lambda n: os.stat(_fsp(td / n)).st_mtime)
-            for n in olds[:-TRASH_KEEP]:
-                os.remove(_fsp(td / n))
-        except OSError:
-            pass
+        trash = _to_trash(path, info, body, td, time.time_ns())
+        _trim_trash(td, [trash])
     else:
         os.remove(_fsp(path))
-    try:
-        os.rmdir(_fsp(path.parent))                     # пустая папка курса не нужна (непустая — не удалится)
-    except OSError:
-        pass
+    _drop_empty(path.parent)
     return {"id": info["id"], "trash": trash}
 
 
-def restore_note(out, trash: str, trash_dir) -> dict:
-    """Вернуть удалённую заметку на место (папка и имя — по её названию и курсу)."""
+def delete_many(out, ids, trash_dir=None) -> dict:
+    """Удалить сразу несколько заметок (галочки в списке). Повторы в списке считаются один раз.
+    → {"deleted": сколько удалено, "missing": сколько не нашлось, "trash": имена для restore_many (только те, что ещё
+    можно вернуть — в корзине помещается TRASH_KEEP), "kept": их число}."""
+    want, seen = [], set()
+    for i in ids or []:
+        i = str(i or "")
+        if i not in seen:
+            seen.add(i)
+            want.append(i)
+    byid = {n["id"]: (p, n, b) for p, n, b in _all(out)}        # один проход по папке, а не по разу на заметку
+    deleted, missing, names, folders = 0, 0, [], set()
+    td = Path(trash_dir) if trash_dir is not None else None
+    if td is not None and want:
+        os.makedirs(_fsp(td), exist_ok=True)
+    base = time.time_ns()
+    for k, i in enumerate(want):
+        f = byid.get(i) if _ID.match(i) else None
+        if not f:
+            missing += 1
+            continue
+        path, info, body = f
+        try:
+            if td is not None:
+                names.append(_to_trash(path, info, body, td, base + k * 1000))
+            else:
+                os.remove(_fsp(path))
+        except OSError:
+            missing += 1
+            continue
+        deleted += 1
+        folders.add(path.parent)
+    if td is not None and names:
+        _trim_trash(td, names)
+        names = names[-TRASH_KEEP:]
+    for d in folders:
+        _drop_empty(d)
+    return {"deleted": deleted, "missing": missing, "trash": names, "kept": len(names)}
+
+
+def _restore(out, trash: str, td: Path, known: set) -> dict | None:
     if not re.fullmatch(r"[nx][0-9a-f]{6,40}\.md", str(trash or "")):
         raise NoteError("Нечего возвращать.")
-    src = Path(trash_dir) / trash
+    src = td / trash
     if not os.path.isfile(_fsp(src)):
         raise NoteError("Эту заметку уже нельзя вернуть: корзина очищена.")
     meta, body = _read(src)
     if not meta:
         raise NoteError("Файл в корзине повреждён.")
-    if find(out, meta.get("id", "")):
+    nid = str(meta.get("id", ""))
+    if nid in known:                                    # такая заметка уже есть (вернули раньше) — копия в корзине лишняя
         os.remove(_fsp(src))
-        return get_note(out, meta["id"])
+        return None
     cid = _int(meta.get("course"))
     sub = safe_name(str(meta.get("course_name") or ""), 60, f"Курс {cid}") if cid is not None else GENERAL
     dest = _unique(root(out) / sub, safe_name(str(meta.get("title") or "заметка")))
     os.makedirs(_fsp(dest.parent), exist_ok=True)
     shutil.move(_fsp(src), _fsp(dest))
-    got = _load(out, dest)
+    known.add(nid)
+    return {"path": dest}
+
+
+def restore_note(out, trash: str, trash_dir) -> dict:
+    """Вернуть удалённую заметку на место (папка и имя — по её названию и курсу)."""
+    td = Path(trash_dir)
+    known = {n["id"] for _p, n, _b in _all(out)}
+    r = _restore(out, trash, td, known)
+    if r is None:                                       # уже на месте
+        return get_note(out, trash[:-3])
+    got = _load(out, r["path"])
     return {**got[0], "body": got[1]}
+
+
+def restore_many(out, trash_names, trash_dir) -> dict:
+    """Вернуть несколько заметок (отмена удаления пачки). → {"restored", "failed", "ids"}."""
+    td = Path(trash_dir)
+    known = {n["id"] for _p, n, _b in _all(out)}
+    ok, bad, paths = 0, 0, []
+    for name in dict.fromkeys(str(x or "") for x in (trash_names or [])):
+        try:
+            r = _restore(out, name, td, known)
+        except (NoteError, OSError):
+            bad += 1
+            continue
+        ok += 1
+        if r:
+            paths.append(r["path"])
+    ids = []
+    for p in paths:
+        got = _load(out, p)
+        if got:
+            ids.append(got[0]["id"])
+    return {"restored": ok, "failed": bad, "ids": ids}
