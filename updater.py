@@ -372,20 +372,30 @@ def swap_exe(exe, new) -> None:
 
 
 def launch(exe) -> None:
-    """Запустить программу заново как отдельный процесс. У собранного PyInstaller'ом exe нужно сбросить окружение
-    (PYINSTALLER_RESET_ENVIRONMENT), иначе новая копия возьмёт временную папку этой, которая исчезнет при её закрытии."""
+    """Запустить программу заново как отдельный процесс (после обновления). Подробности — в `launch_cmd`."""
+    try:
+        launch_cmd([str(exe)], cwd=os.path.dirname(os.path.abspath(str(exe))) or None)
+    except UpdateError as e:
+        raise UpdateError(f"новая версия установлена, но не запустилась: {e}. Откройте программу сами.") from None
+
+
+def launch_cmd(cmd, cwd=None, extra_env=None) -> None:
+    """Запустить `cmd` отдельным процессом, который переживёт эту копию (Windows: без консоли и вне её группы).
+    У собранного PyInstaller'ом exe нужно сбросить окружение (PYINSTALLER_RESET_ENVIRONMENT), иначе новая копия возьмёт
+    временную папку этой, которая исчезнет при её закрытии. `extra_env` — добавки к окружению (например, признак перезапуска)."""
     env = dict(os.environ)
     env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     for k in ("_MEIPASS2", "_PYI_APPLICATION_HOME_DIR", "_PYI_ARCHIVE_FILE", "_PYI_PARENT_PROCESS_LEVEL"):
         env.pop(k, None)
+    env.update(extra_env or {})
     flags = 0
     if os.name == "nt":
         flags = getattr(subprocess, "DETACHED_PROCESS", 0x8) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)
     try:
-        subprocess.Popen([str(exe)], env=env, close_fds=True, creationflags=flags, cwd=os.path.dirname(os.path.abspath(str(exe))) or None,
+        subprocess.Popen([str(c) for c in cmd], env=env, close_fds=True, creationflags=flags, cwd=cwd,
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError as e:
-        raise UpdateError(f"новая версия установлена, но не запустилась: {e.strerror or e}. Откройте программу сами.") from None
+        raise UpdateError(f"не запустилась: {e.strerror or e}") from None
 
 
 def cleanup(exe) -> bool:

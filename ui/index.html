@@ -585,7 +585,7 @@ body.android .no-android{display:none!important}
     <h4 style="margin-top:16px">Акцентный цвет</h4>
     <div class="swatches" id="swatches"></div>
   </div>
-  <div id="topStack"><div id="bannerWrap"></div><div class="updbar hidden" id="updBar" role="status"></div></div>
+  <div id="topStack"><div class="banner bad open hidden" id="lostBar" role="alert"></div><div id="bannerWrap"></div><div class="updbar hidden" id="updBar" role="status"></div></div>
   <main>
     <!-- Вход -->
     <section class="view" id="loginView">
@@ -668,6 +668,7 @@ body.android .no-android{display:none!important}
             <div class="row" style="flex-wrap:wrap"><div class="lbl">Таймер и автообновление<small id="watchInfo">как часто проверять Moodle и докачивать недостающее само</small></div>
               <button class="btn" id="watchOpen">Настроить…</button></div>
             <details class="adv"><summary>Дополнительно</summary>
+              <div class="row no-android"><div class="lbl">Перезапустить программу<small>закроет и сразу откроет снова: если что-то зависло или перестало отвечать</small></div><button class="btn" id="restartBtn">Перезапустить</button></div>
               <div class="row only-android"><div class="lbl">Остановить программу<small>выключит программу в фоне; таймер и автообновление остановятся</small></div><button class="btn danger" id="quitBtn">Остановить</button></div>
               <div class="row"><div class="lbl">Имена файлов как на сервере<small>а не как называется элемент курса</small></div><label class="sw-t"><input type="checkbox" data-s="original_names"><span></span></label></div>
               <div class="row"><div class="lbl">Оглавление и в режиме папок</div><label class="sw-t"><input type="checkbox" data-s="index_in_mode2"><span></span></label></div>
@@ -1628,7 +1629,7 @@ function renderNet(st){
     <button class="btn bn-keep" id="reloginBtn">Войти</button></div>`;
   if (st.job.result && st.job.result.aborted === "session" && st.job.state === "idle") html += `<div class="banner"><div class="bn-t"><b>Сессия Moodle истекла</b><span class="bn-d">Войдите снова — скачанное не потеряется, продолжу с того же места.</span></div></div>`;
   if (!$("#bannerWrap").dataset.bnInit) { $("#bannerWrap").dataset.bnInit = "1";
-    $("#bannerWrap").addEventListener("click", e => { const t = e.target.closest(".bn-t"); if (t && NARROW.matches) { t.parentElement.classList.toggle("open"); setBarVars(); } }); }
+    $("#topStack").addEventListener("click", e => { const t = e.target.closest(".bn-t"); if (t && NARROW.matches) { t.parentElement.classList.toggle("open"); setBarVars(); } }); }
   if ($("#bannerWrap").dataset.h !== html) { $("#bannerWrap").innerHTML = html; $("#bannerWrap").dataset.h = html; const b = $("#geoRe"); if (b) b.onclick = () => api("/api/geo", {});
     const rl = $("#reloginBtn"); if (rl) rl.onclick = () => api("/api/relogin", {});
     const h = $("#geoHide"); if (h) h.onclick = () => api("/api/settings", {no_geo_check: true}).then(() => toast("Проверка IP выключена. Включить снова: «Дополнительно» → «Не проверять страну IP»."));
@@ -2666,9 +2667,11 @@ async function loadUpd(){ try { renderUpd(await api("/api/update")); } catch (e)
 $("#updCheck").onclick = async () => {
   const b = $("#updCheck"); b.disabled = true; b.textContent = "Проверяю…";
   try {
-    const r = await api("/api/update/check", {}); renderUpd(r); updBarTag = "";
+    const r = await api("/api/update/check", {});
+    if (r.internal) { toast(r.error + ". Обычно помогает перезапуск: «Дополнительно» → «Перезапустить программу».", "bad"); b.disabled = false; b.textContent = "Проверить сейчас"; return; }
+    renderUpd(r); updBarTag = "";
     if (r.error) toast(r.error, "bad"); else if (r.newer) toast("Есть новая версия " + r.latest.version, "ok"); else toast("У вас последняя версия — " + r.current, "ok");
-  } catch (e) { toast("Не получилось проверить обновления", "bad"); }
+  } catch (e) { toast("Нет связи с программой: проверка обновлений не началась. Подробности — вверху окна.", "bad"); }
   b.disabled = false; b.textContent = "Проверить сейчас";
 };
 $("#updAuto").onchange = async () => renderUpd(await api("/api/update/settings", {auto: $("#updAuto").checked}));
@@ -2697,20 +2700,78 @@ loadUpd();
 /* ── опрос сервера ── */
 // Эта копия программы закрывается, потому что её заменяет новая версия: окно закрываем само, не оставляем мёртвым.
 // (В окне-приложении window.close() работает; во вкладке обычного браузера может не сработать — тогда остаётся подпись.)
-let closingSeen = "";
+let closingSeen = "", closingWhy = "";
 function closeSelf(){
   const o = document.createElement("div");          // поверх окна, а не вместо содержимого: скрипты страницы продолжают работать без ошибок
   o.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:16px system-ui;background:var(--bg,#15181d);color:var(--text,#e6e9ee)";
-  o.textContent = "Запущена новая версия программы. Это окно закрывается…";
+  const what = closingWhy === "restart" ? "Программа перезапущена." : "Запущена новая версия программы.";
+  o.textContent = what + " Это окно закрывается…";
   document.body.appendChild(o);
   try { window.close(); } catch (e) {}
-  setTimeout(() => { o.textContent = "Запущена новая версия программы. Это окно можно закрыть."; }, 900);
+  setTimeout(() => { o.textContent = what + " Это окно можно закрыть."; }, 900);
 }
+/* Связь с программой. Раньше любой сбой запроса писал «Программа закрыта», даже когда программа работала, но ответила ошибкой
+   или само окно не смогло показать ответ. Теперь три разных случая, и в каждом понятно, что делать. */
+let pollTimer = 0, pollFails = 0, uiFails = 0, lostShown = false;
+async function restartApp(){
+  const busy = S && S.job && S.job.state !== "idle";
+  if (!confirm("Программа закроется и сразу откроется снова. Вход и настройки сохранятся." + (busy ? " Идущая сейчас загрузка остановится и продолжится после запуска (нажмите «Скачать» ещё раз)." : "") + " Продолжить?")) return;
+  let r;
+  try { r = await api("/api/restart", {}); } catch (e) { r = {ok: false, error: "Программа не отвечает, и отсюда её не перезапустить. Запустите Moodle Offline сами (ярлык или «Запустить.bat»), а это окно закройте."}; }
+  if (r.ok) toast("Перезапускаюсь… откроется новое окно, а это закроется само", "ok"); else toast(r.error || "Не получилось перезапустить", "bad");
+}
+function lostHide(){
+  const bar = $("#lostBar"); if (bar.classList.contains("hidden")) return;
+  bar.classList.add("hidden"); bar.dataset.k = ""; lostShown = false;
+  toast("Связь с программой восстановилась", "ok");
+}
+function lostShow(why, msg){
+  const phone = document.body.classList.contains("android");
+  const can = !phone && (!S || S.can_restart !== false);
+  $("#net .dot").className = "dot down";
+  $("#net .txt").textContent = why === "net" ? "Нет связи с программой" : why === "ui" ? "Окно не смогло показать ответ" : "Программа ответила ошибкой";
+  if ((why === "net" ? pollFails : why === "ui" ? uiFails : pollFails) < 2) return;     // один сбой подряд — просто подождём (например, компьютер только проснулся)
+  const bar = $("#lostBar"), key = why + "|" + msg;
+  if (lostShown && bar.dataset.k === key) return;
+  lostShown = true; bar.dataset.k = key;
+  let title, text, btns = "";
+  if (why === "net") {
+    title = "Нет связи с программой";
+    text = phone ? "Окно не достучалось до программы: она закрылась или остановилась. Закройте приложение и откройте его снова. Скачанное и настройки на месте."
+                 : "Окно не достучалось до программы: она закрылась или остановилась (например, после сна компьютера). Закройте это окно и запустите Moodle Offline снова — ярлыком или «Запустить.bat». Скачанные материалы и настройки на месте.";
+    btns = `<button class="btn primary" id="lostRetry">Проверить связь</button>` + (phone ? "" : `<button class="btn" id="lostClose">Закрыть окно</button>`);
+  } else if (why === "ui") {
+    title = "Окно не смогло показать ответ программы";
+    text = "Программа работает, но это окно споткнулось на её ответе" + (msg ? " (" + msg + ")" : "") + ". Обновите окно; если не помогло — перезапустите программу.";
+    btns = `<button class="btn primary" id="lostReload">Обновить окно</button>` + (can ? `<button class="btn" id="lostRestart">Перезапустить программу</button>` : "");
+  } else {
+    title = "Программа работает, но ответила ошибкой";
+    text = (msg ? msg + ". " : "") + "Обычно помогает перезапуск программы. Подробности записаны в файл errors.log в папке с данными программы.";
+    btns = (can ? `<button class="btn primary" id="lostRestart">Перезапустить программу</button>` : "") + `<button class="btn" id="lostRetry">Проверить связь</button>`;
+  }
+  bar.innerHTML = `<div class="bn-t"><b>${esc(title)}</b><span class="bn-d">${esc(text)}</span></div><span class="spacer"></span><div class="bn-btns">${btns}</div>`;
+  bar.classList.remove("hidden"); bar.classList.add("open");
+  const on = (id, fn) => { const el = $("#" + id, bar); if (el) el.onclick = fn; };
+  on("lostRetry", () => { toast("Проверяю связь…"); pollNow(); });
+  on("lostReload", () => location.reload());
+  on("lostRestart", restartApp);
+  on("lostClose", () => { try { window.close(); } catch (e) {} setTimeout(() => toast("Браузер не дал закрыть окно из страницы — закройте его крестиком."), 500); });
+}
+function pollNow(){ clearTimeout(pollTimer); poll(); }
 async function poll(){
-  let delay = 1200;
+  clearTimeout(pollTimer);
+  let delay = 1200, st = null, why = "", msg = "";
+  try { st = await api("/api/state?since=" + seq + (dseqSeen >= 0 ? "&dsince=" + dseqSeen : "")); }
+  catch (e) { why = "net"; }
+  if (st && st.internal) { why = "error"; msg = st.error || ""; }
+  if (why === "net" && closingSeen) return closeSelf();          // сервер ушёл после «закрываюсь» (новая версия, перезапуск) — это не сбой
+  if (why) { pollFails++; lostShow(why, msg); pollTimer = setTimeout(poll, 3000); return; }
+  pollFails = 0;
+  S = st; seq = st.job.seq;
+  closingSeen = st.closing || "";                                 // пустое — закрываться не нужно (например, новая копия не запустилась)
+  closingWhy = st.closing_why || "";                              // зачем закрываемся: restart — кнопка, иначе новая версия
+  if (st.closing === "replaced") return closeSelf();
   try {
-    const st = await api("/api/state?since=" + seq + (dseqSeen >= 0 ? "&dsince=" + dseqSeen : "")); S = st; seq = st.job.seq;
-    if (st.closing) { closingSeen = st.closing; if (st.closing === "replaced") return closeSelf(); }
     const L = st.login;
     if (L.state !== lastLogin) {
       const ok = L.state === "ok" || L.state === "offline";
@@ -2730,13 +2791,17 @@ async function poll(){
                                                    : "«Запомнить меня»: сохраню только cookie сессии; когда она истечёт, пароль спросят снова.";
     loadSettings(st); renderData(st.data); renderNet(st); renderJob(st.job); renderNewsBadge(st.news_unread || 0); renderSearchRun(st.search || {}); renderCalBadge(st.cal_badge || 0); calJobWatch(st.job); renderUpdBar(st.update);
     delay = st.job.state !== "idle" ? 600 : 1200;
+    uiFails = 0; lostHide();
   } catch (e) {
-    if (closingSeen) return closeSelf();          // сервер ушёл после «закрываюсь для новой версии» — это не сбой
-    $("#net .dot").className = "dot down"; $("#net .txt").textContent = "Программа закрыта — перезапустите её";
+    console.error("poll: не удалось показать ответ программы", e);
+    uiFails++; lostShow("ui", (e && e.message || "").slice(0, 120));
     delay = 3000;
   }
-  setTimeout(poll, delay);
+  pollTimer = setTimeout(poll, delay);
 }
+$("#restartBtn").onclick = restartApp;
+// Окно закрывается: говорим программе, чтобы она не гадала по тишине (свёрнутое окно молчит, но живо). Не вернулось за несколько секунд — программа выходит.
+addEventListener("pagehide", () => { try { navigator.sendBeacon("/api/bye?t=" + encodeURIComponent(T)); } catch (e) {} });
 poll();
 </script>
 </body>

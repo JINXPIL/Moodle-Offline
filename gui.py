@@ -53,6 +53,54 @@ SSO_DOMAIN = "sevsu.ru"      # единый вход вуза: auth.sevsu.ru, io
 HEARTBEAT_IDLE = 30
 CLOSE_GRACE = 3.0           # сколько сервер ещё живёт после просьбы новой версии закрыться: окну нужно успеть закрыть себя
 HEARTBEAT_BUSY = 60
+# Когда считать, что окна больше нет. Раньше хватало 25 секунд без запроса состояния, но свёрнутое или «уснувшее» окно браузера
+# запросы почти не шлёт (таймеры в нём замедляют до раза в минуту или замораживают совсем), и программа закрывалась у живого окна.
+WINDOW_FIRST_WAIT = 60.0            # окно ещё ни разу не отозвалось (запуск без окна, браузер не открылся)
+WINDOW_BYE_GRACE = 15.0             # окно сообщило «закрываюсь» (/api/bye) и не вернулось: F5 и перезагрузка страницы успевают вернуться
+WINDOW_SILENCE_LIMIT = 12 * 3600.0  # окно давно молчит и не прощалось (браузер убили, ПК завис): страховка, не обычный путь
+SLEEP_GAP = 45.0                    # между двумя проходами сторожа прошло больше — компьютер спал: окну нужно время очнуться
+ERROR_LOG = "errors.log"            # сбои внутри программы (без паролей и ключей): для разбора, когда «что-то перестало отвечать»
+ERROR_LOG_MAX = 200_000
+_ERR_SEEN: dict = {}                # (где, что) → когда писали в последний раз: одинаковый сбой каждые 5 секунд журнал не засоряет
+_SECRET_RE = re.compile(r"(sesskey|token|moodlesession|password|passwd|secret|cookie|key)=([^&\s'\"]+)", re.I)
+
+
+def scrub(text, limit: int = 400) -> str:
+    """Текст ошибки без значений вида «sesskey=…», «token=…», «password=…» (в сообщениях requests бывают адреса с параметрами)."""
+    return _SECRET_RE.sub(lambda m: m.group(1) + "=…", str(text))[:limit]
+
+
+def log_error(where: str, exc: BaseException, rep=None) -> str:
+    """Записать сбой внутри программы: errors.log в папке данных и «Журнал» окна. Только тип, сжатое сообщение и имена
+    строк кода — без паролей, ключей и cookies. → короткое описание («TypeError: …»)."""
+    import traceback
+    short = f"{type(exc).__name__}: {scrub(exc)}"
+    now = time.monotonic()
+    key = (where, short)
+    if now - _ERR_SEEN.get(key, -1e9) < 600:
+        return short
+    _ERR_SEEN[key] = now
+    try:
+        frames = [f"{Path(f.filename).name}:{f.lineno} {f.name}" for f in traceback.extract_tb(exc.__traceback__)[-6:]]
+    except Exception:           # noqa: BLE001
+        frames = []
+    line = f"{datetime.now():%Y-%m-%d %H:%M:%S} [{where}] {short}" + (f"  ← {' > '.join(frames)}" if frames else "")
+    try:
+        path = mo.DATA_DIR / ERROR_LOG
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and path.stat().st_size > ERROR_LOG_MAX:      # файл не растёт бесконечно: оставляем вторую половину
+            tail = path.read_text(encoding="utf-8", errors="replace")[-ERROR_LOG_MAX // 2:]
+            path.write_text(tail[tail.find("\n") + 1:], encoding="utf-8")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
+    if rep is not None:
+        try:
+            rep.log(f"Сбой внутри программы ({where}): {short}", "warn")
+        except Exception:       # noqa: BLE001
+            pass
+    return short
 ANDROID = android.is_android()      # на телефоне окно — это браузер, а программа живёт в Termux
 CAL_WATCH_EVERY = 300         # как часто (сек) проверять «горящие» сроки, пока открыто окно
 
@@ -241,9 +289,14 @@ class App:
         self.armed = None             # параметры задания, которое стартует, когда сервер поднимется
         self.net = {"status": "unknown", "detail": "", "latency": None, "checked": None}
         self.geo = {"ip": None, "cc": None, "checked": False, "warning": ""}
-        self.last_poll = time.monotonic()
+        self.started = time.monotonic()
+        self.last_poll = self.started
+        self.polled = False           # окно хотя бы раз спрашивало состояние
+        self.bye_at = 0.0             # когда окно сказало «закрываюсь» (0 — не говорило или уже вернулось)
+        self._tick_at = self.started  # прошлый проход сторожа: по разрыву видно, что компьютер спал
         self.token = secrets.token_urlsafe(18)
         self.shutdown = threading.Event()
+        self.closing_why = ""         # зачем: "restart" (кнопка) / "update" (новая версия) — чтобы окно написало верно, даже если пропустило промежуточное состояние
         self.closing = ""             # почему эта копия закрывается: "update" (ставит новую версию) / "replaced" (новая просит место); окна по этому закрываются сами
         self.el_lock = threading.Lock()
         self.reader_lock = threading.Lock()     # читалка: по одному запросу к Moodle за раз
@@ -316,55 +369,77 @@ class App:
         if prev == "down" and status in ("ok", "slow"):
             self.on_server_up()
 
+    def note_poll(self):
+        """Окно спросило состояние: оно живо и ничего не закрывало."""
+        self.last_poll = time.monotonic()
+        self.polled = True
+        self.bye_at = 0.0
+
+    def window_gone(self, now: float | None = None) -> bool:
+        """Окна больше нет? Решает только «прощание» окна (/api/bye) — а не тишина: у свёрнутого окна тишина в порядке вещей."""
+        now = time.monotonic() if now is None else now
+        if self.bye_at:
+            return now - self.bye_at > WINDOW_BYE_GRACE
+        if not self.polled:
+            return now - self.started > WINDOW_FIRST_WAIT
+        return now - self.last_poll > WINDOW_SILENCE_LIMIT
+
     def heartbeat_loop(self):
         """Светофор: лёгкий запрос к сайту по таймеру из настроек (по умолчанию раз в 30 с, во время загрузки — не чаще раза в минуту).
         Заодно раз в 5 с проверяем, открыто ли окно (если закрыли и ничего не качается — выходим) и не пора ли автообновление."""
         next_probe = 0.0
         while not self.shutdown.is_set():
-            now = time.monotonic()
-            if now >= next_probe or self.probe_kick:
-                self.probe_kick = False
-                chk = watch.normalize(self.settings.get("watch"))["check"]
-                waiting = bool(self.armed) or self.login_state == "offline"     # ждём Moodle, чтобы войти или начать загрузку
-                active = chk["enabled"] and watch.in_window(chk["window"], datetime.now())
-                if active or waiting:
-                    try:
-                        prober = self.client or self.new_client()
-                        st, dt = prober.probe()
-                        self.set_net(st, "" if dt is None else f"{dt:.1f} с", dt)
-                        self.watch_feed(st)
-                    except Exception:
-                        pass
-                else:
-                    with self.lock:
-                        self.net["paused"] = "проверка выключена" if not chk["enabled"] else "вне заданного времени"
-                interval = chk["interval"] if chk["enabled"] else 60
-                if waiting:
-                    interval = min(interval, 300)
-                if self.job_state != "idle":
-                    interval = max(interval, HEARTBEAT_BUSY)
-                next_probe = time.monotonic() + interval
-            if not self.keep_running and time.monotonic() - self.last_poll > 25 and self.job_state == "idle" and not self.armed:
-                self.shutdown.set()
-                break
-            if (self.login_state == "offline" and self.net["status"] in ("ok", "slow") and self.vault.load_secret()
-                    and not self.offline.get("need_login")
-                    and time.monotonic() - self.relogin_tried > 120):
-                threading.Thread(target=self._recover_from_offline, daemon=True).start()
             try:
-                self.auto_tick()
-            except Exception as e:      # таймер не должен ронять светофор
-                self.rep.log(f"Автообновление: сбой таймера ({mo.describe_error(e)})", "warn")
-            if time.monotonic() - self.cal_checked > CAL_WATCH_EVERY:     # напоминания о сроках: без сети, из сохранённого
-                self.cal_checked = time.monotonic()
-                threading.Thread(target=self.cal_watch_tick, daemon=True).start()
-            if updater.due(self._upd_cfg()) and not self.upd_lock.locked():       # раз в сутки спросить GitHub о новой версии
-                threading.Thread(target=self.update_check, args=(False,), daemon=True).start()
-            hours = int(self.settings.get("electives_watch_hours", 6) or 6)
-            if (self.settings.get("electives_watch") and self.job_state == "idle" and self._el_creds()
-                    and time.monotonic() - self.electives_checked > hours * 3600):
-                self.electives_checked = time.monotonic()
-                threading.Thread(target=self.electives_refresh, daemon=True).start()
+                now = time.monotonic()
+                if now >= next_probe or self.probe_kick:
+                    self.probe_kick = False
+                    chk = watch.normalize(self.settings.get("watch"))["check"]
+                    waiting = bool(self.armed) or self.login_state == "offline"     # ждём Moodle, чтобы войти или начать загрузку
+                    active = chk["enabled"] and watch.in_window(chk["window"], datetime.now())
+                    if active or waiting:
+                        try:
+                            prober = self.client or self.new_client()
+                            st, dt = prober.probe()
+                            self.set_net(st, "" if dt is None else f"{dt:.1f} с", dt)
+                            self.watch_feed(st)
+                        except Exception:
+                            pass
+                    else:
+                        with self.lock:
+                            self.net["paused"] = "проверка выключена" if not chk["enabled"] else "вне заданного времени"
+                    interval = chk["interval"] if chk["enabled"] else 60
+                    if waiting:
+                        interval = min(interval, 300)
+                    if self.job_state != "idle":
+                        interval = max(interval, HEARTBEAT_BUSY)
+                    next_probe = time.monotonic() + interval
+                now2 = time.monotonic()
+                if now2 - self._tick_at > SLEEP_GAP and not self.bye_at:       # ПК спал или процесс «замораживали»: окно очнётся не сразу
+                    self.last_poll = now2
+                self._tick_at = now2
+                if not self.keep_running and self.window_gone(now2) and self.job_state == "idle" and not self.armed:
+                    self.shutdown.set()
+                    break
+                if (self.login_state == "offline" and self.net["status"] in ("ok", "slow") and self.vault.load_secret()
+                        and not self.offline.get("need_login")
+                        and time.monotonic() - self.relogin_tried > 120):
+                    threading.Thread(target=self._recover_from_offline, daemon=True).start()
+                try:
+                    self.auto_tick()
+                except Exception as e:      # таймер не должен ронять светофор
+                    self.rep.log(f"Автообновление: сбой таймера ({mo.describe_error(e)})", "warn")
+                if time.monotonic() - self.cal_checked > CAL_WATCH_EVERY:     # напоминания о сроках: без сети, из сохранённого
+                    self.cal_checked = time.monotonic()
+                    threading.Thread(target=self.cal_watch_tick, daemon=True).start()
+                if updater.due(self._upd_cfg()) and not self.upd_lock.locked():       # раз в сутки спросить GitHub о новой версии
+                    threading.Thread(target=self.update_check, args=(False,), daemon=True).start()
+                hours = int(self.settings.get("electives_watch_hours", 6) or 6)
+                if (self.settings.get("electives_watch") and self.job_state == "idle" and self._el_creds()
+                        and time.monotonic() - self.electives_checked > hours * 3600):
+                    self.electives_checked = time.monotonic()
+                    threading.Thread(target=self.electives_refresh, daemon=True).start()
+            except Exception as e:      # один сбой не должен навсегда остановить светофор, автообновление и напоминания
+                log_error("сторож", e, self.rep)
             self.shutdown.wait(5)
 
     # ── таймер: упал / ожил и автообновление ──
@@ -1032,6 +1107,7 @@ class App:
             return {"ok": False, "error": err}
         self.rep.log("Перезапускаюсь в новую версию…")
         self.closing = "update"                   # окно увидит это и дождётся, пока новая копия займёт место
+        self.closing_why = "update"
         if self.control:
             self.control.stop()                   # идущая загрузка останавливается сразу
 
@@ -1041,6 +1117,35 @@ class App:
             self.shutdown.wait(25)
             self.shutdown.set()
         threading.Thread(target=_bye, daemon=True).start()
+        return {"ok": True}
+
+    def restart_cmd(self) -> list:
+        """Чем запустить программу заново: сам .exe или тот же Python с этим файлом (так же, как делает Запустить.bat)."""
+        if getattr(sys, "frozen", False):
+            return [os.path.abspath(sys.executable)]
+        return [sys.executable, str(Path(__file__).resolve())]
+
+    def restart(self) -> dict:
+        """Перезапуск программы по кнопке: запускаем новую копию с пометкой «перезапуск», она просит эту закрыться (/api/quit),
+        окно этой копии закрывается само, открывается окно новой. Работает, пока эта копия жива (даже если окно ждёт ответа);
+        «мёртвую» программу окно запустить не может — для этого она должна быть запущена как-то снаружи."""
+        if ANDROID:
+            return {"ok": False, "error": "На телефоне перезапуска нет: закройте приложение и откройте снова."}
+        cmd = self.restart_cmd()
+        try:
+            updater.launch_cmd(cmd, cwd=os.path.dirname(cmd[-1]) or None, extra_env={"MOODLE_OFFLINE_RESTART": "1"})
+        except updater.UpdateError as e:
+            return {"ok": False, "error": "Не получилось перезапустить: " + str(e)}
+        self.rep.log("Перезапускаюсь…")
+        self.closing = "restart"                  # окно увидит это и дождётся, пока новая копия займёт место
+        self.closing_why = "restart"
+
+        def _wait():
+            # Новая копия стартует несколько секунд, потом сама просит эту закрыться (/api/quit). Не пришла — не закрываемся: лучше остаться, чем потерять программу.
+            if not self.shutdown.wait(40):
+                self.closing = self.closing_why = ""
+                self.rep.log("Перезапуск не получился: новая копия не ответила. Работаю как раньше.", "warn")
+        threading.Thread(target=_wait, daemon=True).start()
         return {"ok": True}
 
     def update_brief(self) -> dict:
@@ -2228,6 +2333,34 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    _started = False
+
+    def end_headers(self):
+        self._started = True
+        super().end_headers()
+
+    def _guard(self, fn):
+        """Падение внутри обработчика раньше обрывало соединение без ответа, и окно писало «Программа закрыта», хотя программа
+        работала. Теперь окно получает ответ 500 с причиной, а сбой попадает в errors.log и «Журнал»."""
+        self._started = False
+        try:
+            fn()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, TimeoutError):
+            return                                  # окно закрыло соединение само (остановили скачивание, ушли со страницы) — не сбой
+        except Exception as e:                      # noqa: BLE001
+            short = log_error(self.path.split("?")[0], e, APP.rep if APP else None)
+            if not self._started:
+                try:
+                    self._send(500, {"error": "Сбой внутри программы: " + short, "internal": True})
+                except Exception:                   # noqa: BLE001
+                    pass
+
+    def do_GET(self):
+        self._guard(self._do_get)
+
+    def do_POST(self):
+        self._guard(self._do_post)
+
     def _send(self, code, body=b"", ctype="application/json; charset=utf-8", headers=None):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -2365,7 +2498,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return {}
 
-    def do_GET(self):
+    def _do_get(self):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         if u.path in ("/", "/index.html"):
@@ -2436,12 +2569,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_files(unquote(u.path[len("/files/"):]))
         return self._send(404, {"error": "not found"})
 
-    def do_POST(self):
+    def _do_post(self):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         if not self._authorized(q):
             return self._send(403, {"error": "forbidden"})
         p = u.path
+        if p == "/api/bye":                  # окно закрывается (sendBeacon из pagehide): если оно не вернётся — выходим
+            APP.bye_at = time.monotonic()
+            return self._send(200, {"ok": True})
         if p == "/api/transfer/upload":      # большой файл — читаем потоком, не в память
             cats = [c for c in (q.get("cats") or "").split(",") if c]
             return self._send(200, APP.transfer_upload(self.rfile, int(self.headers.get("Content-Length") or 0), cats,
@@ -2649,6 +2785,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"ok": bool(path), "path": path or ""})
         if p == "/api/schedule":
             return self._send(200, APP.schedule(bool(b.get("enabled")), b.get("time", "03:00")))
+        if p == "/api/restart":
+            return self._send(200, APP.restart())
         if p == "/api/quit":
             if APP.control:
                 APP.control.stop()
@@ -2662,11 +2800,11 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, {"error": "not found"})
 
     def state(self, since, dsince=None):
-        APP.last_poll = time.monotonic()
+        APP.note_poll()
         snap = APP.rep.snapshot(since, dsince)
         st = APP.settings
         return {
-            "version": mo.VERSION, "closing": APP.closing,
+            "version": mo.VERSION, "closing": APP.closing, "closing_why": APP.closing_why, "can_restart": not ANDROID,
             "login": {"state": APP.login_state, "error": APP.login_error, "user": APP.user_name,
                       "base": APP.client.base if APP.client else st.get("base_url"), "username": st.get("username", ""),
                       "remember": bool(st.get("remember", True)), "can_encrypt": APP.vault.can_encrypt,
@@ -2815,17 +2953,19 @@ def gui_main(no_window=False, port=0, keep_running=False, on_ready=None):
     mo.ensure_console_utf8()
     mo.load_env()
     migrated = mo.prepare_data_dir()
+    restart = os.environ.pop("MOODLE_OFFLINE_RESTART", "") == "1"      # нас запустила кнопка «Перезапустить»: прежнюю копию нужно заменить, а не открывать её окно
     old = running_instance() if not no_window else None
     if old:
         ov = old.get("version")
-        if ov == mo.VERSION or (ov and updater.is_newer(ov, mo.VERSION)):
+        if not restart and (ov == mo.VERSION or (ov and updater.is_newer(ov, mo.VERSION))):
             # та же (или более новая) версия уже работает — просто открываем её окно
             print("Программа уже запущена — открываю окно." if ov == mo.VERSION else
                   f"Уже работает более новая версия {ov} (этот файл — {mo.VERSION}) — открываю её окно.")
             open_window(old["url"])
             return 0
         # прежняя версия ещё работает (например, свёрнута или докачивает): просим её закрыться и запускаем эту
-        print(f"Работает прежняя версия {ov or 'старее 1.16.2'} — прошу её закрыться (текущая загрузка остановится и продолжится позже).")
+        print("Перезапуск: прошу прежнюю копию закрыться (текущая загрузка остановится и продолжится позже)." if restart else
+              f"Работает прежняя версия {ov or 'старее 1.16.2'} — прошу её закрыться (текущая загрузка остановится и продолжится позже).")
         if not hand_off(old):
             print("Прежняя версия не закрылась за 75 секунд — открываю её окно. Закройте её кнопкой «Остановить программу» и запустите новую снова.")
             open_window(old["url"])
