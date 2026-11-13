@@ -87,7 +87,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.19.1"
+VERSION = "1.19.2"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -3593,14 +3593,17 @@ def calendar_sync(client: "MoodleClient", out: Path, settings: dict, rep: Report
         raise
     except Exception as e:
         notes.append(f"блок «График» недоступен ({describe_error(e)})")
-    if not timeline_ok or "events" in cfg["kinds"]:
+    if not timeline_ok or "events" in cfg["kinds"] or "sessions" in cfg["kinds"]:
         try:
             more = deadlines.parse_events(client.get_month_events(lo, hi))
-            if timeline_ok:    # сроки сдачи у «Графика» точнее (сданное он убирает) — из месяца берём только обычные события
-                more = [e for e in more if e["kind"] == "events"]
-                kinds.add("events")
+            if timeline_ok:    # сроки сдачи у «Графика» точнее (сданное он убирает) — из месяца берём только обычные события и занятия
+                more = [e for e in more if e["kind"] in ("events", "sessions")]
+                kinds |= {"events", "sessions"}
             else:
                 kinds |= set(deadlines.GROUPS)
+            if "sessions" not in cfg["kinds"]:      # занятий по «Посещаемости» на сайте очень много — без включённого вида не копим
+                more = [e for e in more if e["kind"] != "sessions"]
+                kinds.discard("sessions")           # и не считаем «пропавшими» то, чего не запрашивали
             have = {e["id"] for e in fetched}
             fetched += [e for e in more if e["id"] not in have]
             source.append("monthly")
