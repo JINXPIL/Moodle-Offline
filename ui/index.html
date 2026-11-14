@@ -341,6 +341,120 @@ input.txt:focus,select.txt:focus{border-color:var(--accent)}
 .fsb-thumb{position:absolute;top:0;right:0;width:30px;height:48px;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
 .fsb-thumb::after{content:"";position:absolute;top:0;bottom:0;right:3px;width:5px;border-radius:3px;background:color-mix(in srgb,var(--text) 50%,transparent);transition:width .15s,right .15s,background .15s}
 .fsb.drag .fsb-thumb::after{right:4px;width:12px;background:var(--accent)}
+
+/* ── «Вид»: лист настроек раздела (как в клиентах прокси: пункт слева, выбор справа, выпадающее меню с галочкой) ── */
+.vmodal{z-index:51}
+.vsheet{position:relative;width:min(460px,94vw);max-height:min(84vh,760px);display:flex;flex-direction:column;background:var(--surface-solid);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);overflow:hidden}
+.vsheet header{display:flex;align-items:center;gap:8px;padding:14px 14px 6px 18px}
+.vsheet header b{flex:1;font:600 18px var(--font-display);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vbody{overflow:auto;padding:4px 14px 10px;min-height:0;-webkit-overflow-scrolling:touch}
+.vgrp{background:var(--raised);border:1px solid var(--line);border-radius:18px;padding:0 16px;margin:0 0 12px}
+.vh{font-size:13px;color:var(--muted);margin:8px 6px 8px}
+.vrow{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.vrow:first-child{border-top:0}
+.vl{min-width:0;font-size:15.5px;line-height:1.3}.vl small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.vsel{display:inline-flex;align-items:center;gap:6px;flex:none;max-width:60%;background:none;border:0;color:var(--muted);font:inherit;font-size:15.5px;cursor:pointer;padding:8px 0 8px 8px;text-align:right}
+.vsel span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vsel svg{flex:none}
+.vpop{position:fixed;z-index:5;min-width:230px;max-width:min(340px,90vw);max-height:80vh;overflow:auto;background:var(--surface-solid);border:1px solid var(--line-strong,var(--line));border-radius:20px;box-shadow:0 14px 44px rgba(0,0,0,.4);padding:6px}
+.vopt{display:flex;align-items:center;justify-content:space-between;gap:18px;width:100%;padding:13px 14px;background:none;border:0;border-radius:14px;color:var(--text);font:inherit;font-size:15.5px;cursor:pointer;text-align:left}
+.vopt:hover,.vopt:focus-visible{background:var(--raised);outline:0}.vopt svg{flex:none;color:var(--accent)}
+.vfoot{display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+.vfoot .btn{flex:1 1 auto;justify-content:center}
+.vtab{display:flex;align-items:center;gap:6px}
+.vtab .vl{flex:1}
+.vtab .icon-btn{width:36px;height:36px;border:1px solid var(--line)}.vtab .icon-btn:disabled{opacity:.3;cursor:default}
+.vnote{font-size:12.5px;color:var(--muted);margin:2px 6px 12px;line-height:1.4}
+.vwbtn{flex:none}
+.grp{grid-column:1/-1;margin:12px 2px 0;font:600 13px var(--font-display);color:var(--muted)}.grp span{font-weight:400;margin-left:4px}
+.grp:first-child{margin-top:0}
+
+/* Курсы: стиль, картинка, что показывать, плотность */
+#grid{gap:calc(14px*var(--vd-courses,1))}
+#grid .cbody{padding:calc(12px*var(--vd-courses,1)) 14px}
+#grid .cover{height:calc(112px*var(--vd-courses,1))}
+#grid .cfoot{margin-top:auto}
+body[data-v-courses-style=list] #grid{grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:calc(8px*var(--vd-courses,1))}
+body[data-v-courses-style=list] #grid .card{flex-direction:row;align-items:stretch;transform:none}
+body[data-v-courses-style=list] #grid .cover{height:auto;min-height:calc(76px*var(--vd-courses,1));width:calc(84px*var(--vd-courses,1));flex:none}
+body[data-v-courses-style=list] #grid .cover .ini{font-size:22px}
+body[data-v-courses-style=list] #grid .cbody{min-width:0;padding:calc(9px*var(--vd-courses,1)) 12px}
+body[data-v-courses-style=list] #grid .ctitle{-webkit-line-clamp:2}
+body[data-v-courses-style=list] #grid .check{position:static;flex:none;align-self:center;margin:0 2px 0 12px}
+body[data-v-courses-style=list] #grid .tag{position:static;flex:none;align-self:flex-start;margin:10px 10px 0 0}
+body[data-v-courses-cover=off] #grid .cover{display:none}
+body[data-v-courses-cover=off][data-v-courses-style=cards] #grid .cbody{padding-left:46px}
+body[data-v-courses-cover=off][data-v-courses-style=cards] #grid .check{top:12px}
+body[data-v-courses-cat="0"] #grid .cat{display:none}
+body[data-v-courses-prog="0"] #grid .prog{display:none}
+body[data-v-courses-grade="0"] #grid .gr{display:none}
+body[data-v-courses-date="0"] #grid .cdt{display:none}
+body[data-v-courses-dir="0"] #grid .cfoot .mini{display:none}
+
+/* Окно курса */
+#courseView .mi{padding:calc(10px*var(--vd-course,1)) 16px;gap:calc(12px*var(--vd-course,1))}
+#courseView .msec h3{padding:calc(12px*var(--vd-course,1)) 16px;cursor:pointer;display:flex;align-items:center;gap:8px}
+#courseView .msec h3::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .15s;flex:none}
+#courseView .msec.shut h3{border-bottom:0}#courseView .msec.shut h3::after{transform:rotate(-45deg)}
+#courseView .msec.shut>.mi,#courseView .msec.shut>.restr{display:none}
+#courseView .mfiles{gap:calc(4px*var(--vd-course,1))}
+body[data-v-course-icons=plain] #courseView .micon{background:none!important;color:var(--ic,var(--muted))}
+body[data-v-course-icons=off] #courseView .micon{display:none}
+body[data-v-course-icons=off] #courseView .mi{grid-template-columns:1fr auto}
+body[data-v-course-desc=two] #courseView .mdesc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+body[data-v-course-desc=off] #courseView .mdesc{display:none}
+body[data-v-course-head=compact] #courseView .cv-cover{display:none}
+body[data-v-course-kind="0"] #courseView .mname .kb{display:none}
+body[data-v-course-mtype="0"] #courseView .mtype{display:none}
+body[data-v-course-mtype="0"] #courseView .mtype+.dnw::before{content:none}
+.dnw::before{content:" · "}
+body[data-v-course-done="0"] #courseView .dnw{display:none}
+body[data-v-course-restr="0"] #courseView .restr{display:none}
+body[data-v-course-att="0"] #courseView .att{display:none}
+body[data-v-course-bprev="0"] #courseView [data-prev],body[data-v-course-bext="0"] #courseView [data-ext],body[data-v-course-brev="0"] #courseView [data-rev],
+body[data-v-course-bai="0"] #courseView [data-ai],body[data-v-course-brd="0"] #courseView [data-rd],body[data-v-course-bsite="0"] #courseView .bsite,body[data-v-course-bnote="0"] #courseView [data-nta]{display:none}
+
+/* Заметки */
+#ntList .ntc{padding:calc(10px*var(--vd-notes,1)) 10px calc(10px*var(--vd-notes,1)) 8px;margin-bottom:calc(8px*var(--vd-notes,1))}
+body[data-v-notes-preview=one] #ntList .ntc-p{-webkit-line-clamp:1}
+body[data-v-notes-preview=three] #ntList .ntc-p{-webkit-line-clamp:3}
+body[data-v-notes-preview=off] #ntList .ntc-p{display:none}
+body[data-v-notes-meta="0"] #ntList .ntc-m{display:none}
+body[data-v-notes-acts="0"] #ntList .ntc-act{display:none}
+
+/* Поиск */
+#sqList .sr{padding:calc(12px*var(--vd-search,1)) 14px;margin-bottom:calc(8px*var(--vd-search,1))}
+body[data-v-search-hits=one] #sqList .sp~.sp{display:none}
+body[data-v-search-hits=off] #sqList .sp{display:none}
+body[data-v-search-path="0"] #sqList .sr .sm{display:none}
+body[data-v-search-acts="0"] #sqList .sr .na{display:none}
+
+/* Что нового */
+#nwList .nw{padding:calc(12px*var(--vd-news,1)) 14px;margin-bottom:calc(8px*var(--vd-news,1))}
+body[data-v-news-detail=two] #nwList .nd{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+body[data-v-news-detail=off] #nwList .nd{display:none}
+body[data-v-news-files="0"] #nwList .nf{display:none}
+body[data-v-news-acts="0"] #nwList .na{display:none}
+body[data-v-news-dim="0"] #nwList .nw.read{opacity:1}
+
+/* Календарь */
+#calList .crow{padding:calc(9px*var(--vd-calendar,1)) 12px;margin-bottom:calc(6px*var(--vd-calendar,1))}
+body[data-v-calendar-chips="0"] #calChips{display:none}
+body[data-v-calendar-sub="0"] #calList .cs{display:none}
+body[data-v-calendar-left="0"] #calList .cl{display:none}
+
+/* Элективы */
+#electivesView .eblock,#electivesView .ecard{padding:calc(14px*var(--vd-electives,1)) 16px}
+#electivesView .ecards{gap:calc(12px*var(--vd-electives,1))}
+@media (max-width:700px){
+  .vmodal{place-items:end center}
+  .vsheet{width:100vw;max-height:88dvh;border-radius:26px 26px 0 0;border-bottom:0;animation:vup .2s ease-out}
+  .vsheet::before{content:"";align-self:center;width:44px;height:5px;border-radius:3px;background:var(--line-strong,var(--line));margin:8px 0 0;flex:none}
+  body[data-v-courses-cols="1"] #grid{grid-template-columns:1fr}
+  body[data-v-courses-cols="2"] #grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body[data-v-courses-style=list] #grid{grid-template-columns:1fr!important}
+}
+@keyframes vup{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
 .updbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin:10px 18px 0;padding:10px 14px;background:var(--surface-solid);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;box-shadow:var(--shadow);animation:tin .2s}
 .updbar .ut{flex:1 1 240px;min-width:0}
 .updbar b{font-weight:600}
@@ -698,7 +812,7 @@ body.android .no-android{display:none!important}
             <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" placeholder="Поиск курса"></div>
             <button class="btn ghost" id="selAll">Выбрать все</button>
             <button class="btn ghost" id="selNone">Снять</button>
-            <button class="icon-btn" id="refreshBtn" title="Обновить список курсов"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button>
+            <button class="icon-btn vwbtn" data-vw="courses" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button><button class="icon-btn" id="refreshBtn" title="Обновить список курсов"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button>
           </div>
           <div class="grid" id="grid"></div>
           <div class="hidden" id="courseView"></div>
@@ -777,9 +891,9 @@ body.android .no-android{display:none!important}
     <section class="view hidden" id="scheduleView">
       <div class="layout">
         <div class="content" style="display:flex;flex-direction:column">
-          <div class="toolbar"><h2>Расписание</h2><select class="txt schsel" id="schSelD" aria-label="Какое расписание показать"></select><span class="hint" id="schInfo" style="margin:0"></span></div>
+          <div class="toolbar"><h2>Расписание</h2><select class="txt schsel" id="schSelD" aria-label="Какое расписание показать"></select><span class="hint" id="schInfo" style="margin:0"></span><button class="icon-btn vwbtn" data-vw="schedule" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
           <div id="schEmpty" class="empty hidden">Расписание ещё не сохранено. Выберите период в блоке «Период для офлайна» и нажмите «Сохранить для офлайна».</div>
-          <div class="schhead"><select class="txt schsel" id="schSelM" aria-label="Какое расписание показать"></select><button class="btn" id="schToSettings" aria-haspopup="dialog">Настройки</button></div>
+          <div class="schhead"><select class="txt schsel" id="schSelM" aria-label="Какое расписание показать"></select><button class="btn" id="schToSettings" aria-haspopup="dialog">Настройки</button><button class="icon-btn vwbtn" data-vw="schedule" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
           <iframe class="schedframe hidden" id="schFrame"></iframe>
         </div>
         <aside class="side">
@@ -849,7 +963,7 @@ body.android .no-android{display:none!important}
     <section class="view hidden" id="electivesView">
       <div class="layout">
         <div class="content">
-          <div class="toolbar"><h2 id="elTitle">Элективы</h2><span class="hint" id="elInfo" style="margin:0"></span></div>
+          <div class="toolbar"><h2 id="elTitle">Элективы</h2><span class="hint" id="elInfo" style="margin:0"></span><button class="icon-btn vwbtn" data-vw="electives" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
           <div id="elOffline" class="hint hidden" style="margin:0 0 10px"></div>
           <div id="elBody"></div>
           <details class="adv hidden" id="elOld" style="margin-top:18px"><summary>Запасной способ: снимок страницы через браузер</summary>
@@ -880,7 +994,7 @@ body.android .no-android{display:none!important}
           <div class="toolbar"><h2>Что нового</h2><span class="hint" id="nwInfo" style="margin:0"></span><div class="spacer"></div>
             <select class="txt" id="nwKind" style="width:auto"></select>
             <select class="txt" id="nwCourse" style="width:auto;max-width:240px"></select>
-            <button class="chip" id="nwUnread">Только непрочитанное</button></div>
+            <button class="chip" id="nwUnread">Только непрочитанное</button><button class="icon-btn vwbtn" data-vw="news" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
           <div id="nwList"></div>
         </div>
         <aside class="side">
@@ -898,7 +1012,7 @@ body.android .no-android{display:none!important}
       <div class="layout" style="grid-template-columns:1fr">
         <div class="content">
           <div class="toolbar"><h2>Заметки</h2><span class="hint" id="ntInfo" style="margin:0"></span><div class="spacer"></div>
-            <button class="btn primary" id="ntNew">+ Новая заметка</button></div>
+            <button class="icon-btn vwbtn" data-vw="notes" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button><button class="btn primary" id="ntNew">+ Новая заметка</button></div>
           <div class="toolbar"><div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="ntQ" placeholder="Поиск по заметкам" autocomplete="off"></div>
             <select class="txt" id="ntCourse" style="width:auto;max-width:260px" aria-label="Где искать"></select></div>
           <div class="ntbar hidden" id="ntBar"></div>
@@ -914,7 +1028,7 @@ body.android .no-android{display:none!important}
           <div class="sqf"><select class="txt" id="sqCourse" style="width:auto;max-width:260px"></select>
             <span id="sqTypes" style="display:contents"></span>
             <div class="spacer"></div>
-            <select class="txt" id="sqOrder" style="width:auto"><option value="rank">Сначала самые подходящие</option><option value="new">Сначала новые файлы</option></select></div>
+            <select class="txt" id="sqOrder" style="width:auto"><option value="rank">Сначала самые подходящие</option><option value="new">Сначала новые файлы</option></select><button class="icon-btn vwbtn" data-vw="search" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
           <div class="hint" id="sqInfo" style="margin:0 0 10px"></div>
           <div id="sqList"></div>
         </div>
@@ -937,7 +1051,7 @@ body.android .no-android{display:none!important}
           <div class="sqf"><select class="txt" id="calShow" style="width:auto"><option value="all">Сроки и пары</option><option value="deadlines">Только сроки</option><option value="lessons">Только пары</option></select>
             <select class="txt" id="calCourse" style="width:auto;max-width:260px"></select>
             <select class="txt" id="calDays" style="width:auto"><option value="7">7 дней</option><option value="14" selected>14 дней</option><option value="30">30 дней</option><option value="60">60 дней</option></select>
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><span class="sw-t"><input type="checkbox" id="calDone"><span></span></span>сделанное</label></div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><span class="sw-t"><input type="checkbox" id="calDone"><span></span></span>сделанное</label><button class="icon-btn vwbtn" data-vw="calendar" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
           <div class="hint" id="calSync" style="margin:0 0 10px"></div>
           <div id="calList"></div>
         </div>
@@ -1242,6 +1356,13 @@ body.android .no-android{display:none!important}
     </div>
   </div>
 </div></div>
+<div class="modal vmodal hidden" id="viewModal" role="dialog" aria-modal="true" aria-labelledby="vwTitle">
+  <div class="vsheet">
+    <header><b id="vwTitle">Вид</b><button class="icon-btn" id="vwClose" title="Закрыть" aria-label="Закрыть"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+    <div class="vbody" id="vwBody"></div>
+    <div class="vfoot" id="vwFoot"></div>
+  </div>
+</div>
 <div class="toasts" id="toasts"></div>
 
 <script>
@@ -1335,25 +1456,41 @@ $("#logoutBtn").onclick = async () => { if (!confirm("Выйти и забыть
 
 /* ── курсы ── */
 const visible = c => (filter === "all" || (filter === "current" && !c.past && !c.hidden) || (filter === "past" && c.past && !c.hidden) || (filter === "hidden" && c.hidden))
-                   && (!query || (c.fullname + " " + c.shortname + " " + c.category).toLowerCase().includes(query));
+                   && (!query || (c.fullname + " " + c.shortname + " " + c.category).toLowerCase().includes(query)) && (!vGet("courses", "onlydl") || c.downloaded);
 function coverStyle(c){
   const h = (c.id * 47) % 360;
   return `background-image:linear-gradient(135deg,hsl(${h} 62% 46%),hsl(${(h+40)%360} 70% 36%))`;
 }
 function initials(c){ return (c.shortname || c.fullname).replace(/[^\p{L}\p{N} ]/gu," ").split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase(); }
+function vDate(t){ const m = /(\d+)\.(\d+)\.(\d+)(?:\s+(\d+):(\d+))?/.exec(t || ""); return m ? new Date(+m[3], m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)).getTime() : 0; }
+function sortCourses(a){
+  const k = vGet("courses", "sort"); if (k === "def") return a;
+  const b = a.slice();
+  if (k === "name") b.sort((x, y) => (x.fullname || "").localeCompare(y.fullname || "", "ru"));
+  else if (k === "recent") b.sort((x, y) => vDate(y.updated) - vDate(x.updated));
+  else if (k === "prog") b.sort((x, y) => (y.progress ?? -1) - (x.progress ?? -1));
+  return b;
+}
+function cardHtml(c){
+  const img = c.image ? (c.image.startsWith("data:") ? c.image : c.image + "&t=" + encodeURIComponent(T)) : "";
+  const tag = c.hidden ? "скрыт" : c.past ? "прошлый" : c.future ? "будущий" : "";
+  return `<div class="card ${selected.has(c.id) ? "sel" : ""}" data-id="${c.id}">
+    <span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>
+    <div class="cover" style="${coverStyle(c)}">${img ? `<img src="${esc(img)}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">` : `<div class="ini">${esc(initials(c))}</div>`}</div>
+    <div class="cbody"><div class="cat">${esc(c.category || " ")}</div><div class="ctitle" title="${esc(c.fullname)}">${esc(c.fullname)}</div>
+      ${c.progress != null ? `<div class="prog" title="Выполнено в Moodle: ${Math.round(c.progress)}%"><i style="width:${Math.round(c.progress)}%"></i></div>` : `<div style="margin-top:auto"></div>`}
+      <div class="cfoot"><span>${c.downloaded ? `<span class="cdl">Скачано ${c.downloaded}</span><span class="cdt"> · ${esc(c.updated.split(" ")[0])}</span>` : "Ещё не скачан"}${c.grade ? ` <span class="gr" title="Оценка в Moodle на момент последней загрузки">оценка ${esc(c.grade)}</span>` : ""}</span>
+      ${c.dir ? `<button class="mini" data-open="${esc(c.dir)}" title="Открыть папку курса">Папка</button>` : ""}</div></div>${tag ? `<span class="tag">${tag}</span>` : ""}</div>`;
+}
 function renderGrid(){
-  const list = courses.filter(visible);
-  $("#grid").innerHTML = list.length ? list.map(c => {
-    const img = c.image ? (c.image.startsWith("data:") ? c.image : c.image + "&t=" + encodeURIComponent(T)) : "";
-    const tag = c.hidden ? "скрыт" : c.past ? "прошлый" : c.future ? "будущий" : "";
-    return `<div class="card ${selected.has(c.id) ? "sel" : ""}" data-id="${c.id}">
-      <div class="cover" style="${coverStyle(c)}">${img ? `<img src="${esc(img)}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">` : `<div class="ini">${esc(initials(c))}</div>`}
-        <span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>${tag ? `<span class="tag">${tag}</span>` : ""}</div>
-      <div class="cbody"><div class="cat">${esc(c.category || " ")}</div><div class="ctitle" title="${esc(c.fullname)}">${esc(c.fullname)}</div>
-        ${c.progress != null ? `<div class="prog" title="Выполнено в Moodle: ${Math.round(c.progress)}%"><i style="width:${Math.round(c.progress)}%"></i></div>` : `<div style="margin-top:auto"></div>`}
-        <div class="cfoot"><span>${c.downloaded ? `Скачано ${c.downloaded} · ${esc(c.updated.split(" ")[0])}` : "Ещё не скачан"}${c.grade ? ` <span class="gr" title="Оценка в Moodle на момент последней загрузки">оценка ${esc(c.grade)}</span>` : ""}</span>
-        ${c.dir ? `<button class="mini" data-open="${esc(c.dir)}" title="Открыть папку курса">Папка</button>` : ""}</div></div></div>`;
-  }).join("") : `<div class="empty">${courses.length ? "Ничего не найдено — попробуйте другой фильтр." : "Курсы загружаются…"}</div>`;
+  const list = sortCourses(courses.filter(visible));
+  let html;
+  if (!list.length) html = `<div class="empty">${courses.length ? "Ничего не найдено — попробуйте другой фильтр." : "Курсы загружаются…"}</div>`;
+  else if (vGet("courses", "group") === "cat") {
+    const m = new Map(); list.forEach(c => { const k = c.category || "Без категории"; if (!m.has(k)) m.set(k, []); m.get(k).push(c); });
+    html = [...m].map(([k, a]) => `<div class="grp">${esc(k)}<span>${a.length}</span></div>` + a.map(cardHtml).join("")).join("");
+  } else html = list.map(cardHtml).join("");
+  $("#grid").innerHTML = html;
   updateSelInfo();
 }
 $("#grid").addEventListener("click", e => {
@@ -1677,6 +1814,193 @@ if (window.ResizeObserver) { const ro = new ResizeObserver(setBarVars); ro.obser
   const end = () => { if (!drag) return; drag = null; el.classList.remove("drag"); if (update()) show(); else hide(); };
   th.addEventListener("pointerup", end); th.addEventListener("pointercancel", end); th.addEventListener("lostpointercapture", end);
 })();
+/* ── «Вид»: настройки отображения разделов ──
+   У каждого раздела справа вверху — кнопка «слайдеры»: открывается лист с пунктами (стиль, сортировка, плотность, что показывать…), как в клиентах прокси.
+   Выбор хранится на ЭТОМ устройстве (localStorage «mo_view»: у телефона и компьютера экраны разные, поэтому и вид свой; в «Перенос данных» не входит).
+   Почти всё работает через data-атрибуты на <body> (data-v-<раздел>-<пункт>) и CSS; перерисовка нужна только для сортировки, группировки и сворачивания
+   разделов курса. Расписание рисует отдельная страница-просмотрщик (schedule.py): её пункты лежат в тех же ключах localStorage (rs_*), что и у самого
+   просмотрщика, и ему отправляется сообщение «перечитай». Порядок и видимость вкладок — страница «Разделы» в том же листе. */
+const V_DENS = {k: "dens", t: "Плотность", v: [["roomy", "Свободная"], ["std", "Стандартная"], ["dense", "Плотная"]], d: "std"};
+const V_DV = {roomy: 1.35, std: 1, dense: .65};
+const VIEWDEF = {
+  courses: {name: "Курсы", opts: [
+    {k: "style", t: "Стиль", v: [["cards", "Карточки"], ["list", "Список"]]},
+    {k: "sort", t: "Сортировка", v: [["def", "Как на сайте"], ["name", "По названию"], ["recent", "Недавно скачанные"], ["prog", "По выполнению"]]},
+    V_DENS,
+    {k: "cover", t: "Картинка", v: [["show", "Показывать"], ["off", "Скрыть"]]},
+    {k: "cols", t: "Колонок на телефоне", v: [["auto", "Авто"], ["1", "Одна"], ["2", "Две"]]},
+    {k: "group", t: "Группировка", v: [["none", "Нет"], ["cat", "По категории"]]},
+    {h: "Показывать"},
+    {k: "cat", t: "Категорию", b: 1}, {k: "prog", t: "Выполнение в Moodle", b: 1}, {k: "grade", t: "Оценку", b: 1}, {k: "date", t: "Дату загрузки", b: 1}, {k: "dir", t: "Кнопку «Папка»", b: 1},
+    {h: "Фильтр"},
+    {k: "onlydl", t: "Только скачанные", n: "Не показывать курсы, которые ещё не скачаны", b: 1, d: 0}]},
+  course: {name: "Окно курса", opts: [
+    V_DENS,
+    {k: "icons", t: "Значки элементов", v: [["back", "С подложкой"], ["plain", "Без подложки"], ["off", "Скрыть"]]},
+    {k: "desc", t: "Описания", v: [["full", "Полностью"], ["two", "Две строки"], ["off", "Скрыть"]]},
+    {k: "sections", t: "Разделы курса", v: [["open", "Раскрыты"], ["shut", "Свёрнуты"]]},
+    {k: "head", t: "Шапка курса", v: [["full", "С картинкой"], ["compact", "Компактная"]]},
+    {h: "Показывать у элемента"},
+    {k: "kind", t: "Метки ЛК / ПЗ / ЛЗ", b: 1}, {k: "mtype", t: "Тип и блок", b: 1}, {k: "done", t: "Отметки выполнения", b: 1}, {k: "restr", t: "Ограничения доступа", b: 1}, {k: "att", t: "Посещаемость", b: 1},
+    {h: "Кнопки"},
+    {k: "bprev", t: "Просмотр", b: 1}, {k: "bext", t: "Открыть", b: 1}, {k: "brev", t: "В папке", b: 1}, {k: "bai", t: "ИИ", b: 1}, {k: "brd", t: "Открыть здесь", b: 1}, {k: "bsite", t: "На сайте", b: 1}, {k: "bnote", t: "Заметка", b: 1}]},
+  schedule: {name: "Расписание", opts: [
+    {k: "scale", t: "Размер текста", ls: "rs_scale", v: [["0.9", "Мелкий"], ["1", "Обычный"], ["1.15", "Крупный"], ["1.3", "Очень крупный"]], d: "1"},
+    {k: "dens", t: "Плотность", ls: "rs_dens", v: V_DENS.v, d: "std"},
+    {k: "color", t: "Цветные метки занятий", ls: "rs_color", b: 1},
+    {h: "Показывать в паре"},
+    {k: "end", t: "Время окончания", ls: "rs_f_end", b: 1}, {k: "type", t: "Тип занятия", ls: "rs_f_type", b: 1}, {k: "room", t: "Аудиторию и корпус", ls: "rs_f_room", b: 1},
+    {k: "teacher", t: "Преподавателя", ls: "rs_f_teacher", b: 1}, {k: "stream", t: "Поток и подгруппу", ls: "rs_f_stream", b: 1}, {k: "note", t: "Примечания", ls: "rs_f_note", b: 1}]},
+  notes: {name: "Заметки", opts: [
+    {k: "sort", t: "Сортировка", v: [["upd", "По дате правки"], ["title", "По названию"], ["course", "По курсу"]]},
+    V_DENS,
+    {k: "preview", t: "Текст под названием", v: [["two", "Две строки"], ["one", "Одна строка"], ["three", "Три строки"], ["off", "Скрыть"]]},
+    {h: "Показывать"},
+    {k: "meta", t: "Курс и дату правки", b: 1}, {k: "acts", t: "Кнопки справа", n: "закрепить, показать в папке, удалить", b: 1}]},
+  search: {name: "Поиск", opts: [
+    V_DENS,
+    {k: "hits", t: "Найденные фрагменты", v: [["all", "Все"], ["one", "Только первый"], ["off", "Скрыть"]]},
+    {h: "Показывать"},
+    {k: "path", t: "Путь к файлу", b: 1}, {k: "acts", t: "Кнопки у результата", b: 1}]},
+  news: {name: "Что нового", opts: [
+    V_DENS,
+    {k: "detail", t: "Подробности", v: [["full", "Полностью"], ["two", "Две строки"], ["off", "Скрыть"]]},
+    {h: "Показывать"},
+    {k: "files", t: "Список файлов", b: 1}, {k: "acts", t: "Кнопки действий", b: 1}, {k: "dim", t: "Прочитанное бледнее", b: 1}]},
+  calendar: {name: "Календарь", opts: [
+    V_DENS,
+    {h: "Показывать"},
+    {k: "chips", t: "Счётчики сверху", b: 1}, {k: "sub", t: "Курс и подпись под названием", b: 1}, {k: "left", t: "Сколько осталось («через 5 ч»)", b: 1}]},
+  electives: {name: "Элективы", opts: [V_DENS]},
+};
+const V_TABS = [["courses", "Курсы"], ["search", "Поиск"], ["notes", "Заметки"], ["calendar", "Календарь"], ["schedule", "Расписание"], ["electives", "Элективы"], ["news", "Что нового"]];
+const VKEY = "mo_view";
+let VS = (() => { try { const j = JSON.parse(localStorage.getItem(VKEY) || "{}"); return j && typeof j === "object" && !Array.isArray(j) ? j : {}; } catch (e) { return {}; } })();
+const vSave = () => { try { localStorage.setItem(VKEY, JSON.stringify(VS)); } catch (e) {} };
+const vOpt = (sec, k) => VIEWDEF[sec].opts.find(o => o.k === k);
+function vRaw(sec, o){
+  if (o.ls) { try { return localStorage.getItem(o.ls); } catch (e) { return null; } }
+  const m = VS[sec]; return m && m[o.k] !== undefined ? m[o.k] : null;
+}
+function vGet(sec, k){                                   // значение пункта: строка (выбор) или 0/1 (переключатель); неизвестное → по умолчанию
+  const o = vOpt(sec, k), r = vRaw(sec, o);
+  if (o.b) return r === null ? (o.d === 0 ? 0 : 1) : (String(r) === "0" ? 0 : 1);
+  return r !== null && o.v.some(x => x[0] === String(r)) ? String(r) : (o.d !== undefined ? o.d : o.v[0][0]);
+}
+function vApply(sec){
+  const d = VIEWDEF[sec]; if (!d) return;
+  for (const o of d.opts) {
+    if (!o.k) continue;
+    const v = vGet(sec, o.k); document.body.setAttribute("data-v-" + sec + "-" + o.k, String(v));
+    if (o.k === "dens") document.body.style.setProperty("--vd-" + sec, V_DV[v] || 1);
+  }
+}
+function vSet(sec, k, val){
+  const o = vOpt(sec, k);
+  if (o.ls) { try { localStorage.setItem(o.ls, String(val)); } catch (e) {} }
+  else { (VS[sec] = VS[sec] || {})[k] = val; vSave(); }
+  vApply(sec); vAfter(sec, k);
+}
+function vAfter(sec, k){                                 // что нельзя сделать одним CSS — перерисовываем
+  if (sec === "courses" && (k === "sort" || k === "group" || k === "onlydl")) renderGrid();
+  else if (sec === "course" && k === "sections" && CV) { CV.tg = null; renderCourse(); }
+  else if (sec === "notes" && k === "sort") renderNotes(NT.list.length);
+  else if (sec === "schedule") vSchedPing();
+}
+function vSchedPing(){ try { const f = $("#schFrame"); if (f && f.contentWindow) f.contentWindow.postMessage({moView: 1}, location.origin); } catch (e) {} }
+function vReset(sec){
+  const d = VIEWDEF[sec];
+  for (const o of d.opts) if (o.ls) { try { localStorage.removeItem(o.ls); } catch (e) {} }
+  delete VS[sec]; vSave(); vApply(sec);
+  if (sec === "courses") renderGrid(); else if (sec === "course" && CV) { CV.tg = null; renderCourse(); } else if (sec === "notes") renderNotes(NT.list.length); else if (sec === "schedule") vSchedPing();
+}
+/* вкладки: порядок и видимость («Курсы» скрыть нельзя — это главная) */
+function vTabs(){
+  const t = VS.tabs || {}, known = V_TABS.map(x => x[0]), order = (Array.isArray(t.order) ? t.order : []).filter(x => known.includes(x));
+  known.forEach(x => { if (!order.includes(x)) order.push(x); });
+  return {order, hide: (Array.isArray(t.hide) ? t.hide : []).filter(x => known.includes(x) && x !== "courses")};
+}
+function vApplyTabs(){
+  const nav = $("#mainTabs"), {order, hide} = vTabs();
+  order.forEach(v => { const b = nav.querySelector(`[data-view="${v}"]`); if (b) { nav.appendChild(b); b.classList.toggle("hidden", hide.includes(v)); } });
+}
+function vTabsSet(order, hide){
+  VS.tabs = {order, hide}; vSave(); vApplyTabs();
+  if (typeof view !== "undefined" && hide.includes(view)) showView("courses");
+  if (NARROW.matches) setBarVars();
+}
+/* лист настроек */
+const V_CHECK = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>';
+const V_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg>';
+let VW = {sec: "courses", page: "opts"};
+function vwOpen(sec){ VW = {sec, page: "opts"}; vwRender(); $("#viewModal").classList.remove("hidden"); }
+function vwPopClose(){ const p = $("#viewModal .vpop"); if (p) { p.remove(); return true; } return false; }
+function vwClose(){ if (vwPopClose()) return; $("#viewModal").classList.add("hidden"); }
+function vwRender(){
+  const body = $("#vwBody"), foot = $("#vwFoot"), st = body.scrollTop;
+  vwPopClose();
+  if (VW.page === "tabs") {
+    const {order, hide} = vTabs(), nm = Object.fromEntries(V_TABS);
+    $("#vwTitle").textContent = "Разделы";
+    body.innerHTML = `<div class="vnote">Какие вкладки показывать и в каком порядке. «Курсы» — главная, её скрыть нельзя. Скрытые разделы по-прежнему открываются из других мест (например, заметки — из окна курса).</div><div class="vgrp">` +
+      order.map((v, i) => `<div class="vrow vtab" data-v="${v}"><span class="vl">${esc(nm[v])}</span>
+        <button class="icon-btn" data-mv="-1" aria-label="Выше" ${i === 0 ? "disabled" : ""}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button>
+        <button class="icon-btn" data-mv="1" aria-label="Ниже" ${i === order.length - 1 ? "disabled" : ""}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        <label class="sw-t" style="margin-left:6px"><input type="checkbox" data-show="${v}" ${hide.includes(v) ? "" : "checked"} ${v === "courses" ? "disabled" : ""} aria-label="Показывать вкладку «${esc(nm[v])}»"><span></span></label></div>`).join("") + "</div>";
+    foot.innerHTML = `<button class="btn" id="vwBack">← Назад</button><button class="btn ghost" id="vwTabsReset">Порядок по умолчанию</button>`;
+  } else {
+    const d = VIEWDEF[VW.sec]; $("#vwTitle").textContent = "Вид: " + d.name;
+    let h = '<div class="vgrp">';
+    for (const o of d.opts) {
+      if (o.h) { h += `</div><div class="vh">${esc(o.h)}</div><div class="vgrp">`; continue; }
+      const cur = vGet(VW.sec, o.k), n = o.n ? `<small>${esc(o.n)}</small>` : "";
+      h += o.b ? `<label class="vrow"><span class="vl">${esc(o.t)}${n}</span><span class="sw-t"><input type="checkbox" data-bool="${o.k}" ${cur ? "checked" : ""}><span></span></span></label>`
+               : `<div class="vrow" data-pick="${o.k}"><span class="vl">${esc(o.t)}${n}</span><button class="vsel" data-sel="${o.k}" aria-haspopup="listbox"><span>${esc((o.v.find(x => x[0] === cur) || o.v[0])[1])}</span>${V_CHEV}</button></div>`;
+    }
+    body.innerHTML = h + "</div>";
+    foot.innerHTML = `<button class="btn ghost" id="vwReset">Сбросить</button><button class="btn" id="vwTabs">Вкладки…</button>`;
+  }
+  body.scrollTop = st;
+}
+function vwPop(o, btn){
+  vwPopClose();
+  const cur = vGet(VW.sec, o.k), pop = document.createElement("div"); pop.className = "vpop"; pop.setAttribute("role", "listbox");
+  pop.innerHTML = o.v.map(([v, t]) => `<button class="vopt" role="option" aria-selected="${v === cur}" data-v="${esc(v)}"><span>${esc(t)}</span>${v === cur ? V_CHECK : ""}</button>`).join("");
+  $("#viewModal").appendChild(pop);
+  const r = btn.getBoundingClientRect();
+  pop.style.right = Math.max(8, innerWidth - r.right - 4) + "px";
+  pop.style.top = Math.max(8, Math.min(r.top - 8, innerHeight - pop.offsetHeight - 8)) + "px";
+  pop.onclick = e => { const b = e.target.closest(".vopt"); if (!b) return; vSet(VW.sec, o.k, b.dataset.v); vwRender(); };
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-vw]"); if (b) vwOpen(b.dataset.vw); });
+$("#vwClose").onclick = vwClose;
+$("#viewModal").addEventListener("click", e => {
+  if (e.target.closest(".vpop") || e.target.closest(".vsel")) return;
+  if (vwPopClose()) return;                                   // первое нажатие мимо меню — закрывает меню
+  if (e.target.id === "viewModal") vwClose();
+});
+$("#vwBody").addEventListener("click", e => {
+  const sel = e.target.closest("[data-sel]"); if (sel) { vwPop(vOpt(VW.sec, sel.dataset.sel), sel); return; }
+  const mv = e.target.closest("[data-mv]");
+  if (mv && !mv.disabled) {
+    const {order, hide} = vTabs(), v = mv.closest("[data-v]").dataset.v, i = order.indexOf(v), j = i + (+mv.dataset.mv);
+    if (j >= 0 && j < order.length) { [order[i], order[j]] = [order[j], order[i]]; vTabsSet(order, hide); vwRender(); }
+  }
+});
+$("#vwBody").addEventListener("change", e => {
+  const bl = e.target.dataset.bool; if (bl) { vSet(VW.sec, bl, e.target.checked ? 1 : 0); return; }
+  const sh = e.target.dataset.show;
+  if (sh) { const {order, hide} = vTabs(), i = hide.indexOf(sh); if (e.target.checked && i >= 0) hide.splice(i, 1); else if (!e.target.checked && i < 0) hide.push(sh); vTabsSet(order, hide); vwRender(); }
+});
+$("#vwFoot").addEventListener("click", e => {
+  const id = e.target.closest("button") && e.target.closest("button").id;
+  if (id === "vwReset") { vReset(VW.sec); vwRender(); }
+  else if (id === "vwTabs") { VW.page = "tabs"; vwRender(); }
+  else if (id === "vwBack") { VW.page = "opts"; vwRender(); }
+  else if (id === "vwTabsReset") { delete VS.tabs; vSave(); vApplyTabs(); vwRender(); }
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#viewModal").classList.contains("hidden")) vwClose(); });
+Object.keys(VIEWDEF).forEach(vApply); vApplyTabs();
 /* телефон: «Загрузки» — лист на весь экран, открывается значком в шапке. Пока идёт загрузка, ход виден на самом значке и по полоске под шапкой, поэтому сама панель сама не выскакивает */
 function showDock(){
   if (!NARROW.matches) return $("#dock").classList.remove("collapsed");
@@ -1913,7 +2237,12 @@ const ntIco = {
   pin: f => `<svg width="17" height="17" viewBox="0 0 24 24" fill="${f ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>`,
   folder: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`,
   del: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 11v6M14 11v6"/></svg>`};
-function ntVisible(){ const f = NT.filter; return NT.list.filter(n => f === "" || (f === "g" ? n.course == null : String(n.course) === f)); }
+function ntVisible(){
+  const f = NT.filter, l = NT.list.filter(n => f === "" || (f === "g" ? n.course == null : String(n.course) === f)), k = vGet("notes", "sort");
+  if (k === "upd") return l;                                      // как отдаёт программа: закреплённые, затем по дате правки
+  const cn = n => n.course_name || (n.course != null && NT.cnames.get(n.course)) || "", tt = (a, b) => (a.title || "").localeCompare(b.title || "", "ru");
+  return l.slice().sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (k === "course" ? cn(a).localeCompare(cn(b), "ru") : 0) || tt(a, b));
+}
 function ntCard(n){
   const id = esc(n.id), on = NT.sel.has(n.id);
   return `<div class="ntc${n.pinned ? " pin" : ""}${on ? " sel" : ""}" data-id="${id}">
@@ -2905,7 +3234,7 @@ const MODT = {resource:"Файл",folder:"Папка",url:"Ссылка",page:"�
   text:"Пояснение",file:"Файл",attendance:"Посещаемость",pruffme:"Вебинар",feedback:"Анкета"};
 const KC = {"Лекции":"ЛК","ПЗ":"ПЗ","ЛЗ":"ЛЗ","Прочее":"ДР"};
 const icon = m => { const [c, d] = ICON[m] || ["#8a93a3","M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0"];
-  return `<div class="micon" style="background:${c}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg></div>`; };
+  return `<div class="micon" style="background:${c};--ic:${c}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg></div>`; };
 let CV = null, cvQ = "", cvK = "";
 async function openCourse(id, live = false){
   const c = courses.find(x => x.id === id) || {id, fullname: "Курс"};
@@ -2950,7 +3279,7 @@ function renderCourse(){
       ${c.grade ? `<div class="mmeta" style="margin-top:4px">Оценка на сайте: <b>${esc(c.grade)}</b> (на момент последней загрузки)</div>` : ""}${doneSummary(d)}${c.progress != null ? `<div class="prog" style="margin-top:8px;max-width:340px"><i style="width:${Math.round(c.progress)}%"></i></div>` : ""}</div>
     <div class="cv-acts"><button class="btn primary" id="cvDl">${d.downloaded ? "Обновить курс" : "Скачать курс"}</button>
       ${(d.url || c.url) ? `<button class="btn" id="cvSite">Открыть на сайте</button><button class="btn" id="cvGrades" title="Оценки по заданиям и тестам этого курса — страница сайта в читалке">Оценки курса</button>` : ""}<button class="btn" id="cvAi" title="Задать вопрос нейросети по материалам этого курса">Спросить ИИ</button><button class="btn" id="cvNotes" title="Ваши заметки к этому курсу">Заметки${(CV.notes || []).length ? " (" + CV.notes.length + ")" : ""}</button>${d.dir ? `<button class="btn" id="cvDir">Папка курса</button>` : ""}
-      <button class="btn ghost" id="cvLive" title="Перечитать разделы и элементы с сайта">↻ С сайта</button></div></div></div>`;
+      <button class="btn ghost" id="cvLive" title="Перечитать разделы и элементы с сайта">↻ С сайта</button><button class="btn ghost vwbtn" data-vw="course" title="Настроить вид: плотность, значки, кнопки, разделы" style="gap:6px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg>Вид</button></div></div></div>`;
   if (d.error) { el.innerHTML = html + `<div class="empty">${esc(d.error)}</div>`; bindCV(); return; }
   html += `<div class="toolbar"><div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="cvQ" placeholder="Поиск в курсе" value="${esc(cvQ)}"></div>
     <div class="chips">${["", "ЛК", "ПЗ", "ЛЗ", "ДР"].map(k => `<button class="chip ${cvK === k ? "on" : ""}" data-k="${k}">${k || "Все"}</button>`).join("")}</div></div>`;
@@ -2958,15 +3287,15 @@ function renderCourse(){
   const secs = d.sections.map(s => ({...s, items: s.items.filter(okItem)})).filter(s => s.items.length);
   html += `<div class="cv-body"><nav class="toc">${secs.map(s => `<a href="#" data-sec="${s.number}">${esc(s.name)}</a>`).join("")}</nav><div>`;
   for (const s of secs) {
-    html += `<section class="msec" id="msec-${s.number}"><h3>${esc(s.name)}</h3>${s.restriction ? `<div class="restr" style="padding:0 16px 6px">Ограничение на сайте: ${esc(s.restriction)}</div>` : ""}`;
+    html += `<section class="msec${cvShut(s.number) ? " shut" : ""}" id="msec-${s.number}" data-n="${esc(String(s.number))}"><h3 title="Свернуть или развернуть раздел">${esc(s.name)}</h3>${s.restriction ? `<div class="restr" style="padding:0 16px 6px">Ограничение на сайте: ${esc(s.restriction)}</div>` : ""}`;
     for (const it of s.items) {
       const files = (it.files || []).map(f => { const p = (d.dir ? d.dir + "/" : "") + f.path, e = extOf(p);
         return `<div class="mf"><span class="fn" title="${esc(f.title)}">${esc(f.title)}</span><span class="mmeta">${hsize(f.size)}</span>${PREVIEW.has(e) ? `<button data-prev="${esc(p)}">Просмотр</button>` : ""}<button data-ext="${esc(p)}">Открыть</button><button data-rev="${esc(p)}">В папке</button>${aiOn() && aiReadable(p) ? `<button data-ai="${esc(p)}" title="Пересказать или составить вопросы по этому файлу">ИИ</button>` : ""}</div>` + reserveHtml(d, f); }).join("");
-      const site = (it.url ? `<button data-rd="${esc(it.url)}" data-rdn="${esc(it.name)}" class="rdb">Открыть здесь</button>` : "") + (it.url ? `<button data-url="${esc(it.url)}">На сайте</button>` : "");
+      const site = (it.url ? `<button data-rd="${esc(it.url)}" data-rdn="${esc(it.name)}" class="rdb">Открыть здесь</button>` : "") + (it.url ? `<button class="bsite" data-url="${esc(it.url)}">На сайте</button>` : "");
       const extl = it.external ? `<button data-url="${esc(it.external)}">Ссылка</button>` : "";
       const note = it.online_only ? `<div class="mmeta">только онлайн${it.url ? "" : " · недоступно"}</div>` : it.error ? `<div class="mmeta" style="color:var(--bad)">${esc(it.error)}</div>` : (!d.downloaded ? `<div class="mmeta">не скачано</div>` : "");
       html += `<div class="mi ${it.online_only && !it.url ? "dim" : ""}">${icon(it.modtype)}<div style="min-width:0"><div class="mname"><span class="kb ${KC[it.kind] || "ДР"}">${KC[it.kind] || "ДР"}</span>${esc(it.name)}</div>
-        <div class="mmeta">${esc(MODT[it.modtype] || it.modtype)}${it.context && it.context !== it.name ? " · из блока «" + esc(it.context) + "»" : ""}${it.done && DONE_UI[it.done] ? ` · <span class="dn ${DONE_UI[it.done][1]}">${DONE_UI[it.done][0]}</span>` : ""}</div>
+        <div class="mmeta"><span class="mtype">${esc(MODT[it.modtype] || it.modtype)}${it.context && it.context !== it.name ? " · из блока «" + esc(it.context) + "»" : ""}</span>${it.done && DONE_UI[it.done] ? `<span class="dnw"><span class="dn ${DONE_UI[it.done][1]}">${DONE_UI[it.done][0]}</span></span>` : ""}</div>
         ${it.restriction ? `<div class="restr">Ограничение на сайте: ${esc(it.restriction)}</div>` : ""}${attHtml(it.attendance)}${it.description ? `<div class="mdesc">${esc(it.description)}</div>` : ""}${files ? `<div class="mfiles">${files}</div>` : ""}${note}${(CV.notes || []).some(n => n.item === it.key) ? `<div class="mnotes">${cvNoteChips(it)}</div>` : ""}</div><div class="side-b" style="display:flex;gap:4px">${extl}${site}<button data-nta="${esc(it.key)}" data-ntn="${esc(it.name)}" title="Добавить заметку к этому элементу">Заметка</button></div></div>`;
     }
     html += `</section>`;
@@ -2974,6 +3303,8 @@ function renderCourse(){
   el.innerHTML = html + (secs.length ? "" : `<div class="empty">Ничего не найдено.</div>`) + "</div></div>";
   bindCV();
 }
+/* свёрнут ли раздел: по умолчанию — как в «Вид → Разделы курса», нажатием на название — вручную (до закрытия курса); при поиске и фильтре показываем всё */
+function cvShut(n){ if (cvQ || cvK) return false; const m = CV && CV.tg; return m && m.has(String(n)) ? m.get(String(n)) : vGet("course", "sections") === "shut"; }
 function bindCV(){
   const {c, d} = CV, on = (id, f) => { const b = $("#" + id); if (b) b.onclick = f; };
   on("cvBack", closeCourse); on("cvSite", () => openUrl(d.url || c.url));
@@ -2988,7 +3319,8 @@ function bindCV(){
   const q = $("#cvQ"); if (q) q.oninput = e => { cvQ = e.target.value.trim().toLowerCase(); const pos = e.target.selectionStart; renderCourse(); const n = $("#cvQ"); n.focus(); n.setSelectionRange(pos, pos); };
   $$("#courseView .chip").forEach(b => b.onclick = () => { cvK = b.dataset.k; renderCourse(); });
   $$("#courseView [data-rd]").forEach(b => b.onclick = () => rdOpen(b.dataset.rd, b.dataset.rdn));
-  $$("#courseView .toc a").forEach(a => a.onclick = e => { e.preventDefault(); const t = $("#msec-" + a.dataset.sec); if (t) t.scrollIntoView({behavior: "smooth", block: "start"}); });
+  $$("#courseView .toc a").forEach(a => a.onclick = e => { e.preventDefault(); const t = $("#msec-" + a.dataset.sec); if (!t) return; if (t.classList.contains("shut")) { t.classList.remove("shut"); (CV.tg = CV.tg || new Map()).set(String(a.dataset.sec), false); } t.scrollIntoView({behavior: "smooth", block: "start"}); });
+  $$("#courseView .msec h3").forEach(h => h.onclick = () => { const t = h.parentElement, on = t.classList.toggle("shut"); (CV.tg = CV.tg || new Map()).set(t.dataset.n, on); });
 }
 
 

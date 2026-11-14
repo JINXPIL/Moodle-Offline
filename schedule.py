@@ -1532,6 +1532,12 @@ main.go-1{animation:inR .18s ease-out}main.go--1{animation:inL .18s ease-out}
 .les.past{opacity:.55}.les.on{background:color-mix(in srgb,var(--accent) 10%,transparent)}
 .les.mine{background:color-mix(in srgb,var(--accent) 8%,transparent)}.les.dim{opacity:.4}
 .tag{display:inline-block;font-size:.8rem;font-weight:700;color:#fff;border-radius:6px;padding:1px 8px;background:var(--kc,var(--other))}
+/* вид: плотность и скрытие частей пары (окно «Вид» в приложении и панель настроек здесь) */
+html[data-dens=roomy] .les{padding:16px 14px 16px 16px;gap:12px}html[data-dens=roomy] .les .m{margin-top:5px}html[data-dens=roomy] .les .tg{margin-top:6px}html[data-dens=roomy] .day h3{padding:14px 14px}
+html[data-dens=dense] .les{padding:5px 10px 5px 12px;gap:8px}html[data-dens=dense] .les .m{margin-top:1px}html[data-dens=dense] .les .tg{margin-top:2px}html[data-dens=dense] .les::before{top:5px;bottom:5px}html[data-dens=dense] .day h3{padding:6px 12px}
+html.no-color .les::before{background:transparent}html.no-color .tag{background:var(--muted)}
+html.hf-end .les .te{display:none}html.hf-type .les .tag{display:none}html.hf-room .les .m.rm{display:none}html.hf-teacher .les .m.tc{display:none}
+html.hf-stream .les .st,html.hf-stream .les .sg{display:none}html.hf-note .les .m.nt{display:none}
 .k-lecture{--kc:var(--lecture)}.k-practice{--kc:var(--practice)}.k-lab{--kc:var(--lab)}.k-exam{--kc:var(--exam)}.k-other{--kc:var(--other)}
 .sg{font-size:.8rem;border:1px solid var(--line);border-radius:6px;padding:0 7px;color:var(--muted)}
 .st{font-size:.8rem;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);border-radius:6px;padding:0 7px;font-weight:700}
@@ -1606,6 +1612,8 @@ html.wide main{padding:14px 16px 40px}
     <div class="fg"><label>Поиск (показывает все подходящие пары списком)</label><input type="search" id="q" placeholder="Предмет, преподаватель, аудитория"></div>
     <div class="fg"><label>Типы занятий (нажмите, чтобы скрыть)</label><div class="chips" id="kinds"></div></div>
     <div class="fg"><label>Размер текста</label><div class="seg size" id="size"><button data-z="0.9">А</button><button data-z="1">А</button><button data-z="1.15">А</button><button data-z="1.3">А</button></div></div>
+    <div class="fg"><label>Плотность</label><div class="seg" id="dens"><button data-d="roomy">Свободно</button><button data-d="std">Обычно</button><button data-d="dense">Плотно</button></div></div>
+    <div class="fg"><label>Что показывать в паре (нажмите, чтобы скрыть)</label><div class="chips" id="lfields"></div></div>
     <div class="fg"><button class="btn sm" onclick="print()">Печать / PDF</button></div>
   </div>
 </header>
@@ -1618,7 +1626,7 @@ const $ = id => document.getElementById(id), root = document.documentElement;
 const D = JSON.parse($("data").textContent), L = D.lessons, M = D.meta;
 /* выбор подгруппы, потоков и т.п. запоминается отдельно для каждой группы (чужое расписание не должно получить ваши фильтры);
    вид и размер текста — общие. Старые сохранённые значения подхватывает только своё расписание. */
-const NS = "rs:" + String(M.group || "") + ":", OWN = M.own !== false, SHARED = ["rs_view", "rs_scale"];
+const NS = "rs:" + String(M.group || "") + ":", OWN = M.own !== false, SHARED = ["rs_view", "rs_scale", "rs_dens", "rs_color", "rs_f_end", "rs_f_type", "rs_f_room", "rs_f_teacher", "rs_f_stream", "rs_f_note"];
 const LS = {get(k, d) { try { const sh = SHARED.includes(k); let v = localStorage.getItem(sh ? k : NS + k); if (v === null && OWN && !sh) v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
             set(k, v) { try { localStorage.setItem(SHARED.includes(k) ? k : NS + k, v); } catch (e) {} }};
 L.sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
@@ -1644,6 +1652,14 @@ let view = VIEWS.includes(h.get("view")) ? h.get("view") : (VIEWS.includes(LS.ge
 let sub = LS.get("rs_sub", ""), q = "", showPast = false, printing = false;
 let scale = parseFloat(LS.get("rs_scale", "1")); if (![0.9, 1, 1.15, 1.3].includes(scale)) scale = 1;
 root.style.setProperty("--sc", scale);
+/* «Вид»: плотность, цвет меток и какие поля показывать в паре. Те же ключи localStorage, что у приложения (там — окно «Вид»), так что выбор общий */
+const LF = [["end", "Время окончания"], ["type", "Тип занятия"], ["room", "Аудитория"], ["teacher", "Преподаватель"], ["stream", "Поток и подгруппа"], ["note", "Примечания"], ["color", "Цвет меток"]];
+const lfKey = f => f === "color" ? "rs_color" : "rs_f_" + f;
+function applyLook(){
+  const d = LS.get("rs_dens", "std"); root.dataset.dens = ["roomy", "std", "dense"].includes(d) ? d : "std";
+  LF.forEach(([f]) => root.classList.toggle(f === "color" ? "no-color" : "hf-" + f, LS.get(lfKey(f), "1") === "0"));
+}
+applyLook();
 const eff = () => printing ? "week" : q ? "list" : (view || (WIDE.matches ? "week" : "day"));
 let kinds = new Set(JSON.parse(LS.get("rs_kinds", "[]")));
 const hasMe = L.some(l => (l.src || []).includes("timetable")), hasGroup = L.some(l => (l.src || []).some(s => s !== "timetable"));
@@ -1674,10 +1690,10 @@ function lessonHTML(l){
   const mark = l.stream && smode === "mark" ? (mine.has(l.stream) ? " mine" : " dim") : "";
   const place = [l.room && `<b>${esc(l.room)}</b>`, l.address && esc(l.address)].filter(Boolean).join(" · ");
   return `<div class="les k-${l.kind || "other"}${past && !live ? " past" : ""}${live ? " on" : ""}${mark}">
-    <div class="t"><b>${esc(l.start)}</b>${l.end ? `<span>${esc(l.end)}</span>` : ""}</div>
+    <div class="t"><b>${esc(l.start)}</b>${l.end ? `<span class="te">${esc(l.end)}</span>` : ""}</div>
     <div><div class="s">${esc(l.subject)}</div>
       <div class="tg">${live ? '<span class="live">идёт сейчас</span>' : ""}<span class="tag">${esc(l.type || KIND[l.kind] || KIND.other)}</span>${l.stream ? `<span class="st">${esc(l.stream)}</span>` : ""}${l.subgroup ? `<span class="sg">подгр. ${esc(l.subgroup)}</span>` : ""}</div>
-      ${place ? `<div class="m rm">${place}</div>` : ""}${l.teacher ? `<div class="m">${esc(l.teacher)}</div>` : ""}${l.note ? `<div class="m">${esc(l.note)}</div>` : ""}</div></div>`;
+      ${place ? `<div class="m rm">${place}</div>` : ""}${l.teacher ? `<div class="m tc">${esc(l.teacher)}</div>` : ""}${l.note ? `<div class="m nt">${esc(l.note)}</div>` : ""}</div></div>`;
 }
 function dayCard(d, opts = {}){
   const id = iso(d), ls = on(id), head = opts.head === false ? "" :
@@ -1802,6 +1818,18 @@ segs("sub", "s", sub, s => { sub = s; LS.set("rs_sub", s); render(); });
 segs("who", "w", who, w => { who = w; LS.set("rs_who", w); render(); });
 segs("smode", "m", smode, m => { smode = m; LS.set("rs_smode", m); render(); });
 segs("size", "z", String(scale), z => { scale = parseFloat(z); LS.set("rs_scale", String(scale)); root.style.setProperty("--sc", scale); render(); });
+const lookUi = () => {
+  segs("dens", "d", root.dataset.dens, d => { LS.set("rs_dens", d); applyLook(); render(); });
+  $("size").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.z === String(scale)));
+  $("lfields").innerHTML = LF.map(([f, t]) => `<span class="chip ${LS.get(lfKey(f), "1") === "0" ? "off" : ""}" data-f="${f}">${t}</span>`).join("");
+};
+$("lfields").onclick = e => { const c = e.target.closest(".chip"); if (!c) return; const k = lfKey(c.dataset.f), off = LS.get(k, "1") === "0";
+  LS.set(k, off ? "1" : "0"); c.classList.toggle("off", !off); applyLook(); render(); };
+lookUi();
+/* приложение (окно «Вид») поменяло общие настройки — перечитываем: сообщением из окна-родителя и по событию storage */
+const rereadLook = () => { let z = parseFloat(LS.get("rs_scale", "1")); if (![0.9, 1, 1.15, 1.3].includes(z)) z = 1; scale = z; root.style.setProperty("--sc", scale); applyLook(); lookUi(); render(); };
+addEventListener("storage", e => { if (e.key && e.key.startsWith("rs_")) rereadLook(); });
+addEventListener("message", e => { if (e.origin === location.origin && e.data && e.data.moView) rereadLook(); });
 $("q").oninput = e => { q = e.target.value.trim().toLowerCase(); render(); };
 if (!(hasMe && hasGroup)) $("whoBox").hidden = true;
 if (!streamList.length) $("streams").hidden = true;
