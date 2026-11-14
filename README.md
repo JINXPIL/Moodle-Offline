@@ -1101,7 +1101,7 @@ GitHub видит только IP-адрес, как при открытии л�
 ### Что проверено и что нет
 
 **Проверено на настоящем Linux (x86-64):** собранный файл запускается, отдаёт окно, определяет систему и сборку, держит данные в `~/.local/share/moodle-offline` и закрывается по просьбе (`tests/smoke_binary.py`); команды и тексты файлов автозапуска, таймера systemd и LaunchAgent, выбор папки и уведомления — как команды и как файлы на подставных запусках (`tests/test_desktop_unit.py`, `tests/test_desktop_gui_unit.py`); обновление файла Linux (скачивание, ELF-проверка, право на запуск, подмена работающего файла) — `tests/test_updater_platforms_unit.py`.
-**Сборки Linux, macOS (Apple Silicon и Intel) и проверки на macOS** выполняются на серверах GitHub (`build-desktop.yaml`, `tests.yaml`).
+**Проверено на серверах GitHub (настоящие Mac):** сборки macOS для Apple Silicon (`macos-15`) и Intel (`macos-15-intel`) собираются, получают подпись «ad-hoc», запускаются без окна, отдают интерфейс, кладут данные в `~/Library/Application Support/MoodleOffline` и закрываются по просьбе; весь набор тестов проходит на macOS (`tests.yaml`, Python 3.13). Эти прогоны нашли и исправили настоящие ошибки: «это macOS» терялось при передаче дальше (автозапуск записал бы файл для Linux), а запуск серверов и список адресов для переноса ждали ответа системы десятки секунд (окно и «Перенос данных» могли висеть).
 **Не проверялось на настоящих системах:** окно выбора папки (`osascript`, `zenity`, `kdialog`), уведомления (`osascript`, `notify-send`), `systemctl --user` и `launchctl` по-настоящему, автозапуск при входе, открытие приложения из Finder и запрос разрешения macOS, окно в Chrome на Mac, snap-Chromium, Wayland, «Обновить сейчас» на настоящем Linux. Если что-то из этого не заработает — пришлите, что написано в окне и в `errors.log` (в папке данных): починим.
 
 ---
@@ -1311,6 +1311,7 @@ document.querySelector('li.section .sectionname')?.textContent       // назв
 | `Консольная версия.bat` | меню в консоли |
 | `Собрать EXE.bat` | собрать портативный `MoodleOffline.exe` |
 | `run.sh` | запуск из исходников в Linux, macOS и Termux (Android) |
+| `httpbind.py` | локальный HTTP-сервер без ожидания обратного DNS (быстрый запуск на macOS и за особым DNS) |
 | `desktop.py` | Linux и macOS: уведомления, окно выбора папки, автозапуск (`.desktop`, LaunchAgent), ночная синхронизация (systemd, LaunchAgent), snap-Chromium; без сети |
 | `moodle_offline.py` | ядро: вход, разбор курсов, загрузка, докачка, отчёты, консольная версия |
 | `gui.py`, `ui/index.html` | графический интерфейс |
