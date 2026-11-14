@@ -335,6 +335,12 @@ input.txt:focus,select.txt:focus{border-color:var(--accent)}
 .modal-box header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
 .modal-box header b{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .modal-box iframe{flex:1;border:0;background:#fff}
+/* ползунок прокрутки для сенсорных экранов (скрипт «fastScroll»): системная полоска на телефоне только показывает место, а этот можно взять и потянуть */
+.fsb{position:fixed;top:0;right:0;bottom:0;width:30px;z-index:70;pointer-events:none;visibility:hidden;opacity:0;transition:opacity .25s,visibility 0s .25s}
+.fsb.on{visibility:visible;opacity:1;transition-delay:0s}
+.fsb-thumb{position:absolute;top:0;right:0;width:30px;height:48px;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+.fsb-thumb::after{content:"";position:absolute;top:0;bottom:0;right:3px;width:5px;border-radius:3px;background:color-mix(in srgb,var(--text) 50%,transparent);transition:width .15s,right .15s,background .15s}
+.fsb.drag .fsb-thumb::after{right:4px;width:12px;background:var(--accent)}
 .updbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin:10px 18px 0;padding:10px 14px;background:var(--surface-solid);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;box-shadow:var(--shadow);animation:tin .2s}
 .updbar .ut{flex:1 1 240px;min-width:0}
 .updbar b{font-weight:600}
@@ -1612,6 +1618,65 @@ function setBarVars(){
   if (NARROW.matches && nav.offsetHeight) r.setProperty("--bnav-h", Math.max(0, nav.offsetHeight - (parseFloat(getComputedStyle(nav).paddingBottom) - 4)) + "px");
 }
 if (window.ResizeObserver) { const ro = new ResizeObserver(setBarVars); ro.observe($(".top")); ro.observe($("#topStack")); ro.observe($("#mainTabs")); } addEventListener("resize", setBarVars); setBarVars();
+/* ── ползунок прокрутки для сенсорных экранов ──
+   Системная полоска на телефоне — только индикатор: взять её пальцем нельзя, и по длинному списку приходится долго листать. Поэтому справа свой ползунок:
+   появляется, когда листаешь, и держится ещё пару секунд — его можно взять и тянуть вверх-вниз. Работает на том, что прокручивалось последним:
+   страница, окно курса, «Загрузки», читалка и т.д. (короткие списки и вложенные блоки меньше 40 % высоты экрана не берём). На компьютере с мышью
+   не включается: там обычная полоса, которую и так можно тянуть. */
+(function fastScroll(){
+  if (!matchMedia("(pointer:coarse)").matches) return;
+  const el = document.createElement("div"); el.className = "fsb"; el.setAttribute("aria-hidden", "true"); el.innerHTML = '<div class="fsb-thumb"></div>';
+  document.body.appendChild(el);
+  const th = el.firstChild, MINTH = 48;
+  let tgt = null, hideT = 0, drag = null;
+  const docEl = () => document.scrollingElement || document.documentElement;
+  const isDoc = t => t === docEl() || t === document.documentElement || t === document.body;
+  function metrics(t){ const s = isDoc(t) ? docEl() : t; return {s, ch: s.clientHeight, sh: s.scrollHeight, st: s.scrollTop}; }
+  const big = m => m.sh - m.ch >= 120 && m.ch >= innerHeight * .4;          // есть что листать, и это основная область, а не маленький список
+  function track(t){                                                             // где ползунок может ходить: у страницы — между шапкой и нижними вкладками
+    if (isDoc(t)) {
+      const hd = document.querySelector(".top"), nav = document.getElementById("mainTabs");
+      const top = hd ? hd.getBoundingClientRect().bottom : 0;
+      const bot = nav && nav.offsetHeight && getComputedStyle(nav).position === "fixed" ? nav.getBoundingClientRect().top : innerHeight;
+      return {top: Math.max(0, top) + 4, bot: bot - 4, right: 0};
+    }
+    const r = t.getBoundingClientRect();
+    return {top: Math.max(0, r.top) + 4, bot: Math.min(innerHeight, r.bottom) - 4, right: Math.max(0, innerWidth - r.right)};
+  }
+  const thumbH = (m, h) => Math.max(MINTH, Math.min(h, h * m.ch / m.sh));
+  function hide(){ clearTimeout(hideT); el.classList.remove("on", "drag"); }
+  function update(){                                                              // → true, если ползунок нужен
+    if (!tgt || !tgt.isConnected) { hide(); return false; }
+    const m = metrics(tgt), tr = track(tgt), h = tr.bot - tr.top;
+    if (!big(m) || h < 120) { hide(); return false; }
+    const hh = thumbH(m, h), y = tr.top + (h - hh) * Math.min(1, Math.max(0, m.st / (m.sh - m.ch)));
+    el.style.right = tr.right + "px"; th.style.height = hh + "px"; th.style.transform = "translateY(" + y + "px)";
+    return true;
+  }
+  function show(){ clearTimeout(hideT); el.classList.add("on"); if (!drag) hideT = setTimeout(() => el.classList.remove("on"), 1800); }
+  document.addEventListener("scroll", e => {
+    if (drag) return;                                                              // тянем сами — само положение ведёт pointermove
+    const t = e.target === document ? docEl() : e.target;
+    if (!(t instanceof Element)) return;
+    if (t !== tgt) { if (!big(metrics(t))) return; tgt = t; }
+    if (update()) show();
+  }, {capture: true, passive: true});
+  addEventListener("resize", () => { if (el.classList.contains("on")) update(); });
+  th.addEventListener("pointerdown", e => {
+    if (!tgt || !update()) return;
+    drag = {y: e.clientY, st: metrics(tgt).st, id: e.pointerId};
+    try { th.setPointerCapture(e.pointerId); } catch (_) {}
+    clearTimeout(hideT); el.classList.add("drag"); e.preventDefault();
+  });
+  th.addEventListener("pointermove", e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const m = metrics(tgt), tr = track(tgt), free = (tr.bot - tr.top) - thumbH(m, tr.bot - tr.top);
+    if (free > 0) m.s.scrollTop = drag.st + (e.clientY - drag.y) * (m.sh - m.ch) / free;   // присваиванием, а не scrollTo({behavior}) — так работает и в старых WebView
+    update(); e.preventDefault();
+  });
+  const end = () => { if (!drag) return; drag = null; el.classList.remove("drag"); if (update()) show(); else hide(); };
+  th.addEventListener("pointerup", end); th.addEventListener("pointercancel", end); th.addEventListener("lostpointercapture", end);
+})();
 /* телефон: «Загрузки» — лист на весь экран, открывается значком в шапке. Пока идёт загрузка, ход виден на самом значке и по полоске под шапкой, поэтому сама панель сама не выскакивает */
 function showDock(){
   if (!NARROW.matches) return $("#dock").classList.remove("collapsed");

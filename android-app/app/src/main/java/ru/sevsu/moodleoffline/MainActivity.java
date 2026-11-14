@@ -69,6 +69,7 @@ public class MainActivity extends Activity {
         root.addView(status, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(root);
         Web.configure(web, this);
+        web.setVerticalScrollBarEnabled(false);   // системная полоска справа не тянется пальцем — вместо неё свой ползунок в ui/index.html (fastScroll); во втором окне (ViewerActivity) его нет, там системная остаётся
         if (Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 5);
