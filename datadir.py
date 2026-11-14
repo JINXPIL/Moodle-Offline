@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,8 +51,11 @@ class Plan:
 def user_data_root(env=None, home: Path | None = None, os_name: str | None = None) -> Path:
     env = os.environ if env is None else env
     home = Path(home) if home else Path.home()
-    if (os_name or os.name) == "nt":
+    os_name = os_name or ("darwin" if sys.platform == "darwin" else os.name)       # "nt" | "darwin" | "posix"
+    if os_name == "nt":
         return Path(env.get("LOCALAPPDATA") or (home / "AppData" / "Local")) / "MoodleOffline"
+    if os_name == "darwin":
+        return home / "Library" / "Application Support" / "MoodleOffline"
     xdg = env.get("XDG_DATA_HOME")
     return (Path(xdg) if xdg else home / ".local" / "share") / "moodle-offline"
 

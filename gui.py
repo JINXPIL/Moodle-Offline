@@ -30,6 +30,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import ai
 import android
+import desktop
 import dl_rules
 import moodle_offline as mo
 import datadir
@@ -591,8 +592,16 @@ class App:
             p = android.boot_path(home)
             return {"supported": True, "kind": "termux-boot", "on": p.exists(), "path": str(p),
                     "app_ready": android.boot_dir(home).is_dir()}
+        if os.name != "nt":       # Linux — файл в ~/.config/autostart, macOS — LaunchAgent (desktop.py)
+            p = desktop.autostart_path(desktop.system(), Path.home(), os.environ)
+            return {"supported": p is not None, "kind": desktop.kind_of(), "on": bool(p and p.exists()), "path": str(p or "")}
         p = watch.startup_path(os.environ)
         return {"supported": os.name == "nt", "kind": "windows", "on": bool(p and p.exists()), "path": str(p or "")}
+
+    def _bg_command(self, *flags: str) -> list[str]:
+        """Команда для фона (автозапуск, ночная синхронизация): собранный файл — сам (gui.py пропускает ключи консольной версии),
+        исходники — Python и moodle_offline.py."""
+        return desktop.program_command(mo.FROZEN, sys.executable, sys.executable, str(mo.APP_DIR / "moodle_offline.py"), *flags)
 
     def autostart_set(self, enabled: bool) -> dict:
         if android.is_apk():
@@ -612,7 +621,10 @@ class App:
                 return {"ok": False, "error": mo.describe_error(e)}
             return {"ok": True, **self.autostart_info()}
         if os.name != "nt":
-            return {"ok": False, "error": "автозапуск из окна есть только в Windows; в Linux и Android используйте systemd/cron/Termux:Boot (см. README)"}
+            r = desktop.autostart_set(enabled, self._bg_command("--watch", "-y"), env=os.environ)
+            if not r.get("ok"):
+                return {"ok": False, "error": r.get("error") or "не получилось сохранить настройку автозапуска"}
+            return {"ok": True, **self.autostart_info()}
         p = watch.startup_path(os.environ)
         if p is None:
             return {"ok": False, "error": "не нашёл папку автозагрузки Windows"}
@@ -1051,8 +1063,9 @@ class App:
     def update_status(self) -> dict:
         st = updater.status(self._upd_cfg(), mo.VERSION, self._upd_kind())
         lt = st.get("latest") or {}
-        # «Обновить сейчас» есть только у Windows-программы (.exe), когда в релизе есть и файл, и контрольная сумма, и рядом можно писать
-        can = bool(st["kind"] == "exe" and st["newer"] and lt.get("asset_url") and lt.get("sha_url") and updater.can_write_next_to(self._exe_path()))
+        # «Обновить сейчас» есть только у собранной программы Windows и Linux, когда в релизе есть и файл, и контрольная сумма,
+        # и рядом можно писать. macOS — приложение-папка: его ставят вручную
+        can = bool(st["kind"] in updater.CAN_SWAP and st["newer"] and lt.get("asset_url") and lt.get("sha_url") and updater.can_write_next_to(self._exe_path()))
         with self.lock:
             inst = dict(self.upd_install)
         return {"ok": True, **st, "can_install": can, "install": inst}
@@ -1061,7 +1074,7 @@ class App:
         """Скачать новую версию в фоне (рядом с программой), проверить контрольную сумму. Подмена и перезапуск — отдельной кнопкой."""
         st = self.update_status()
         if not st["can_install"]:
-            return {"ok": False, "error": "Из программы обновиться нельзя (не Windows-версия, нет файла в релизе или папку программы нельзя менять) — скачайте файл вручную."}
+            return {"ok": False, "error": "Из программы обновиться нельзя (не собранная программа для Windows или Linux, нет файла в релизе или папку программы нельзя менять) — скачайте файл вручную."}
         with self.lock:
             if self.upd_install["state"] in ("downloading", "ready"):
                 return {"ok": True, **self.update_status_unlocked()}
@@ -1083,7 +1096,8 @@ class App:
         try:
             sha = updater.fetch_expected_sha(lt.get("sha_url", ""), mo.VERSION, proxy)
             updater.download_verified(lt["asset_url"], updater.new_path(exe), sha, int(lt.get("size") or 0), progress=prog,
-                                      stop=lambda: self.shutdown.is_set(), current=mo.VERSION, use_system_proxy=proxy)
+                                      stop=lambda: self.shutdown.is_set(), current=mo.VERSION, use_system_proxy=proxy,
+                                      magic=updater.MAGIC.get(self._upd_kind(), b"MZ"))
             with self.lock:
                 self.upd_install["state"] = "ready"
             self.rep.log(f"Новая версия {lt['version']} скачана и проверена. Нажмите «Перезапустить и обновить».")
@@ -2635,10 +2649,20 @@ class App:
                 st = self.job_hint
         return st
 
-    # ── планировщик Windows ──
+    # ── планировщик: Windows — schtasks, Linux — таймер systemd, macOS — LaunchAgent ──
     def schedule(self, enabled: bool, hhmm: str):
         if os.name != "nt":
-            return {"ok": False, "error": "расписание через планировщик есть только в Windows (в Linux используйте cron)"}
+            if ANDROID:
+                return {"ok": False, "error": "на телефоне ночная синхронизация идёт через «Таймер и автообновление»"}
+            r = desktop.schedule_set(enabled, hhmm, self._bg_command("--sync", "-y"), env=os.environ)
+            if not r.get("ok"):
+                return {"ok": False, "error": r.get("error") or "не получилось настроить ночную синхронизацию"}
+            self.settings["schedule_on"] = bool(enabled)
+            if enabled:
+                self.settings["schedule_time"] = hhmm
+                self.settings["schedule_exe"] = sys.executable if mo.FROZEN else ""
+            self.save_settings()
+            return {"ok": True}
         if not enabled:
             r = subprocess.run(["schtasks", "/Delete", "/TN", TASK_NAME, "/F"], capture_output=True, text=True,
                                creationflags=0x08000000)
@@ -2663,10 +2687,10 @@ class App:
         return {"ok": True}
 
     def repair_schedule(self):
-        """Ночная синхронизация в планировщике Windows хранит путь к .exe. Положили новую версию в другое место —
-        старая задача указывает в пустоту. Если путь сменился, пересоздаём задачу с тем же временем."""
+        """Ночная синхронизация в планировщике (Windows, systemd, LaunchAgent) хранит путь к программе. Положили новую версию в другое
+        место — старая задача указывает в пустоту. Если путь сменился, пересоздаём задачу с тем же временем."""
         st = self.settings
-        if os.name != "nt" or not mo.FROZEN or not st.get("schedule_on") or st.get("schedule_exe") == sys.executable:
+        if ANDROID or not mo.FROZEN or not st.get("schedule_on") or st.get("schedule_exe") == sys.executable:
             return
         r = self.schedule(True, st.get("schedule_time") or "03:10")
         self.rep.log("Ночная синхронизация: путь к программе изменился, задачу в планировщике обновил." if r.get("ok")
@@ -2705,21 +2729,42 @@ def open_path(p: Path, reveal=False):
         subprocess.Popen(["xdg-open", str(target)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def pick_folder(initial: str):
+def _tk_pick_folder(initial: str, title: str):
     try:
         import tkinter as tk
         from tkinter import filedialog
     except ImportError:
         return None
-    root = tk.Tk()
+    try:
+        root = tk.Tk()
+    except Exception:                      # нет экрана (Linux без графики) — окна выбора нет
+        return None
     root.withdraw()
     try:
         root.attributes("-topmost", True)
     except Exception:
         pass
-    path = filedialog.askdirectory(initialdir=initial or str(Path.home()), title="Куда сохранять материалы")
+    path = filedialog.askdirectory(initialdir=initial or str(Path.home()), title=title)
     root.destroy()
-    return path or None
+    return path or ""
+
+
+def pick_folder(initial: str, title: str = "Куда сохранять материалы"):
+    """Окно выбора папки. → путь; "" — человек отказался; None — окна выбора здесь нет (тогда путь вводят вручную).
+    macOS: osascript, Linux: zenity/kdialog (desktop.py), на Windows и как запасной путь на Linux — tkinter.
+    На macOS tkinter не берём: Tk там падает всегда, кроме главного потока, а запрос приходит из потока сервера."""
+    initial = initial or str(Path.home())
+    if os.name != "nt" and not android.is_android():
+        r = desktop.pick_folder(title, initial)
+        if r is not None or desktop.system() == "macos":
+            return r
+    return _tk_pick_folder(initial, title)
+
+
+def no_picker_text() -> str:
+    if desktop.system() == "linux" and not android.is_android():
+        return "Окна выбора папки не нашлось: впишите путь в поле вручную (или поставьте zenity: sudo apt install zenity)."
+    return "Окна выбора папки здесь нет: впишите путь в поле вручную."
 
 
 EXT_MIME = {".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json",
@@ -3234,7 +3279,9 @@ class Handler(BaseHTTPRequestHandler):
             datadir.mark_seen(mo.DATA_DIR)
             return self._send(200, {"ok": True})
         if p == "/api/data/import":
-            path = (b.get("path") or "").strip() or pick_folder(str(mo.APP_DIR.parent))
+            path = (b.get("path") or "").strip() or pick_folder(str(mo.APP_DIR.parent), "Папка прежней версии (с .moodle_offline)")
+            if path is None:
+                return self._send(200, {"ok": False, "error": no_picker_text()})
             if not path:
                 return self._send(200, {"ok": False, "cancelled": True})
             return self._send(200, APP.data_import(path))
@@ -3243,7 +3290,7 @@ class Handler(BaseHTTPRequestHandler):
             if path:
                 APP.settings["out_dir"] = path
                 APP.save_settings()
-            return self._send(200, {"ok": bool(path), "path": path or ""})
+            return self._send(200, {"ok": bool(path), "path": path or "", **({"error": no_picker_text()} if path is None else {})})
         if p == "/api/schedule":
             return self._send(200, APP.schedule(bool(b.get("enabled")), b.get("time", "03:00")))
         if p == "/api/restart":
@@ -3278,7 +3325,7 @@ class Handler(BaseHTTPRequestHandler):
                                                    "quiet_hours_on", "schedule_on", "schedule_time", "wait_for_server",
                                                    "use_system_proxy", "original_names", "index_in_mode2", "no_geo_check", "android_wakelock")},
                          "keep_versions": bool(st.get("keep_versions", True)), "save_grades": bool(st.get("save_grades", True))},
-            "platform": os.name, "android": ANDROID, "android_info": APP.android_info() if ANDROID else None, "browser_pdf": bool(mo.find_browser()),
+            "platform": os.name, "system": "android" if ANDROID else desktop.system(), "android": ANDROID, "android_info": APP.android_info() if ANDROID else None, "browser_pdf": bool(mo.find_browser()),
             "news_unread": APP.news_unread(),
             "update": APP.update_brief(),
             "cal_badge": APP.cal_badge(),

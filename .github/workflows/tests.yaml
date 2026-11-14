@@ -14,13 +14,16 @@ permissions:
   contents: read
 jobs:
   unit:
-    name: tests (Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    name: tests (Python ${{ matrix.python }}${{ matrix.os == 'macos-latest' && ', macOS' || '' }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15   # обычно 2–3 минуты
     strategy:
-      fail-fast: false      # если упала одна версия Python — вторая всё равно проверится
+      fail-fast: false      # если упала одна версия Python (или macOS) — остальные всё равно проверятся
       matrix:
-        python: ["3.11", "3.13"]
+        include:
+          - {os: ubuntu-latest, python: "3.11"}
+          - {os: ubuntu-latest, python: "3.13"}
+          - {os: macos-latest, python: "3.13"}      # Mac: те же проверки (программа работает и на macOS, см. README)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

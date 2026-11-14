@@ -22,7 +22,7 @@ ok(u.is_newer("2", "1.99.9"), "2 новее 1.99.9")
 
 # где запущено
 ok(u.kind(apk=True, android=True) == "apk" and u.kind(android=True) == "termux"
-   and u.kind(frozen=True) == "exe" and u.kind() == "source", "kind")
+   and u.kind(frozen=True, system="windows") == "exe" and u.kind() == "source", "kind")
 ok("apk" in u.how_to("apk").lower() and "git pull" in u.how_to("termux") and "Обновить сейчас" in u.how_to("exe") and "(1)" in u.how_to("exe"), "how_to")
 
 # настройки

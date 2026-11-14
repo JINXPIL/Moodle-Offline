@@ -1,0 +1,123 @@
+# Сборка программы для Linux и macOS на серверах GitHub (Windows — в build-exe.yaml, Android — в build-apk.yaml).
+#  • В pull request (если менялся код): собирает файлы и запускает собранную программу без окна — проверка, что она поднимается,
+#    отдаёт интерфейс, держит данные в своей папке и закрывается (tests/smoke_binary.py). Красный крестик — сборка не годится.
+#  • Вручную (Actions → build-desktop → Run workflow): то же + артефакты для скачивания.
+#  • По тегу v*: то же + файлы выкладываются в Releases вместе с контрольными суммами SHA-256:
+#      MoodleOffline-linux-x86_64            — один исполняемый файл (программа сама обновляется кнопкой «Обновить сейчас»);
+#      MoodleOffline-macos-arm64.zip         — приложение MoodleOffline.app для Mac на Apple Silicon (M1 и новее);
+#      MoodleOffline-macos-x86_64.zip        — то же для Mac с процессором Intel.
+#    Приложение macOS НЕ подписано сертификатом разработчика Apple (он платный): при первом запуске система спросит разрешение
+#    (см. README, раздел про Linux и macOS).
+#  • Сборка Windows от этих задач не зависит: упала одна — остальные всё равно выкладываются.
+name: build-desktop
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "*.py"
+      - "ui/**"
+      - "requirements.txt"
+      - "tests/smoke_binary.py"
+      - ".github/workflows/build-desktop.yaml"
+permissions:
+  contents: write   # нужно, чтобы создать релиз и приложить к нему файлы (на pull request не используется)
+jobs:
+  linux:
+    name: linux (x86_64)
+    runs-on: ubuntu-22.04   # самая старая из доступных: собранный файл запускается и на более старых дистрибутивах (нужна glibc не старше 2.35)
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Версия из тега (чтобы тег и версия внутри файла не расходились)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          if ! echo "$ver" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then echo "::error::Тег $GITHUB_REF_NAME не похож на версию (нужно v1.2.3)"; exit 1; fi
+          sed -i -E "s/^VERSION = \".*\"/VERSION = \"$ver\"/" moodle_offline.py
+          grep -n '^VERSION = ' moodle_offline.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pyinstaller
+      - run: pyinstaller --noconfirm --onefile --windowed --name MoodleOffline --add-data "ui:ui" gui.py
+      - name: Проверка собранной программы (запуск без окна)
+        run: python tests/smoke_binary.py --system linux --kind linux --data-rel .local/share/moodle-offline -- dist/MoodleOffline
+      - name: Файл релиза
+        run: |
+          cd dist
+          cp MoodleOffline MoodleOffline-linux-x86_64
+          chmod +x MoodleOffline-linux-x86_64
+          sha256sum MoodleOffline-linux-x86_64 > MoodleOffline-linux-x86_64.sha256
+          ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MoodleOffline-linux-x86_64
+          path: |
+            dist/MoodleOffline-linux-x86_64
+            dist/MoodleOffline-linux-x86_64.sha256
+      - name: Выложить в Releases (только для тегов v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # релиз мог уже создать соседняя задача (Windows, macOS): создаём, только если его ещё нет, и в любом случае добавляем файлы
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "Moodle Offline $GITHUB_REF_NAME" --generate-notes \
+            || gh release view "$GITHUB_REF_NAME" >/dev/null
+          gh release upload "$GITHUB_REF_NAME" dist/MoodleOffline-linux-x86_64 dist/MoodleOffline-linux-x86_64.sha256 --clobber
+
+  macos:
+    name: macos (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false      # не вышла одна сборка — вторая всё равно нужна
+      matrix:
+        include:
+          - os: macos-14          # Apple Silicon (M1 и новее)
+            arch: arm64
+          - os: macos-15-intel    # процессор Intel (последний образ с Intel у GitHub)
+            arch: x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Версия из тега
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          if ! echo "$ver" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then echo "::error::Тег $GITHUB_REF_NAME не похож на версию (нужно v1.2.3)"; exit 1; fi
+          sed -i '' -E "s/^VERSION = \".*\"/VERSION = \"$ver\"/" moodle_offline.py
+          grep -n '^VERSION = ' moodle_offline.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pyinstaller
+      # --windowed без --onefile на macOS даёт приложение MoodleOffline.app (папка); внутри — исполняемый файл Contents/MacOS/MoodleOffline
+      - run: pyinstaller --noconfirm --windowed --name MoodleOffline --osx-bundle-identifier org.moodleoffline.app --add-data "ui:ui" gui.py
+      - name: Проверка собранной программы (запуск без окна)
+        run: python tests/smoke_binary.py --system macos --kind macos --data-rel "Library/Application Support/MoodleOffline" -- dist/MoodleOffline.app/Contents/MacOS/MoodleOffline
+      - name: Архив релиза
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent MoodleOffline.app "MoodleOffline-macos-${{ matrix.arch }}.zip"
+          shasum -a 256 "MoodleOffline-macos-${{ matrix.arch }}.zip" > "MoodleOffline-macos-${{ matrix.arch }}.zip.sha256"
+          ls -la
+          codesign -dv MoodleOffline.app 2>&1 | head -5 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MoodleOffline-macos-${{ matrix.arch }}
+          path: |
+            dist/MoodleOffline-macos-${{ matrix.arch }}.zip
+            dist/MoodleOffline-macos-${{ matrix.arch }}.zip.sha256
+      - name: Выложить в Releases (только для тегов v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "Moodle Offline $GITHUB_REF_NAME" --generate-notes \
+            || gh release view "$GITHUB_REF_NAME" >/dev/null
+          gh release upload "$GITHUB_REF_NAME" "dist/MoodleOffline-macos-${{ matrix.arch }}.zip" "dist/MoodleOffline-macos-${{ matrix.arch }}.zip.sha256" --clobber

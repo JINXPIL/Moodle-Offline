@@ -729,7 +729,7 @@ body.android .no-android{display:none!important}
             <div class="row"><div class="lbl">Ждать поднятия сервера<small>если Moodle лежит — начну сам, когда оживёт</small></div><label class="sw-t"><input type="checkbox" data-s="wait_for_server"><span></span></label></div>
             <div class="row" style="flex-wrap:wrap"><div class="lbl">Тихие часы<small>качать только в это время</small></div><label class="sw-t"><input type="checkbox" data-s="quiet_hours_on"><span></span></label>
               <div class="times" style="width:100%"><span class="hint" style="margin:0">с</span><input type="time" id="qhFrom" value="01:00"><span class="hint" style="margin:0">до</span><input type="time" id="qhTo" value="07:00"></div></div>
-            <div class="row" style="flex-wrap:wrap" id="schedRow"><div class="lbl">Ночная синхронизация<small>планировщик Windows, каждый день</small></div><label class="sw-t"><input type="checkbox" id="schedOn"><span></span></label>
+            <div class="row" style="flex-wrap:wrap" id="schedRow"><div class="lbl">Ночная синхронизация<small id="schedHint">планировщик Windows, каждый день</small></div><label class="sw-t"><input type="checkbox" id="schedOn"><span></span></label>
               <div class="times" style="width:100%"><span class="hint" style="margin:0">в</span><input type="time" id="schedTime" value="03:10"></div></div>
             <div class="row" style="flex-wrap:wrap"><div class="lbl">Таймер и автообновление<small id="watchInfo">как часто проверять Moodle и докачивать недостающее само</small></div>
               <button class="btn" id="watchOpen">Настроить…</button></div>
@@ -834,7 +834,7 @@ body.android .no-android{display:none!important}
             <button class="btn primary big" id="schSave" style="margin-top:10px">Сохранить для офлайна</button>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
               <button class="btn" id="schOpen">Открыть в браузере</button><button class="btn" id="schIcs">В календарь (.ics)</button><button class="btn" id="schSnaps">Снимки страниц</button></div>
-            <p class="hint">Данные копятся: сохранили месяц, потом неделю — месяц не пропадёт. Официальные сайты СевГУ открываются через Edge в фоне, как в обычном браузере.</p>
+            <p class="hint">Данные копятся: сохранили месяц, потом неделю — месяц не пропадёт. Официальные сайты СевГУ открываются через Edge или Chrome в фоне, как в обычном браузере.</p>
           </div>
         </aside>
       </div>
@@ -1021,7 +1021,7 @@ body.android .no-android{display:none!important}
       <div id="nsKinds"></div>
       <p class="hint">«В ленту» — запоминать событие во вкладке. «Уведомлять» — ещё и присылать сообщение. Выключенное на сайте не запрашивается: например, без «Оценка» журнал оценок не открывается.</p></div>
     <div class="rsec"><h4>Куда присылать</h4>
-      <div class="nch"><div class="hd"><div>Окно на компьютере<small>всплывающее уведомление Windows</small></div><label class="sw-t"><input type="checkbox" id="nsToast"><span></span></label></div></div>
+      <div class="nch"><div class="hd"><div>Окно на компьютере<small id="nsToastHint">всплывающее уведомление Windows</small></div><label class="sw-t"><input type="checkbox" id="nsToast"><span></span></label></div></div>
       <div class="nch"><div class="hd"><div>Telegram<small>бот пришлёт сообщение вам в чат</small></div><label class="sw-t"><input type="checkbox" id="nsTg"><span></span></label></div>
         <div class="fl"><input class="txt" id="nsTgTok" type="password" autocomplete="off" spellcheck="false"><input class="txt" id="nsTgChat" placeholder="chat id, например 123456789" spellcheck="false"></div>
         <p class="hint" style="margin:0">Создайте бота у @BotFather, напишите ему любое сообщение и укажите его токен и свой chat id (его показывает, например, бот @userinfobot). Токен хранится зашифрованно. <a href="#" class="link" id="nsTgClear" style="display:none">Забыть токен</a></p></div>
@@ -1066,7 +1066,7 @@ body.android .no-android{display:none!important}
       <div class="path"><input class="txt" id="csAhead" type="number" min="7" max="365" style="width:90px;flex:none"><span class="hint" style="margin:auto 0">дней вперёд спрашивать у Moodle</span></div>
       <div class="path" style="margin-top:8px"><input class="txt" id="csBack" type="number" min="0" max="90" style="width:90px;flex:none"><span class="hint" style="margin:auto 0">дней показывать просроченное</span></div></div>
     <div class="rsec"><label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Пары расписания в календаре<small>в общий .ics и в повестку (расписание нужно сохранить во вкладке «Расписание»)</small></span><span class="sw-t"><input type="checkbox" id="csLessons"><span></span></span></label></div>
-    <div class="rsec"><label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Сообщать в «Что нового» о сроках<small>новый срок, перенос и «срок горит»; каналы (окно Windows, Telegram, webhook) — в настройках «Что нового»</small></span><span class="sw-t"><input type="checkbox" id="csNotify"><span></span></span></label></div>
+    <div class="rsec"><label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Сообщать в «Что нового» о сроках<small>новый срок, перенос и «срок горит»; каналы (окно на компьютере, Telegram, webhook) — в настройках «Что нового»</small></span><span class="sw-t"><input type="checkbox" id="csNotify"><span></span></span></label></div>
     <div class="rsec"><label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Скрывать то, что отмечено «сделано»<small>в списке и в файле .ics (напоминаний о сделанном не будет)</small></span><span class="sw-t"><input type="checkbox" id="csHide"><span></span></span></label></div>
     <div class="rsec"><h4>Не брать сроки этих курсов</h4><div class="modgrid" id="csCourses"></div></div>
   </div>
@@ -1083,7 +1083,7 @@ body.android .no-android{display:none!important}
       <div class="modgrid" style="margin-top:10px">
         <label><span class="sw-t"><input type="checkbox" id="wtCDown"><span></span></span><span>Сообщить, что Moodle не отвечает</span></label>
         <label><span class="sw-t"><input type="checkbox" id="wtCUp"><span></span></span><span>Сообщить, что Moodle снова работает</span></label></div>
-      <p class="hint" id="wtCNote">Сообщения приходят туда же, куда и «Что нового» (окно Windows, Telegram, webhook — каналы настраиваются в «Что нового»).</p></div>
+      <p class="hint" id="wtCNote">Сообщения приходят туда же, куда и «Что нового» (окно на компьютере, Telegram, webhook — каналы настраиваются в «Что нового»).</p></div>
     <div class="rsec" id="wtAutoSec"><h4>Автообновление файлов</h4>
       <label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Рубильник: докачивать само по таймеру<small>программа сверит файлы на диске: что есть — не трогает, чего не хватает — докачает; если ничего не скачано — скачает всё выбранное</small></span><span class="sw-t"><input type="checkbox" id="wtAOn"><span></span></span></label>
       <div id="wtABody">
@@ -1276,6 +1276,14 @@ async function apiRaw(path, body) {
 const fileUrl = p => "/f/" + encodeURIComponent(T) + "/" + p.split("/").map(encodeURIComponent).join("/");   // ключ в адресе — чтобы у страницы грузились и её скрипты/стили
 function hsize(n){ if(n==null) return ""; const u=["Б","КБ","МБ","ГБ"]; let i=0; while(n>=1024&&i<3){n/=1024;i++} return (i?n.toFixed(1):n.toFixed(0))+" "+u[i]; }
 function dur(s){ if(s==null||!isFinite(s)) return ""; s=Math.round(s); if(s<60) return s+" с"; const m=Math.floor(s/60); return m+" мин "+(s%60)+" с"; }
+/* подписи, зависящие от системы: Windows, macOS, Linux (S.system приходит из /api/state) */
+const SYS_TEXT = sys => ({
+  macos:   {login: "macOS", sched: "служба macOS (launchd), каждый день", toast: "уведомление macOS",
+            autostart: "Служба лежит в вашей папке ~/Library/LaunchAgents, права администратора не нужны."},
+  linux:   {login: "систему", sched: "таймер systemd (systemctl --user), каждый день", toast: "уведомление рабочего стола (нужен notify-send)",
+            autostart: "Файл автозапуска лежит в ~/.config/autostart, права администратора не нужны."},
+}[sys] || {login: "Windows", sched: "планировщик Windows, каждый день", toast: "всплывающее уведомление Windows",
+          autostart: "Файл автозапуска лежит в вашей папке автозагрузки, права администратора не нужны."});
 function toast(msg, kind=""){ const d=document.createElement("div"); d.className="toast "+kind; d.textContent=msg; $("#toasts").appendChild(d); setTimeout(()=>d.remove(), 6000); }
 
 /* ── тема и акцент ── */
@@ -1421,15 +1429,16 @@ function loadSettings(st){
   $$("[data-s]").forEach(i => i.checked = !!s[i.dataset.s]);
   if (s.quiet_hours) { const [a, b] = s.quiet_hours.split("-"); $("#qhFrom").value = a.padStart(5, "0"); $("#qhTo").value = b.padStart(5, "0"); }
   $("#schedOn").checked = !!s.schedule_on; if (s.schedule_time) $("#schedTime").value = s.schedule_time;
-  $("#schedRow").classList.toggle("hidden", st.platform !== "nt");
+  $("#schedRow").classList.toggle("hidden", st.system === "android");
+  if (!ANDROID) { $("#schedHint").textContent = SYS_TEXT(st.system).sched; const nh = $("#nsToastHint"); if (nh) nh.textContent = SYS_TEXT(st.system).toast; }
   const pdf = $('[data-s="pdf"]'); pdf.disabled = !st.browser_pdf;
-  $("#pdfNote").textContent = st.browser_pdf ? "задания, тесты, страницы — ещё и в PDF" : ANDROID ? "на телефоне недоступно" : "нужен Microsoft Edge или Google Chrome";
+  $("#pdfNote").textContent = st.browser_pdf ? "задания, тесты, страницы — ещё и в PDF" : ANDROID ? "на телефоне недоступно" : "нужен Microsoft Edge, Google Chrome или Chromium";
   if (!settingsLoaded) { (s.course_ids || []).forEach(id => selected.add(+id)); settingsLoaded = true; }
 }
 $$(".mopt").forEach(m => m.onclick = () => { $$(".mopt").forEach(x => x.classList.toggle("on", x === m)); $("#tplBox").classList.toggle("hidden", +m.dataset.m !== 3); api("/api/settings", {mode: +m.dataset.m}); });
 $$("[data-s]").forEach(i => i.onchange = () => api("/api/settings", {[i.dataset.s]: i.checked}));
 $("#outDir").onchange = e => api("/api/settings", {out_dir: e.target.value.trim()}).then(loadCourses);
-$("#pickDir").onclick = async () => { const r = await api("/api/pick_folder", {}); if (r.ok) { $("#outDir").value = r.path; loadCourses(); } };
+$("#pickDir").onclick = async () => { const r = await api("/api/pick_folder", {}); if (r.ok) { $("#outDir").value = r.path; loadCourses(); } else if (r.error) toast(r.error, "bad"); };
 $("#openDir").onclick = () => api("/api/open", {path: ""});
 $("#quitBtn").onclick = async () => { if (!confirm("Остановить программу? Таймер и автообновление перестанут работать, пока вы не " + (IS_APK() ? "откроете приложение снова." : "запустите её снова в Termux."))) return;
   await api("/api/quit", {}); toast("Программа остановлена. Эту вкладку можно закрыть."); setTimeout(() => { document.body.innerHTML = '<p style="padding:24px;font:16px system-ui">Программа остановлена. ' + (IS_APK() ? 'Чтобы запустить снова, откройте приложение Moodle Offline.' : 'Чтобы запустить снова, откройте Termux и выполните <code>./run.sh</code>') + '</p>'; }, 800); };
@@ -2767,14 +2776,14 @@ async function openWatch(){
     : as.kind === "termux-boot"
     ? `<label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Запускать слежение при включении телефона<small>без окна: проверка Moodle и автообновление идут в фоне. Нужно приложение Termux:Boot (из F-Droid) — установите его и один раз откройте${as.app_ready ? "" : " (папка автозапуска ещё не создана)"}</small></span><span class="sw-t"><input type="checkbox" id="wtAuto" ${as.on ? "checked" : ""}><span></span></span></label>`
     : as.supported
-    ? `<label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Запускать слежение при входе в Windows<small>без окна, в фоне: проверка Moodle и автообновление идут, пока компьютер включён. Выключить — здесь же. Файл автозапуска лежит в вашей папке автозагрузки, права администратора не нужны</small></span><span class="sw-t"><input type="checkbox" id="wtAuto" ${as.on ? "checked" : ""}><span></span></span></label>`
-    : `<p class="hint" style="margin:0">Без окна: <code>python moodle_offline.py --watch -y</code> (Linux, см. README). Автозапуск из окна есть только в Windows и на Android.</p>`;
+    ? `<label class="row" style="border:0;padding:0;cursor:pointer"><span class="lbl">Запускать слежение при входе в ${SYS_TEXT((S && S.system) || "").login}<small>без окна, в фоне: проверка Moodle и автообновление идут, пока компьютер включён. Выключить — здесь же. ${SYS_TEXT((S && S.system) || "").autostart}</small></span><span class="sw-t"><input type="checkbox" id="wtAuto" ${as.on ? "checked" : ""}><span></span></span></label>`
+    : `<p class="hint" style="margin:0">Без окна: <code>python moodle_offline.py --watch -y</code> (см. README). Автозапуск из окна есть в Windows, Linux, macOS и на Android.</p>`;
   $("#wtBg").innerHTML = abody + wk + bat;
   if ($("#wtBat")) $("#wtBat").onclick = () => api("/api/android/action", {name: "battery"});
   if (as.supported) $("#wtAuto").onchange = async e => {
     const r = await api("/api/watch/autostart", {enabled: e.target.checked});
     if (!r.ok) { e.target.checked = !e.target.checked; $("#wtMsg").textContent = r.error || "Не получилось"; return; }
-    toast(e.target.checked ? (ANDROID ? "Слежение будет запускаться при включении телефона" : "Слежение будет запускаться при входе в Windows") : "Автозапуск слежения выключен", "ok");
+    toast(e.target.checked ? (ANDROID ? "Слежение будет запускаться при включении телефона" : "Слежение будет запускаться при входе в " + SYS_TEXT((S && S.system) || "").login) : "Автозапуск слежения выключен", "ok");
   };
   if (ANDROID) $("#wtWake").onchange = e => { api("/api/settings", {android_wakelock: e.target.checked}); if (S) S.settings.android_wakelock = e.target.checked; };
   $("#wtMsg").textContent = WT.other ? "Автообновление сейчас ведёт другая программа (" + WT.other + "); окно его не запускает." : (WT.why && a.enabled ? "Сейчас: " + WT.why : "");
@@ -3358,7 +3367,7 @@ function renderUpd(u){
   clearTimeout(updPoll);
   if (u.install && u.install.state === "downloading") updPoll = setTimeout(loadUpd, 700);     // пока качается — показываем ход
 }
-/* «Обновить сейчас» (только Windows-программа): скачать → проверить → перезапустить */
+/* «Обновить сейчас» (собранная программа Windows и Linux; macOS — вручную): скачать → проверить → перезапустить */
 function updInstallHtml(u){
   if (!u.can_install) return "";
   const i = u.install || {state: "idle"};

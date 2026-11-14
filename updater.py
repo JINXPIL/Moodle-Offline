@@ -3,17 +3,20 @@
 Что делает: раз в сутки (или по кнопке) спрашивает у GitHub, какая версия последняя, и сравнивает со своей.
 Ходит ТОЛЬКО на api.github.com (последний релиз репозитория программы; через системный прокси, если он есть). Ничего о вас не отправляет:
 ни пароля, ни имени, ни курсов — обычный запрос «какая версия последняя». GitHub видит только IP-адрес.
-Windows-программа (.exe) может обновить себя сама, но только по нажатию кнопки «Обновить сейчас»: скачивает свежий файл с
-github.com/JINXPIL/Moodle-Offline, сверяет контрольную сумму SHA-256 из того же релиза, подменяет им себя и перезапускается.
-В остальных случаях (apk, Termux, исходники) даёт ссылку на файл, а скачать и поставить — вам.
+Собранная программа Windows (.exe) и Linux (один файл) может обновить себя сама, но только по нажатию кнопки «Обновить сейчас»:
+скачивает свежий файл с github.com/JINXPIL/Moodle-Offline, сверяет контрольную сумму SHA-256 из того же релиза, проверяет, что это
+программа (MZ / ELF), подменяет им себя и перезапускается.
+В остальных случаях (macOS — приложение-папка, apk, Termux, исходники) даёт ссылку на файл, а скачать и поставить — вам.
 Ссылки берутся только с github.com/JINXPIL/Moodle-Offline — любые другие из ответа выбрасываются.
 """
 from __future__ import annotations
 
 import hashlib
 import os
+import platform
 import re
 import subprocess
+import sys
 import threading
 import time
 
@@ -25,7 +28,9 @@ SAFE_PREFIX = f"https://github.com/{REPO}/"
 EVERY_HOURS = (6, 12, 24, 72, 168)         # как часто проверять само, часов
 DEFAULT_EVERY = 24
 RETRY_AFTER = 3600                          # не вышло (нет сети) — повторить через час, а не ждать сутки
-ASSETS = {"exe": "MoodleOffline.exe", "apk": "MoodleOffline.apk"}
+ASSETS = {"exe": "MoodleOffline.exe", "apk": "MoodleOffline.apk"}      # Linux и macOS — по архитектуре, см. asset_for
+CAN_SWAP = ("exe", "linux")      # эти сборки программа заменяет сама; macOS — приложение-папка, его меняют вручную
+MAGIC = {"exe": b"MZ", "linux": b"\x7fELF"}       # с чего начинается настоящая программа (чтобы не поставить чужой файл)
 DL_HOSTS = ("github.com", "githubusercontent.com")   # куда может вести перенаправление при скачивании файла релиза
 MAX_DL = 300 * 1024 * 1024                          # файл больше — это не наша программа
 
@@ -50,13 +55,34 @@ def is_newer(latest, current) -> bool:
 
 
 # ── где запущена программа ───────────────────────────────────────────────────
-def kind(frozen: bool = False, apk: bool = False, android: bool = False) -> str:
-    """apk — приложение для Android; termux — Termux; exe — Windows-программа; source — из исходников."""
+def this_system() -> str:
+    return "windows" if os.name == "nt" else "macos" if sys.platform == "darwin" else "linux"
+
+
+def kind(frozen: bool = False, apk: bool = False, android: bool = False, system: str | None = None) -> str:
+    """apk — приложение для Android; termux — Termux; exe / linux / macos — собранная программа для этой системы;
+    source — из исходников."""
     if apk:
         return "apk"
     if android:
         return "termux"
-    return "exe" if frozen else "source"
+    if not frozen:
+        return "source"
+    return {"linux": "linux", "macos": "macos"}.get(system or this_system(), "exe")
+
+
+def arch_name(machine: str | None = None) -> str:
+    m = (machine or platform.machine() or "").lower()
+    return {"amd64": "x86_64", "x64": "x86_64", "aarch64": "arm64", "arm64e": "arm64"}.get(m, m)
+
+
+def asset_for(k: str, machine: str | None = None) -> str:
+    """Имя файла релиза для этой сборки: у Windows и Android одно, у Linux и macOS — по архитектуре процессора."""
+    if k == "linux":
+        return f"MoodleOffline-linux-{arch_name(machine)}"
+    if k == "macos":
+        return f"MoodleOffline-macos-{arch_name(machine)}.zip"
+    return ASSETS.get(k, "")
 
 
 def how_to(k: str, has_asset: bool = True) -> str:
@@ -69,6 +95,14 @@ def how_to(k: str, has_asset: bool = True) -> str:
                 "Вход, настройки и данные лежат в папке пользователя и сохранятся. "
                 "Если делаете вручную («Скачать файл»): запускайте именно новый файл (в имени может быть «(1)»), "
                 "старую копию программы закрывать не обязательно — новая сама попросит её закрыться.")
+    if k == "linux":
+        return ("Нажмите «Обновить сейчас»: программа сама скачает новую версию, проверит файл и перезапустится. "
+                "Вход, настройки и данные лежат в вашей домашней папке и сохранятся. Если делаете вручную («Скачать файл»): "
+                "замените старый файл новым и сделайте его исполняемым — chmod +x.")
+    if k == "macos":
+        return ("Нажмите «Скачать»: придёт архив MoodleOffline-macos-….zip. Закройте программу, распакуйте архив и перетащите "
+                "MoodleOffline.app в «Программы» с заменой. Если macOS не даёт открыть новую копию — «Системные настройки» → «Конфиденциальность и безопасность» → «Всё равно открыть» (или в Терминале: xattr -dr com.apple.quarantine /Applications/MoodleOffline.app). "
+                "Вход, настройки и данные лежат в ~/Library/Application Support/MoodleOffline и сохранятся.")
     if k == "termux":
         return ("В Termux выполните: cd ~/moodle-offline && git pull — и запустите программу заново. "
                 "Если вы ставили приложение .apk, обновляйтесь им.")
@@ -111,11 +145,11 @@ def safe_url(u) -> str:
     return u if u.startswith(SAFE_PREFIX) else ""
 
 
-def summarize(release: dict, k: str) -> dict:
+def summarize(release: dict, k: str, machine: str | None = None) -> dict:
     """Из ответа GitHub — только нужное (версия, ссылки, описание)."""
     if not isinstance(release, dict) or not parse_version(release.get("tag_name")):
         raise UpdateError("GitHub вернул непонятный ответ")
-    want = ASSETS.get(k)
+    want = asset_for(k, machine)
     asset = {}
     for a in release.get("assets") or []:
         if isinstance(a, dict) and want and str(a.get("name", "")).lower() == want.lower():
@@ -286,7 +320,7 @@ def fetch_expected_sha(sha_url: str, current: str = "", use_system_proxy: bool =
 
 
 def download_verified(url: str, dest, expected_sha: str, size_hint: int = 0, progress=None, stop=None,
-                      current: str = "", use_system_proxy: bool = True) -> str:
+                      current: str = "", use_system_proxy: bool = True, magic: bytes = b"MZ") -> str:
     """Скачать файл релиза в dest, сверить SHA-256 и размер. → путь. Любая проблема — UpdateError, недокачанное удаляется.
     progress(done, total) вызывается по ходу; stop() → True прерывает."""
     if not safe_url(url):
@@ -332,8 +366,8 @@ def download_verified(url: str, dest, expected_sha: str, size_hint: int = 0, pro
         if h.hexdigest() != expected_sha.lower():
             raise UpdateError("контрольная сумма скачанного файла не совпала — файл не используем")
         with open(part, "rb") as f:
-            if f.read(2) != b"MZ":
-                raise UpdateError("скачанный файл не похож на программу Windows")
+            if f.read(len(magic)) != magic:
+                raise UpdateError("скачанный файл не похож на программу для этой системы")
         os.replace(part, dest)
         return dest
     except BaseException:
@@ -357,6 +391,11 @@ def swap_exe(exe, new) -> None:
             os.remove(old)
     except OSError:
         raise UpdateError("рядом с программой остался занятый файл .old — закройте все копии программы и повторите") from None
+    if os.name != "nt":                    # скачанный файл не исполняемый: без этого новая копия не запустится
+        try:
+            os.chmod(new, 0o755)
+        except OSError as e:
+            raise UpdateError(f"не удалось дать новому файлу право на запуск: {e.strerror or e}") from None
     try:
         os.replace(exe, old)
     except OSError as e:

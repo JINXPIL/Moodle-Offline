@@ -40,6 +40,7 @@ from urllib.parse import parse_qs, parse_qsl, quote, unquote, urlencode, urljoin
 
 import android    # Android (Termux): открыть страницу, уведомление, «не засыпать»
 import datadir    # где лежат данные программы и перенос с прошлой версии
+import desktop    # Linux и macOS: уведомления, окно выбора папки, автозапуск, ночная синхронизация
 import deadlines  # календарь и дедлайны: сроки из Moodle, повестка, общий .ics
 import dl_rules   # правила скачивания (что брать, что пропускать, шаблоны имён)
 import news       # что нового: события, лента, уведомления
@@ -87,7 +88,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.21.0"
+VERSION = "1.22.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -3315,16 +3316,20 @@ def find_browser():
             if b:
                 cands += [Path(b) / "Microsoft/Edge/Application/msedge.exe",
                           Path(b) / "Google/Chrome/Application/chrome.exe"]
-    for name in ("msedge", "microsoft-edge", "google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome"):
+    for name in ("msedge", "microsoft-edge", "google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
+                 "chrome", "brave-browser"):
         p = shutil.which(name)
         if p:
             cands.append(Path(p))
     if sys.platform == "darwin":
-        cands += [Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
-                  Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")]
+        for base in (Path("/Applications"), Path.home() / "Applications"):
+            cands += [base / "Google Chrome.app/Contents/MacOS/Google Chrome",
+                      base / "Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                      base / "Chromium.app/Contents/MacOS/Chromium",
+                      base / "Brave Browser.app/Contents/MacOS/Brave Browser"]
     for c in cands:
-        if c.exists():
-            return c
+        if c.exists() and not (sys.platform.startswith("linux") and desktop.is_snap_browser(c)):
+            return c        # snap-Chromium профиль в скрытой папке не открывает — такой браузер не берём (desktop.py)
     return None
 
 
@@ -3477,7 +3482,7 @@ try {
 
 
 def notify(title: str, message: str, ok: bool = True) -> bool:
-    """Звук + системное уведомление (Windows: всплывающее окно; Linux: notify-send; Android: termux-notification)."""
+    """Звук + системное уведомление (Windows: всплывающее окно; macOS: osascript; Linux: notify-send; Android: termux-notification)."""
     try:
         if os.name == "nt":
             import winsound
@@ -3493,9 +3498,9 @@ def notify(title: str, message: str, ok: bool = True) -> bool:
         else:
             sys.stdout.write("\a")
             sys.stdout.flush()
-            if shutil.which("notify-send"):
-                subprocess.Popen(["notify-send", "-a", APP_NAME, title, message],
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            cmd = desktop.notify_command(title, message)      # macOS — osascript, Linux — notify-send
+            if cmd:
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
     return True
