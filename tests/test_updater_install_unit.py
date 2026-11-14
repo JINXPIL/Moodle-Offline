@@ -97,7 +97,7 @@ check("нет sha_url — отказ", r is not None)
 
 # ── подмена работающего файла ──
 exe = d / "prog"; new = d / "prog.new"
-exe.write_text("#!/bin/sh\necho OLD > %s/ran.txt\nsleep 30\n" % d); exe.chmod(0o755)
+exe.write_text("#!/bin/sh\necho OLD > %s/ran.txt\nexec sleep 30\n" % d); exe.chmod(0o755)
 new.write_text("#!/bin/sh\necho NEW > %s/ran.txt\n" % d); new.chmod(0o755)
 proc = subprocess.Popen([str(exe)]); time.sleep(0.5)       # «старая» копия запущена и держит файл
 check("до подмены работает старая", (d / "ran.txt").read_text().strip() == "OLD")

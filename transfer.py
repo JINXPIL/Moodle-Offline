@@ -33,7 +33,8 @@ import urllib.error
 import urllib.request
 import zipfile
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from httpbind import QuickHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -527,6 +528,31 @@ def is_lan(ip: str) -> bool:
     return a.is_private or a.is_loopback or a.is_link_local or (a in ipaddress.ip_network("100.64.0.0/10"))
 
 
+_HOST_SLOW_UNTIL = 0.0      # до какого момента не спрашивать у системы адреса по имени компьютера (раньше он отвечал слишком долго)
+
+
+def _hostname_ips(timeout: float = 1.5) -> list:
+    """Адреса по имени компьютера — дополнение к основному (если сетевых карт несколько). Ответ системы может занять десятки
+    секунд (macOS без сети: имя вида «….local» ищется через mDNS, сервер сборки GitHub), а окно переноса ждёт этот список.
+    Поэтому ждём недолго; не дождались — это дополнение в ближайшие 5 минут пропускаем."""
+    global _HOST_SLOW_UNTIL
+    if time.time() < _HOST_SLOW_UNTIL:
+        return []
+    out: list = []
+
+    def run():
+        try:
+            out.extend(i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET))
+        except OSError:
+            pass
+    th = threading.Thread(target=run, daemon=True, name="transfer-hostname")
+    th.start()
+    th.join(timeout)
+    if th.is_alive():
+        _HOST_SLOW_UNTIL = time.time() + 300
+    return list(out)
+
+
 def local_ips() -> list:
     """Адреса этого устройства в локальной сети: сначала домашние (192.168…), потом остальные частные."""
     found = set()
@@ -536,11 +562,7 @@ def local_ips() -> list:
             found.add(s.getsockname()[0])
     except OSError:
         pass
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            found.add(info[4][0])
-    except OSError:
-        pass
+    found.update(_hostname_ips())
     ips = [ip for ip in found if is_lan(ip) and not ip.startswith(("127.", "169.254."))]
 
     def rank(ip):
@@ -596,7 +618,7 @@ class Sender:
             def do_HEAD(self):
                 sender._handle(self, head=True)
 
-        self.httpd = ThreadingHTTPServer((self.bind, self.port), H)
+        self.httpd = QuickHTTPServer((self.bind, self.port), H)
         self.httpd.daemon_threads = True
         self.port = self.httpd.server_address[1]
         self.expires = time.time() + self.ttl

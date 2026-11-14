@@ -6,8 +6,8 @@
     python tests/run_all.py news iot        # только те, в имени которых есть «news» или «iot»
 
 То же самое в GitHub Actions делает задача **tests** (`.github/workflows/tests.yaml`): в каждом pull request, при слиянии в `main`
-и вручную — на Python **3.11 и 3.13**. Она **не мешает** сборке apk и exe: упавший тест виден красным крестом в pull request,
-но сборки идут как раньше.
+и вручную — на Python **3.11 и 3.13** (Linux) и на **3.13 в macOS**. Она **не мешает** сборкам apk, exe, Linux и macOS: упавший тест виден красным
+крестом в pull request, но сборки идут как раньше.
 
 ## Что внутри
 - `test_*.py` — отдельные проверки, каждая запускается своим процессом. Тест «провален», если вернул код не 0 или напечатал
@@ -17,6 +17,9 @@
   Нужные макеты `run_all.py` запускает сам (таблица `MOCKS` в нём) и останавливает после теста.
 - `mock_llm.py` — фейковые нейросети (Claude, Gemini, OpenAI и совместимые, списки моделей) для `test_ai_unit.py` и `test_ai_api_unit.py`; ключи и тексты вымышленные, сервер поднимает сам тест в потоке.
 - `test_mcp_unit.py` / `test_mcp_api_unit.py` / `test_mcp_stdio_e2e.py` — доступ для внешних нейросетей: инструменты и защита путей, HTTP на настоящем сокете (токен, Host/Origin, блокировка, лимиты), окно `/api/mcp*`, токен в `mcp.bin`, настоящий процесс `--mcp`; настоящих клиентов (Claude Code, Cursor…) тут нет.
+- `test_desktop_unit.py` / `test_desktop_gui_unit.py` — Linux и macOS (`desktop.py`): команды `osascript`/`notify-send`/`zenity`/`kdialog` и защита текста в аргументах, файлы автозапуска (`.desktop`, LaunchAgent) и таймера systemd, включение/выключение на подставных `systemctl`/`launchctl`, окно (`/api/watch/autostart`, `/api/schedule`, `/api/pick_folder`). `test_updater_platforms_unit.py` — виды сборок, файлы релиза по архитектуре, проверка ELF, право на запуск. Настоящих macOS и systemd в этих тестах нет.
+- `test_httpbind_unit.py` — серверы программы (окно, MCP, раздача переноса) поднимаются сразу, даже если система отвечает на имя компьютера десятки секунд (на macOS так и было). Сами тестовые серверы и макеты получают то же из `_root.py`.
+- `smoke_binary.py` — **не тест** (в `run_all.py` не входит): запускает уже собранную программу (Linux/macOS) без окна и проверяет, что она поднимается, отдаёт интерфейс и закрывается; запускается в `build-desktop.yaml`, у себя — `python tests/smoke_binary.py --system linux --kind linux --data-rel .local/share/moodle-offline -- ./dist/MoodleOffline`.
 - `restart_helper.py` — запускалка для `test_restart_e2e.py`: та же `gui.gui_main`, но окно не открывается (вместо него файл-метка), а «перезапуск»
   запускает этот же файл. Два настоящих процесса (старая и новая копия) без интернета и без окна браузера.
 - `apkfake/java.py` — подделка моста Android для проверки `apk_main.py` на компьютере.
@@ -34,7 +37,7 @@
 ## Чего тесты НЕ проверяют
 - Настоящие сайты СевГУ (там нужен вход): только макеты. Тест проходит ≠ сайт не поменял разметку.
 - Окно в браузере (Playwright), живую загрузку курса, Android WebView и сборку exe/apk — это отдельно (apk собирает и проверяет в эмуляторе
-  `build-apk.yaml`).
+  `build-apk.yaml`; Linux и macOS собирает и запускает `build-desktop.yaml`).
 
 ## Как добавить тест
 Файл `tests/test_что_проверяем.py`, первой строкой `import _root`, в конце `sys.exit(1 if FAILS else 0)`; печатать `PASS …` / `FAIL …`.

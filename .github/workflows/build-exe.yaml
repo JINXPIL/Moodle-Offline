@@ -43,6 +43,8 @@ jobs:
             # релиз с таким тегом уже создан вручную на сайте: просто добавляем файлы
             gh release upload "$GITHUB_REF_NAME" MoodleOffline.exe MoodleOffline.exe.sha256 --clobber
           else
+            # релиз могут создавать и соседние сборки (apk, Linux, macOS) одновременно: опередили — просто добавляем файлы
             gh release create "$GITHUB_REF_NAME" MoodleOffline.exe MoodleOffline.exe.sha256 \
-              --title "Moodle Offline $GITHUB_REF_NAME" --generate-notes
+              --title "Moodle Offline $GITHUB_REF_NAME" --generate-notes \
+              || gh release upload "$GITHUB_REF_NAME" MoodleOffline.exe MoodleOffline.exe.sha256 --clobber
           fi

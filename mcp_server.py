@@ -28,6 +28,7 @@ import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from httpbind import QuickHTTPServer
 from pathlib import Path
 
 import notes
@@ -473,7 +474,7 @@ class AccessLog:
 
 
 # ═══════════════════════════ HTTP ══════════════════════════════════
-class _Httpd(ThreadingHTTPServer):
+class _Httpd(QuickHTTPServer):
     """Порт у нас заранее известный (8787), поэтому в Windows занимаем его «эксклюзивно»: обычное SO_REUSEADDR позволило бы
     чужому процессу сесть на тот же порт и получать запросы клиентов вместе с токеном."""
     allow_reuse_address = os.name != "nt"
