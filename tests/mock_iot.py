@@ -1,5 +1,6 @@
 """Макет auth.sevsu.ru (Keycloak, код + PKCE) и iot.sevsu.ru/api (элективы) — для проверок iotapi.py без настоящего сайта.
 Хосты: auth.sevsu.test, iot.sevsu.test (в /etc/hosts → 127.0.0.1). Порт — 1-й аргумент (по умолчанию 8766)."""
+import _root  # noqa: F401  (быстрый запуск сервера без обратного DNS, см. _root.py)
 import base64, hashlib, json, secrets, sys, threading
 from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler

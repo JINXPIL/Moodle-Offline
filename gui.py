@@ -24,7 +24,8 @@ import time
 import webbrowser
 from collections import deque
 from datetime import date, datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from httpbind import QuickHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
@@ -3483,7 +3484,7 @@ def gui_main(no_window=False, port=0, keep_running=False, on_ready=None):
     APP = App()
     if migrated:
         APP.rep.log(f"Данные прошлой версии перенесены из {migrated['from']} (файлов: {migrated['files']}). Старая папка осталась как была.")
-    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    srv = QuickHTTPServer(("127.0.0.1", port), Handler)
     srv.daemon_threads = True
     port = srv.server_address[1]
     url = f"http://127.0.0.1:{port}/?t={APP.token}"

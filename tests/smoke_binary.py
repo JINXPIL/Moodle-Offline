@@ -89,7 +89,9 @@ def main():
     # 2. запуск без окна, данные в своей папке
     data = tmp / "данные"
     env = dict(base_env, MOODLE_OFFLINE_DATA=str(data))
+    t0 = time.time()
     p, port, token = run_app(cmd, env, data)
+    print(f"INFO программа поднялась за {time.time() - t0:.1f} с", flush=True)
     out = ""
     if port is None:
         try:

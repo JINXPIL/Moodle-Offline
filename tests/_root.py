@@ -16,3 +16,21 @@ FAKE_JAVA = TESTS / "apkfake"      # подделка модуля java (мос�
 for p in (str(ROOT), str(TESTS)):
     if p not in sys.path:
         sys.path.insert(0, p)
+
+# Серверы самих тестов (и макеты mock_*.py) — без обратного DNS при запуске: `HTTPServer.server_bind` зовёт `socket.getfqdn`, а на
+# macOS и на серверах сборки это висит десятки секунд на каждый сервер. Сами серверы программы от этого не зависят (httpbind.py);
+# test_httpbind_unit.py возвращает настоящий `server_bind` и проверяет именно их.
+import http.server
+import socketserver
+
+ORIG_SERVER_BIND = http.server.HTTPServer.server_bind
+
+
+def _fast_server_bind(self):
+    socketserver.TCPServer.server_bind(self)
+    host, port = self.server_address[:2]
+    self.server_name = str(host)
+    self.server_port = port
+
+
+http.server.HTTPServer.server_bind = _fast_server_bind

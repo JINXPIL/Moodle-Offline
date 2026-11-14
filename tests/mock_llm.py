@@ -1,5 +1,6 @@
 """Фейковые нейросети для проверок: Claude (/v1/messages), Gemini (…:generateContent), OpenAI и совместимые (/v1/chat/completions),
 плюс списки моделей. Запросы запоминаются в .log. Ключи и тексты вымышленные. Запускается в потоке: MockLLM().start()."""
+import _root  # noqa: F401  (быстрый запуск сервера без обратного DNS, см. _root.py)
 import json, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 

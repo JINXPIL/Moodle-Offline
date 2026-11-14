@@ -45,12 +45,14 @@ check("из собранного файла: он сам и ключи (gui.py �
 mo.FROZEN = False
 
 # ── автозапуск (системный вызов не нужен: пишется файл в «домашней» папке) ──
-if os.name != "nt" and sys.platform != "darwin":
+if os.name != "nt":
     info = APP.autostart_info()
     p = Path(info["path"])
-    check("Linux: автозапуск поддержан, выключен, файл в ~/.config/autostart", info["supported"] and info["kind"] == "xdg" and not info["on"] and p == BASE / "home/.config/autostart/moodle-offline-watch.desktop", str(info))
+    want = BASE / "home/.config/autostart/moodle-offline-watch.desktop" if sys.platform != "darwin" else BASE / "home/Library/LaunchAgents/org.moodleoffline.watch.plist"
+    check("автозапуск поддержан, выключен, файл там, где его ждёт система", info["supported"] and info["kind"] == ("launchd" if sys.platform == "darwin" else "xdg") and not info["on"] and p == want, str(info))
     r = call("/api/watch/autostart", {"enabled": True})[1]
-    check("включили: файл создан, Exec с ключами", r["ok"] and r["on"] and p.is_file() and "moodle_offline.py" in p.read_text(encoding="utf-8") and "--watch -y" in p.read_text(encoding="utf-8"), str(r))
+    text = p.read_text(encoding="utf-8", errors="ignore") if p.is_file() else ""
+    check("включили: файл создан, команда с ключами", r["ok"] and r["on"] and "moodle_offline.py" in text and "--watch" in text, str(r))
     r = call("/api/watch/autostart", {"enabled": False})[1]
     check("выключили: файла нет, окно видит «выключено»", r["ok"] and not r["on"] and not p.exists())
 
@@ -65,9 +67,10 @@ desktop.shutil.which = lambda n: "/usr/bin/" + n if n == "systemctl" else real_w
 try:
     if os.name != "nt":
         r = call("/api/schedule", {"enabled": True, "time": "04:15"})[1]
-        sv, tm = desktop.sync_paths(None, BASE / "home", {})
+        paths = desktop.sync_paths(None, BASE / "home", {})
+        sv, tm = paths[0], paths[-1]            # Linux: служба и таймер; macOS: один файл LaunchAgent (sv is tm)
         if sys.platform == "darwin":
-            ok_files = sv.is_file()
+            ok_files = sv.is_file() and "<integer>4</integer>" in sv.read_text(encoding="utf-8") and "<integer>15</integer>" in sv.read_text(encoding="utf-8")
         else:
             ok_files = sv.is_file() and tm.is_file() and "OnCalendar=*-*-* 04:15:00" in tm.read_text(encoding="utf-8")
         check("включили расписание: файлы системы записаны", r.get("ok") and ok_files, str(r))
@@ -81,9 +84,11 @@ try:
         mo.FROZEN = True
         APP.settings.update(schedule_on=True, schedule_time="05:30", schedule_exe="/старое/место/MoodleOffline")
         APP.repair_schedule()
-        tt = tm.read_text(encoding="utf-8") if tm.exists() else ""
+        svt = sv.read_text(encoding="utf-8", errors="ignore") if sv.exists() else ""
+        tmt = tm.read_text(encoding="utf-8", errors="ignore") if tm.exists() else ""
+        time_ok = ("OnCalendar=*-*-* 05:30:00" in tmt) if sys.platform != "darwin" else ("<integer>5</integer>" in tmt and "<integer>30</integer>" in tmt)
         check("путь программы сменился — задача пересоздана на новый путь и то же время",
-              (APP.settings["schedule_exe"] == sys.executable) and ("05:30" in tt or sys.platform == "darwin") and sys.executable in sv.read_text(encoding="utf-8", errors="ignore") if sv.exists() and sys.platform != "darwin" else APP.settings["schedule_exe"] == sys.executable)
+              APP.settings["schedule_exe"] == sys.executable and sys.executable in svt and time_ok, f"{APP.settings.get('schedule_exe')} | {svt[:200]}")
         mo.FROZEN = False
 finally:
     subprocess.run = real_run

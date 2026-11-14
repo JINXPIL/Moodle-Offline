@@ -5,6 +5,7 @@
   OUTAGE=N       — после N-го запроса сервер «падает» (502) на OUTAGE_LEN запросов
   EXPIRE_AFTER=N — после N запросов сессия истекает (проверка повторного входа)
 """
+import _root  # noqa: F401  (быстрый запуск сервера без обратного DNS, см. _root.py)
 import hashlib
 import json
 import os

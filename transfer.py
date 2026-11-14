@@ -33,7 +33,8 @@ import urllib.error
 import urllib.request
 import zipfile
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from httpbind import QuickHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -596,7 +597,7 @@ class Sender:
             def do_HEAD(self):
                 sender._handle(self, head=True)
 
-        self.httpd = ThreadingHTTPServer((self.bind, self.port), H)
+        self.httpd = QuickHTTPServer((self.bind, self.port), H)
         self.httpd.daemon_threads = True
         self.port = self.httpd.server_address[1]
         self.expires = time.time() + self.ttl
