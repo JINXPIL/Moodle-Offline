@@ -748,7 +748,42 @@ body.android .no-android{display:none!important}
   #scheduleView .side{display:none;position:fixed;inset:0;z-index:48;overflow:auto;background:var(--bg);padding:0 12px calc(24px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
   #scheduleView.side-open .side{display:block}
   .schback{display:flex;position:sticky;top:0;z-index:2;width:calc(100% + 24px);margin:0 -12px 12px;border-radius:0;border-width:0 0 1px;justify-content:flex-start;height:52px;padding:env(safe-area-inset-top) 16px 0;background:var(--surface-solid);font-weight:600}
+}
 @media (max-width:520px){.brand{font-size:0;gap:0}}
+/* ── 1.24.0: настройки по шестерёнке, читаемые шапки и карточки ── */
+@media (min-width:701px){.setbox{width:min(640px,94vw)}}
+.setbody .panel{margin:0}
+#setBtn{color:var(--muted)}
+#net{cursor:pointer}
+#net .sh{display:none}
+.toast{white-space:pre-line}
+/* карточки курсов: название и категория читаются полностью, слово не обрезается по краю карточки, подвал переносится */
+.cbody{min-width:0}
+.ctitle{-webkit-line-clamp:4;overflow-wrap:anywhere;hyphens:auto}
+.cat{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:clip;overflow-wrap:anywhere}
+.cfoot{flex-wrap:wrap;row-gap:6px}
+.cfoot>span{min-width:0}
+.cfoot .mini{margin-left:auto}
+body[data-v-courses-style=list] #grid .ctitle{-webkit-line-clamp:3}
+@media (max-width:700px){
+  /* шапка: слева значок и короткий статус («Онлайн»), справа значки; шестерёнка — последняя, под большой палец */
+  #net{flex:0 1 auto;margin-right:auto}
+  #net .lg{display:none}#net .sh{display:inline}
+  .dlbtn{order:3}.user{order:4}#themeBtn{order:5}#setBtn{order:6}
+  .top .icon-btn:not(.dlbtn){width:clamp(34px,10.4vw,40px);height:clamp(34px,10.4vw,40px)}
+  .top{gap:6px;flex-wrap:nowrap;padding:8px 10px}   /* одна строка: если не хватает места, сжимается только статус (с многоточием), значки не переносятся */
+  #net{min-width:46px}
+  @media (max-width:340px){.brand{display:none}}   /* самый узкий экран: значок приложения уступает место статусу */
+  /* курсы: сколько карточек в ряд, решает размер шрифта (em), а не ширина экрана — при крупном шрифте карточка одна в ряд и текст помещается */
+  .grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,11.5em),1fr))}
+  /* фильтры не прокручиваются вбок: кнопки делят ширину и при крупном шрифте переходят на вторую строку */
+  .toolbar .chips{overflow:visible;flex-wrap:wrap;width:100%;max-width:none}
+  /* четыре кнопки в ряд, а если при крупном шрифте не помещаются — два ряда по две (а не «три и одна»): ширину смотрим в em */
+  #filters{container-type:inline-size}
+  #filters .chip{flex:1 1 0;height:36px;padding:0 6px;text-align:center;min-width:0}
+  @container (max-width:26em){#filters .chip{flex:1 1 calc(50% - 3px)}}
+  .setbody{padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+}
 </style>
 </head>
 <body>
@@ -756,13 +791,14 @@ body.android .no-android{display:none!important}
   <header class="top">
     <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>Moodle Offline</div>
     <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/></svg><span class="tl">Курсы</span></button><button data-view="search"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg><span class="tl">Поиск</span></button><button data-view="notes"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 11h8M8 15h5"/></svg><span class="tl">Заметки</span></button><button data-view="calendar"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="tl">Календарь</span><span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="tl">Расписание</span></button><button data-view="electives"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="tl">Элективы</span></button><button data-view="news"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="tl">Что нового</span><span class="nbadge hidden" id="newsBadge"></span></button></div>
-    <div class="pill" id="net" title="Проверка доступности Moodle (частоту можно изменить: «Таймер и автообновление»)"><span class="dot"></span><span class="txt">Проверяю сервер…</span></div>
+    <div class="pill" id="net" title="Проверка доступности Moodle (частоту можно изменить: «Таймер и автообновление»)"><span class="dot"></span><span class="txt"><span class="lg">Проверяю сервер…</span><span class="sh">Проверка…</span></span></div>
     <div class="pill hidden" id="ip"></div>
     <button class="icon-btn dlbtn hidden" id="dlBtn" title="Загрузки" aria-label="Загрузки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg><span class="dlpct" id="dlPct"></span><span class="dlmark" id="dlMark"></span></button>
     <div class="spacer"></div>
     <div class="user hidden" id="user"><div class="avatar" id="avatar"></div><span id="uname"></span>
       <button class="icon-btn" id="logoutBtn" title="Выйти и забыть вход"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h12"/></svg></button></div>
     <button class="icon-btn" id="themeBtn" title="Оформление"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18" fill="currentColor"/></svg></button>
+    <button class="icon-btn hidden" id="setBtn" title="Настройки" aria-label="Настройки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h0a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56h0a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v0a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.03z"/></svg></button>
     <div class="topprog" id="topProg" aria-hidden="true"><i></i></div>
   </header>
   <div class="pop hidden" id="themePop">
@@ -818,67 +854,6 @@ body.android .no-android{display:none!important}
           <div class="hidden" id="courseView"></div>
         </div>
         <aside class="side">
-          <div class="panel">
-            <h3>Как сохранять</h3>
-            <div class="mode" id="modeBox">
-              <div class="mopt" data-m="1"><div class="radio"></div><div><b>Каталог с оглавлением</b><span>Файлы с префиксами «03_ЛЗ_02 …» и index.html / README.md с названиями как на сайте</span></div></div>
-              <div class="mopt" data-m="2"><div class="radio"></div><div><b>Папки по типам</b><span>Курс / 03. Раздел / Лекции · ПЗ · ЛЗ / файлы</span></div></div>
-              <div class="mopt" data-m="3"><div class="radio"></div><div><b>Свой шаблон</b><span>Сами решаете, как называть папки и файлы</span></div></div>
-            </div>
-            <div class="field hidden" id="tplBox">
-              <label>Папки (через «/», пусто — всё в одну папку)</label><input class="txt" id="tplDir" spellcheck="false">
-              <label style="margin-top:10px">Имя файла</label><input class="txt" id="tplFile" spellcheck="false">
-              <div class="rchips" id="tplChips"></div>
-              <select class="txt" id="tplPresets" style="margin-top:8px"></select>
-              <div class="tplex" id="tplEx"></div>
-              <p class="hint" id="tplErr" style="color:var(--bad)"></p>
-            </div>
-            <div class="field"><label>Папка для сохранения</label>
-              <div class="path"><input id="outDir"><button class="btn no-android" id="pickDir" title="Выбрать папку">…</button><button class="btn" id="openDir" title="Открыть папку с материалами"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button></div>
-              <p class="hint hidden only-android" id="andHint" style="margin-top:6px"></p>
-            </div>
-            <div class="row"><div class="lbl">PDF-копии страниц<small id="pdfNote">задания, тесты, страницы — ещё и в PDF</small></div><label class="sw-t"><input type="checkbox" data-s="pdf"><span></span></label></div>
-            <div class="row"><div class="lbl">ZIP-бэкап курса<small>архив с датой в папке _бэкапы</small></div><label class="sw-t"><input type="checkbox" data-s="zip"><span></span></label></div>
-            <div class="row"><div class="lbl">Резерв файлов<small>если преподаватель заменит файл (или поставит «заглушку»), прежняя версия останется в папке «_Резерв» курса</small></div><label class="sw-t"><input type="checkbox" data-s="keep_versions"><span></span></label></div>
-            <div class="row"><div class="lbl">Оценки с сайта<small>после загрузки — один запрос «Оценки» по всем курсам; видно на карточках и в окне курса, в том числе без сети</small></div><label class="sw-t"><input type="checkbox" data-s="save_grades"><span></span></label></div>
-            <button class="btn big ghost" id="rulesBtn" style="margin-top:10px">Правила скачивания…</button>
-            <p class="hint" id="rulesInfo">Какие файлы брать, что пропускать, свои правила для каждого курса.</p>
-          </div>
-          <div class="panel">
-            <h3>Бережный режим</h3>
-            <div class="row"><div class="lbl">Ждать поднятия сервера<small>если Moodle лежит — начну сам, когда оживёт</small></div><label class="sw-t"><input type="checkbox" data-s="wait_for_server"><span></span></label></div>
-            <div class="row" style="flex-wrap:wrap"><div class="lbl">Тихие часы<small>качать только в это время</small></div><label class="sw-t"><input type="checkbox" data-s="quiet_hours_on"><span></span></label>
-              <div class="times" style="width:100%"><span class="hint" style="margin:0">с</span><input type="time" id="qhFrom" value="01:00"><span class="hint" style="margin:0">до</span><input type="time" id="qhTo" value="07:00"></div></div>
-            <div class="row" style="flex-wrap:wrap" id="schedRow"><div class="lbl">Ночная синхронизация<small id="schedHint">планировщик Windows, каждый день</small></div><label class="sw-t"><input type="checkbox" id="schedOn"><span></span></label>
-              <div class="times" style="width:100%"><span class="hint" style="margin:0">в</span><input type="time" id="schedTime" value="03:10"></div></div>
-            <div class="row" style="flex-wrap:wrap"><div class="lbl">Таймер и автообновление<small id="watchInfo">как часто проверять Moodle и докачивать недостающее само</small></div>
-              <button class="btn" id="watchOpen">Настроить…</button></div>
-            <details class="adv"><summary>Дополнительно</summary>
-              <div class="row no-android"><div class="lbl">Перезапустить программу<small>закроет и сразу откроет снова: если что-то зависло или перестало отвечать</small></div><button class="btn" id="restartBtn">Перезапустить</button></div>
-              <div class="row only-android"><div class="lbl">Остановить программу<small>выключит программу в фоне; таймер и автообновление остановятся</small></div><button class="btn danger" id="quitBtn">Остановить</button></div>
-              <div class="row"><div class="lbl">Имена файлов как на сервере<small>а не как называется элемент курса</small></div><label class="sw-t"><input type="checkbox" data-s="original_names"><span></span></label></div>
-              <div class="row"><div class="lbl">Оглавление и в режиме папок</div><label class="sw-t"><input type="checkbox" data-s="index_in_mode2"><span></span></label></div>
-              <div class="row"><div class="lbl">Через системный прокси<small>обычно не нужно — Moodle лучше напрямую</small></div><label class="sw-t"><input type="checkbox" data-s="use_system_proxy"><span></span></label></div>
-              <div class="row"><div class="lbl">Не проверять страну IP</div><label class="sw-t"><input type="checkbox" data-s="no_geo_check"><span></span></label></div>
-            <div class="row" style="flex-wrap:wrap"><div class="lbl">Перенос данных<small>на телефон или компьютер: архивом или по Wi-Fi</small></div>
-                <button class="btn" id="trOpen">Перенос данных…</button></div>
-            <div class="row no-android" style="flex-wrap:wrap"><div class="lbl">Данные программы<small id="dataInfo">вход, настройки и кэш лежат в папке пользователя</small></div>
-                <button class="btn" id="dataImport" title="Если при смене версии программа не нашла старые данные сама — укажите папку со старой версией">Перенести из старой версии…</button></div>
-            </details>
-          </div>
-          <div class="panel" id="mcpPanel">
-            <h3>Доступ для нейросетей</h3>
-            <div class="row" style="border-top:0;padding-top:0"><div class="lbl"><span id="mcpState">Выключен</span><small>Claude Code, Cursor и другие программы смогут искать в скачанных материалах — только чтение, по токену, только на этом устройстве</small></div>
-              <button class="btn" id="mcpOpen">Настроить…</button></div>
-          </div>
-          <div class="panel" id="updPanel">
-            <h3>Обновление программы</h3>
-            <div class="row" style="border-top:0;padding-top:0"><div class="lbl"><span>Версия <b id="updCur"></b></span><small id="updInfo">проверка ещё не выполнялась</small></div>
-              <button class="btn" id="updCheck">Проверить сейчас</button></div>
-            <div class="updnew hidden" id="updNew"></div>
-            <div class="row"><div class="lbl">Проверять само<small>раз в сутки спрашиваю только GitHub «какая версия последняя»; личные данные не отправляются</small></div><label class="sw-t"><input type="checkbox" id="updAuto"><span></span></label></div>
-            <div class="row"><div class="lbl">Как часто</div><select class="txt" id="updEvery" style="width:auto"><option value="6">каждые 6 ч</option><option value="12">каждые 12 ч</option><option value="24">раз в сутки</option><option value="72">раз в 3 дня</option><option value="168">раз в неделю</option></select></div>
-          </div>
           <div class="panel">
             <button class="btn primary big" id="startBtn">Скачать выбранные</button>
             <button class="btn big" id="syncBtn" style="margin-top:8px">Быстрая синхронизация (только новое)</button>
@@ -1095,6 +1070,72 @@ body.android .no-android{display:none!important}
     </div>
   </section>
 </div>
+<div class="modal hidden" id="setModal"><div class="modal-box rules-box setbox">
+  <header><b>Настройки</b><button class="btn" id="setClose">Закрыть</button></header>
+  <div class="rules-body setbody" id="setBody">
+          <div class="panel">
+            <h3>Как сохранять</h3>
+            <div class="mode" id="modeBox">
+              <div class="mopt" data-m="1"><div class="radio"></div><div><b>Каталог с оглавлением</b><span>Файлы с префиксами «03_ЛЗ_02 …» и index.html / README.md с названиями как на сайте</span></div></div>
+              <div class="mopt" data-m="2"><div class="radio"></div><div><b>Папки по типам</b><span>Курс / 03. Раздел / Лекции · ПЗ · ЛЗ / файлы</span></div></div>
+              <div class="mopt" data-m="3"><div class="radio"></div><div><b>Свой шаблон</b><span>Сами решаете, как называть папки и файлы</span></div></div>
+            </div>
+            <div class="field hidden" id="tplBox">
+              <label>Папки (через «/», пусто — всё в одну папку)</label><input class="txt" id="tplDir" spellcheck="false">
+              <label style="margin-top:10px">Имя файла</label><input class="txt" id="tplFile" spellcheck="false">
+              <div class="rchips" id="tplChips"></div>
+              <select class="txt" id="tplPresets" style="margin-top:8px"></select>
+              <div class="tplex" id="tplEx"></div>
+              <p class="hint" id="tplErr" style="color:var(--bad)"></p>
+            </div>
+            <div class="field"><label>Папка для сохранения</label>
+              <div class="path"><input id="outDir"><button class="btn no-android" id="pickDir" title="Выбрать папку">…</button><button class="btn" id="openDir" title="Открыть папку с материалами"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button></div>
+              <p class="hint hidden only-android" id="andHint" style="margin-top:6px"></p>
+            </div>
+            <div class="row"><div class="lbl">PDF-копии страниц<small id="pdfNote">задания, тесты, страницы — ещё и в PDF</small></div><label class="sw-t"><input type="checkbox" data-s="pdf"><span></span></label></div>
+            <div class="row"><div class="lbl">ZIP-бэкап курса<small>архив с датой в папке _бэкапы</small></div><label class="sw-t"><input type="checkbox" data-s="zip"><span></span></label></div>
+            <div class="row"><div class="lbl">Резерв файлов<small>если преподаватель заменит файл (или поставит «заглушку»), прежняя версия останется в папке «_Резерв» курса</small></div><label class="sw-t"><input type="checkbox" data-s="keep_versions"><span></span></label></div>
+            <div class="row"><div class="lbl">Оценки с сайта<small>после загрузки — один запрос «Оценки» по всем курсам; видно на карточках и в окне курса, в том числе без сети</small></div><label class="sw-t"><input type="checkbox" data-s="save_grades"><span></span></label></div>
+            <button class="btn big ghost" id="rulesBtn" style="margin-top:10px">Правила скачивания…</button>
+            <p class="hint" id="rulesInfo">Какие файлы брать, что пропускать, свои правила для каждого курса.</p>
+          </div>
+          <div class="panel">
+            <h3>Бережный режим</h3>
+            <div class="row"><div class="lbl">Ждать поднятия сервера<small>если Moodle лежит — начну сам, когда оживёт</small></div><label class="sw-t"><input type="checkbox" data-s="wait_for_server"><span></span></label></div>
+            <div class="row" style="flex-wrap:wrap"><div class="lbl">Тихие часы<small>качать только в это время</small></div><label class="sw-t"><input type="checkbox" data-s="quiet_hours_on"><span></span></label>
+              <div class="times" style="width:100%"><span class="hint" style="margin:0">с</span><input type="time" id="qhFrom" value="01:00"><span class="hint" style="margin:0">до</span><input type="time" id="qhTo" value="07:00"></div></div>
+            <div class="row" style="flex-wrap:wrap" id="schedRow"><div class="lbl">Ночная синхронизация<small id="schedHint">планировщик Windows, каждый день</small></div><label class="sw-t"><input type="checkbox" id="schedOn"><span></span></label>
+              <div class="times" style="width:100%"><span class="hint" style="margin:0">в</span><input type="time" id="schedTime" value="03:10"></div></div>
+            <div class="row" style="flex-wrap:wrap"><div class="lbl">Таймер и автообновление<small id="watchInfo">как часто проверять Moodle и докачивать недостающее само</small></div>
+              <button class="btn" id="watchOpen">Настроить…</button></div>
+            <details class="adv"><summary>Дополнительно</summary>
+              <div class="row no-android"><div class="lbl">Перезапустить программу<small>закроет и сразу откроет снова: если что-то зависло или перестало отвечать</small></div><button class="btn" id="restartBtn">Перезапустить</button></div>
+              <div class="row only-android"><div class="lbl">Остановить программу<small>выключит программу в фоне; таймер и автообновление остановятся</small></div><button class="btn danger" id="quitBtn">Остановить</button></div>
+              <div class="row"><div class="lbl">Имена файлов как на сервере<small>а не как называется элемент курса</small></div><label class="sw-t"><input type="checkbox" data-s="original_names"><span></span></label></div>
+              <div class="row"><div class="lbl">Оглавление и в режиме папок</div><label class="sw-t"><input type="checkbox" data-s="index_in_mode2"><span></span></label></div>
+              <div class="row"><div class="lbl">Через системный прокси<small>обычно не нужно — Moodle лучше напрямую</small></div><label class="sw-t"><input type="checkbox" data-s="use_system_proxy"><span></span></label></div>
+              <div class="row"><div class="lbl">Не проверять страну IP</div><label class="sw-t"><input type="checkbox" data-s="no_geo_check"><span></span></label></div>
+            <div class="row" style="flex-wrap:wrap"><div class="lbl">Перенос данных<small>на телефон или компьютер: архивом или по Wi-Fi</small></div>
+                <button class="btn" id="trOpen">Перенос данных…</button></div>
+            <div class="row no-android" style="flex-wrap:wrap"><div class="lbl">Данные программы<small id="dataInfo">вход, настройки и кэш лежат в папке пользователя</small></div>
+                <button class="btn" id="dataImport" title="Если при смене версии программа не нашла старые данные сама — укажите папку со старой версией">Перенести из старой версии…</button></div>
+            </details>
+          </div>
+          <div class="panel" id="mcpPanel">
+            <h3>Доступ для нейросетей</h3>
+            <div class="row" style="border-top:0;padding-top:0"><div class="lbl"><span id="mcpState">Выключен</span><small>Claude Code, Cursor и другие программы смогут искать в скачанных материалах — только чтение, по токену, только на этом устройстве</small></div>
+              <button class="btn" id="mcpOpen">Настроить…</button></div>
+          </div>
+          <div class="panel" id="updPanel">
+            <h3>Обновление программы</h3>
+            <div class="row" style="border-top:0;padding-top:0"><div class="lbl"><span>Версия <b id="updCur"></b></span><small id="updInfo">проверка ещё не выполнялась</small></div>
+              <button class="btn" id="updCheck">Проверить сейчас</button></div>
+            <div class="updnew hidden" id="updNew"></div>
+            <div class="row"><div class="lbl">Проверять само<small>раз в сутки спрашиваю только GitHub «какая версия последняя»; личные данные не отправляются</small></div><label class="sw-t"><input type="checkbox" id="updAuto"><span></span></label></div>
+            <div class="row"><div class="lbl">Как часто</div><select class="txt" id="updEvery" style="width:auto"><option value="6">каждые 6 ч</option><option value="12">каждые 12 ч</option><option value="24">раз в сутки</option><option value="72">раз в 3 дня</option><option value="168">раз в неделю</option></select></div>
+          </div>
+  </div>
+</div></div>
 <div class="modal hidden" id="modal"><div class="modal-box"><header><b id="mTitle"></b><button class="btn" id="mOpen">Открыть в программе</button><button class="btn" id="mReveal">Показать в папке</button><button class="icon-btn" id="mClose"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><iframe id="mFrame"></iframe></div></div>
 <div class="modal hidden" id="rdModal"><div class="modal-box rd-box">
   <header><button class="btn" id="rdBack" title="Назад" aria-label="Назад">←</button><button class="btn" id="rdFwd" title="Вперёд" aria-label="Вперёд">→</button><b id="rdTitle"></b>
@@ -2189,12 +2230,16 @@ function renderJob(j){
 }
 
 /* ── светофор, IP, баннер ── */
+/* Надпись о сервере: на компьютере полная («Moodle доступен · 0,4 с»), на телефоне — короткое слово (в шапке мало места), полный текст — по нажатию */
+function netText(full, short){ $("#net .lg").textContent = full; $("#net .sh").textContent = short; }
+$("#net").addEventListener("click", () => { const t = $("#net").title.replace(/^ · /, ""); toast($("#net .lg").textContent + (t ? "\n" + t : "")); });
 function renderNet(st){
   const n = st.net, dot = $("#net .dot");
   dot.className = "dot " + ({ok:"ok", slow:"slow", down:"down"}[n.status] || "");
   const every = WCHK.interval < 60 ? WCHK.interval + " с" : WCHK.interval < 3600 ? Math.round(WCHK.interval / 60) + " мин" : +(WCHK.interval / 3600).toFixed(1) + " ч";
-  if (n.paused) { dot.className = "dot"; $("#net .txt").textContent = "Проверка Moodle на паузе — " + n.paused; }
-  else $("#net .txt").textContent = {ok:"Moodle доступен", slow:"Moodle отвечает медленно", down:"Moodle недоступен", unknown:"Проверяю сервер…"}[n.status] + (n.detail ? " · " + n.detail : "");
+  if (n.paused) { dot.className = "dot"; netText("Проверка Moodle на паузе — " + n.paused, "Пауза"); }
+  else netText({ok:"Moodle доступен", slow:"Moodle отвечает медленно", down:"Moodle недоступен", unknown:"Проверяю сервер…"}[n.status] + (n.detail ? " · " + n.detail : ""),
+               {ok:"Онлайн", slow:"Медленно", down:"Недоступен", unknown:"Проверка…"}[n.status] || "Проверка…");
   $("#net").title = (n.checked ? "Последняя проверка: " + n.checked + (n.paused ? "" : " (раз в " + every + ")") : "") + " · настройки: «Таймер и автообновление»";
   const g = st.geo, ip = $("#ip");
   if (g.skipped || !g.cc) ip.classList.add("hidden");
@@ -3801,7 +3846,12 @@ $("#updCheck").onclick = async () => {
 };
 $("#updAuto").onchange = async () => renderUpd(await api("/api/update/settings", {auto: $("#updAuto").checked}));
 $("#updEvery").onchange = async () => renderUpd(await api("/api/update/settings", {every: +$("#updEvery").value}));
-function goUpdPanel(){ showView("courses"); setTimeout(() => $("#updPanel").scrollIntoView({behavior: "smooth", block: "center"}), 60); }
+/* «Настройки» — окно по шестерёнке в шапке (панели «Как сохранять», «Бережный режим», «Доступ для нейросетей», «Обновление программы») */
+function setOpen(){ $("#setModal").classList.remove("hidden"); }
+function setHide(){ $("#setModal").classList.add("hidden"); }
+$("#setBtn").onclick = setOpen; $("#setClose").onclick = setHide;
+$("#setModal").addEventListener("click", e => { if (e.target === e.currentTarget) setHide(); });
+function goUpdPanel(){ setOpen(); setTimeout(() => $("#updPanel").scrollIntoView({behavior: "smooth", block: "start"}), 80); }
 async function renderUpdBar(b){
   const bar = $("#updBar");
   if (!b || !b.newer || b.tag === updDismissed) { bar.classList.add("hidden"); updBarTag = b && b.newer ? b.tag : ""; return; }
@@ -3854,7 +3904,8 @@ function lostShow(why, msg){
   const phone = document.body.classList.contains("android");
   const can = !phone && (!S || S.can_restart !== false);
   $("#net .dot").className = "dot down";
-  $("#net .txt").textContent = why === "net" ? "Нет связи с программой" : why === "ui" ? "Окно не смогло показать ответ" : "Программа ответила ошибкой";
+  netText(why === "net" ? "Нет связи с программой" : why === "ui" ? "Окно не смогло показать ответ" : "Программа ответила ошибкой",
+          why === "net" ? "Нет связи" : "Ошибка");
   if ((why === "net" ? pollFails : why === "ui" ? uiFails : pollFails) < 2) return;     // один сбой подряд — просто подождём (например, компьютер только проснулся)
   const bar = $("#lostBar"), key = why + "|" + msg;
   if (lostShown && bar.dataset.k === key) return;
@@ -3902,7 +3953,7 @@ async function poll(){
       const ok = L.state === "ok" || L.state === "offline";
       $("#loginView").classList.toggle("hidden", ok); $("#coursesView").classList.toggle("hidden", !ok); $("#user").classList.toggle("hidden", !ok);
       $("#dock").classList.toggle("hidden", !ok && st.job.state === "idle"); $("#dlBtn").classList.toggle("hidden", !ok && st.job.state === "idle");
-      $("#mainTabs").classList.toggle("hidden", !ok);
+      $("#mainTabs").classList.toggle("hidden", !ok); $("#setBtn").classList.toggle("hidden", !ok);
       if (!ok) { $("#scheduleView").classList.add("hidden"); $("#electivesView").classList.add("hidden"); $("#newsView").classList.add("hidden"); $("#searchView").classList.add("hidden"); $("#notesView").classList.add("hidden"); }
       else showView(view);
       if (ok) loadCourses();
