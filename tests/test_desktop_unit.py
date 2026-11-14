@@ -14,6 +14,9 @@ BASE = Path(tempfile.gettempdir()) / "mo_desktop_t"; shutil.rmtree(BASE, ignore_
 have = lambda *names: (lambda n: "/usr/bin/" + n if n in names else None)
 
 # 1. система
+check("система: уже нормализованное имя не ломается (gui передаёт ответ system() дальше)", all(D.system(D.system(p)) == D.system(p) for p in ("win32", "darwin", "linux", "freebsd13")) and D.system("macos") == "macos" and D.system("windows") == "windows")
+check("пути для macOS берутся и по «macos», а не только по «darwin»", D.autostart_path(D.system("darwin"), Path("/h")) == D.autostart_path("darwin", Path("/h")) == Path("/h/Library/LaunchAgents/org.moodleoffline.watch.plist")
+      and D.sync_paths(D.system("darwin"), Path("/h")) == D.sync_paths("darwin", Path("/h")) and D.kind_of("macos") == "launchd")
 check("определение системы", D.system("win32") == "windows" and D.system("darwin") == "macos" and D.system("linux") == "linux" and D.system("freebsd13") == "linux")
 
 # 2. уведомления

@@ -47,6 +47,19 @@ srvm = mcp_server._Httpd(("127.0.0.1", free()), H)
 check("MCP-сервер (_Httpd) тоже без getfqdn", not calls, str(calls))
 srvm.server_close()
 
+# имя компьютера в системе отвечает долго (macOS без сети): список адресов для переноса не должен ждать
+real_gai = socket.getaddrinfo
+gai_calls = []
+def slow_gai(host, *a, **k):
+    if host in (None, "") or str(host).startswith(("127.", "10.255")): return real_gai(host, *a, **k)
+    gai_calls.append(host); time.sleep(6); return real_gai(host, *a, **k)
+socket.getaddrinfo = slow_gai
+transfer._HOST_SLOW_UNTIL = 0.0
+t0 = time.time(); ips = transfer.local_ips(); dt1 = time.time() - t0
+check("адреса для переноса: не ждём ответа системы по имени компьютера дольше пары секунд", dt1 < 3.5 and gai_calls, f"{dt1:.1f} с, обращений {len(gai_calls)}")
+t0 = time.time(); transfer.local_ips(); dt2 = time.time() - t0
+check("повторно — мгновенно (медленный способ на время отложен)", dt2 < 0.5 and len(gai_calls) == 1, f"{dt2:.1f} с, обращений {len(gai_calls)}")
+
 # перенос данных: Sender.start() привязывает порт синхронно
 tmp = Path(tempfile.mkdtemp(prefix="hb_"))
 class Rep:
@@ -56,5 +69,6 @@ t0 = time.time()
 snd = transfer.Sender(tmp, tmp, ["materials"], {}, Rep(), ttl=30, bind="127.0.0.1")
 info = snd.start(); dt = time.time() - t0
 check("перенос по Wi-Fi: раздача стартует сразу", dt < 2 and not calls and info.get("port"), f"{dt:.1f} с {calls}")
+socket.getaddrinfo = real_gai
 snd.stop()
 print("FAILS:", FAILS); sys.exit(1 if FAILS else 0)

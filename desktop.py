@@ -31,11 +31,12 @@ RUN_TIMEOUT = 20
 
 
 def system(platform: str | None = None) -> str:
-    """windows | macos | linux (всё остальное «Unix» считаем Linux). Android проверяют отдельно, до вызова."""
+    """windows | macos | linux (всё остальное «Unix» считаем Linux). Принимает и sys.platform, и уже нормализованный ответ этой же
+    функции (`system(system())` даёт то же самое). Android проверяют отдельно, до вызова."""
     p = sys.platform if platform is None else platform
-    if p.startswith("win"):
+    if p.startswith("win"):                 # «win32» и уже нормализованное «windows»
         return "windows"
-    return "macos" if p == "darwin" else "linux"
+    return "macos" if p in ("darwin", "macos") else "linux"     # «darwin» (sys.platform) и уже нормализованное «macos»
 
 
 def _arg(s, cap: int) -> str:
