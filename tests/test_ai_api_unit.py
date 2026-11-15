@@ -89,6 +89,10 @@ t = call("/api/ai/test", {"provider": "claude", "model": "nope"})[1]
 check("проверка с неверной моделью", not t["ok"] and "nope" in t["error"], str(t))
 check("список моделей", call("/api/ai/models", {"provider": "claude"})[1]["models"] == ["claude-a", "claude-b"])
 check("проверка без ключа — просьба ввести ключ", "ключ" in call("/api/ai/test", {"provider": "openai"})[1]["error"])
+info = call("/api/ai")[1]
+check("/api/ai отдаёт маршрут запросов (kind и адрес без логина)", isinstance(info.get("route"), dict) and info["route"].get("kind") in ("direct", "system", "system_socks", "own") and "@" not in info["route"].get("proxy", ""), str(info.get("route")))
+r_ = call("/api/ai/test", {"provider": "claude", "key": KEYS["claude"], "proxy": ""})[1]
+check("«Проверить связь» сообщает, как шёл запрос", r_.get("ok") and isinstance(r_.get("route"), dict) and "kind" in r_["route"], str(r_))
 
 # вопросы по материалам
 r = run({"task": "ask", "question": "Что такое OSPF?"})

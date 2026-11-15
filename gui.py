@@ -2208,7 +2208,7 @@ class App:
                               for i, v in ai.PROVIDERS.items()],
                 "has_key": {i: i in keys for i in ai.PROVIDERS}, "ready": not why, "why": why, "consent": bool(pid) and ai.has_consent(cfg),
                 "provider_title": ai.PROVIDERS[pid]["title"] if pid else "", "host": self._ai_host(cfg),
-                "encrypted": self.vault.can_encrypt, "caps": {"ask": ai.ASK_CHARS, "doc": ai.DOC_CHARS},
+                "route": ai.route_info(cfg), "sys_route": ai.route_info({**cfg, "proxy": ""}), "encrypted": self.vault.can_encrypt, "caps": {"ask": ai.ASK_CHARS, "doc": ai.DOC_CHARS},
                 "exts": sorted(search.READABLE)}      # какие файлы можно отправить на пересказ (то же, что читает поиск)
 
     @staticmethod
@@ -2285,12 +2285,13 @@ class App:
         cl, why = self._ai_client(b)
         if not cl:
             return {"ok": False, "error": why}
+        route = ai.route_info(self.ai_form(b)[0])
         t0 = time.perf_counter()
         try:
             r = cl.complete("Отвечай одним словом.", "Скажи: ок", 256)
         except ai.AiError as e:
-            return {"ok": False, "error": str(e)}
-        return {"ok": True, "ms": int((time.perf_counter() - t0) * 1000), "model": r["model"], "text": r["text"][:80]}
+            return {"ok": False, "error": str(e), "route": route}
+        return {"ok": True, "ms": int((time.perf_counter() - t0) * 1000), "model": r["model"], "text": r["text"][:80], "route": route}
 
     def ai_run(self, b) -> dict:
         task = b.get("task")
