@@ -34,7 +34,7 @@ body{margin:0;font:14px/1.45 var(--font);color:var(--text);
 button,input,select{font:inherit;color:inherit}
 .hidden{display:none!important}
 svg{flex:none}
-#app{display:grid;grid-template-rows:56px auto 1fr auto;height:100vh}
+#app{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:56px auto 1fr auto;height:100vh}   /* колонка не шире окна: широкая строка кнопок раньше растягивала страницу и обрезала край справа */
 
 /* верхняя панель */
 .top{display:flex;align-items:center;gap:14px;padding:0 18px;border-bottom:1px solid var(--line);
@@ -750,6 +750,10 @@ body.android .no-android{display:none!important}
   .schback{display:flex;position:sticky;top:0;z-index:2;width:calc(100% + 24px);margin:0 -12px 12px;border-radius:0;border-width:0 0 1px;justify-content:flex-start;height:52px;padding:env(safe-area-inset-top) 16px 0;background:var(--surface-solid);font-weight:600}
 }
 @media (max-width:520px){.brand{font-size:0;gap:0}}
+/* ── 1.25.0: правой панели в «Курсах» нет — кнопки скачивания в строке над карточками ── */
+#coursesView .layout{grid-template-columns:minmax(0,1fr)}
+.dlbar{display:contents}   /* на ПК кнопки — обычные элементы строки .toolbar (ей же задаёт промежутки) */
+@media (min-width:701px){#coursesView .search{min-width:150px}}   /* строка со всеми кнопками помещается в окно 1280 px; поиск сжимается первым */
 /* ── 1.24.0: настройки по шестерёнке, читаемые шапки и карточки ── */
 @media (min-width:701px){.setbox{width:min(640px,94vw)}}
 .setbody .panel{margin:0}
@@ -783,6 +787,14 @@ body[data-v-courses-style=list] #grid .ctitle{-webkit-line-clamp:3}
   #filters .chip{flex:1 1 0;height:36px;padding:0 6px;text-align:center;min-width:0}
   @container (max-width:26em){#filters .chip{flex:1 1 calc(50% - 3px)}}
   .setbody{padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+  /* кнопки скачивания: плашка над нижними вкладками, пока выбран хотя бы один курс (раньше панель лежала в самом конце длинного списка) */
+  .dlbar{display:none}
+  #coursesView.has-sel .dlbar{display:flex;flex-wrap:wrap;gap:8px;position:fixed;left:12px;right:12px;z-index:47;padding:8px;border-radius:16px;
+    bottom:calc(var(--bnav-h,58px) + env(safe-area-inset-bottom,0px) + 10px);background:var(--surface-solid);border:1px solid var(--line);box-shadow:var(--shadow)}
+  .dlbar .btn{height:auto;min-height:44px;padding:8px 10px;justify-content:center;white-space:normal;text-align:center;line-height:1.2}
+  .dlbar .btn.primary{flex:1 1 8em}   /* «Скачать выбранные (3)» забирает всё свободное место, чтобы число не уезжало на вторую строку */
+  .dlbar #syncBtn{flex:0 1 auto;min-width:7.5em}
+  #coursesView.has-sel .content{padding-bottom:calc(var(--dl-h,0px) + 18px)}   /* последний ряд карточек не прячется под плашкой */
 }
 </style>
 </head>
@@ -848,18 +860,15 @@ body[data-v-courses-style=list] #grid .ctitle{-webkit-line-clamp:3}
             <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" placeholder="Поиск курса"></div>
             <button class="btn ghost" id="selAll">Выбрать все</button>
             <button class="btn ghost" id="selNone">Снять</button>
+            <div class="dlbar" id="dlBar">
+              <button class="btn primary" id="startBtn" title="Отметьте курсы галочкой в углу карточки. Нажатие на саму карточку открывает курс.">Скачать выбранные</button>
+              <button class="btn" id="syncBtn" title="Быстрая синхронизация: только новое в выбранных курсах">Синхронизация</button>
+            </div>
             <button class="icon-btn vwbtn" data-vw="courses" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button><button class="icon-btn" id="refreshBtn" title="Обновить список курсов"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button>
           </div>
           <div class="grid" id="grid"></div>
           <div class="hidden" id="courseView"></div>
         </div>
-        <aside class="side">
-          <div class="panel">
-            <button class="btn primary big" id="startBtn">Скачать выбранные</button>
-            <button class="btn big" id="syncBtn" style="margin-top:8px">Быстрая синхронизация (только новое)</button>
-            <p class="hint" id="selInfo"></p>
-          </div>
-        </aside>
       </div>
     </section>
     <!-- Расписание -->
@@ -1553,9 +1562,10 @@ $("#refreshBtn").onclick = async () => { await api("/api/refresh_courses", {}); 
 let selTimer; function saveSel(){ clearTimeout(selTimer); selTimer = setTimeout(() => api("/api/settings", {course_ids: [...selected]}), 400); }
 function updateSelInfo(){
   const n = selected.size, busy = S && S.job.state !== "idle";
-  $("#startBtn").textContent = n ? `Скачать выбранные (${n})` : "Выберите курсы";
+  $("#startBtn").textContent = n ? `Скачать выбранные (${n})` : "Скачать выбранные";
   $("#startBtn").disabled = !n || busy; $("#syncBtn").disabled = !n || busy;
-  $("#selInfo").textContent = n ? "Можно закрыть окно во время загрузки — она завершится в фоне, придёт уведомление." : "Отметьте курсы галочкой в углу карточки. Нажатие на саму карточку открывает курс.";
+  $("#startBtn").title = n ? "Можно закрыть окно во время загрузки — она завершится в фоне, придёт уведомление." : "Отметьте курсы галочкой в углу карточки. Нажатие на саму карточку открывает курс.";
+  $("#coursesView").classList.toggle("has-sel", n > 0);   // на телефоне кнопки — плашка над вкладками, пока что-то выбрано
 }
 async function loadCourses(){ courses = await api("/api/courses"); renderGrid(); }
 /* ── данные программы: где лежат и перенос с прошлой версии ── */
@@ -1771,12 +1781,14 @@ $("#rSave").onclick = async () => {
 };
 
 /* ── запуск ── */
+let bgHinted = false;   // подсказку «окно можно закрыть» показываем один раз за запуск
 async function start(sync, ignoreGeo=false, ids=null){
   const body = {sync, course_ids: ids || [...selected], wait_for_server: $('[data-s="wait_for_server"]').checked, ignore_geo: ignoreGeo};
   const r = await api("/api/start", body);
   if (r.geo) { if (confirm(r.geo + "\n\nВсё равно начать?")) return start(sync, true, ids); return; }
   if (!r.ok) { if (r.need_login) api("/api/relogin", {}); return toast(r.error || "Не удалось начать", "bad"); }
   if (r.armed) toast("Moodle сейчас недоступен — начну автоматически, как только он оживёт.");
+  else if (!NARROW.matches && !bgHinted) { bgHinted = true; toast("Загрузка идёт в фоне — окно можно закрыть, придёт уведомление."); }   // на телефоне то же говорит подсказка в showDock
   showDock();
 }
 $("#startBtn").onclick = () => start(false);
@@ -1794,8 +1806,9 @@ function setBarVars(){
   const r = document.documentElement.style, top = $(".top").offsetHeight; r.setProperty("--top-h", top + "px"); r.setProperty("--above-h", Math.max(0, $("main").offsetTop - top) + "px");
   const nav = $("#mainTabs");   // нижняя панель вкладок (телефон): реальная высота без отступа под «жестовую» полосу — CSS добавляет его сам
   if (NARROW.matches && nav.offsetHeight) r.setProperty("--bnav-h", Math.max(0, nav.offsetHeight - (parseFloat(getComputedStyle(nav).paddingBottom) - 4)) + "px");
+  r.setProperty("--dl-h", $("#dlBar").offsetHeight + "px");   // плашка «Скачать выбранные» (телефон): сколько места оставить под ней
 }
-if (window.ResizeObserver) { const ro = new ResizeObserver(setBarVars); ro.observe($(".top")); ro.observe($("#topStack")); ro.observe($("#mainTabs")); } addEventListener("resize", setBarVars); setBarVars();
+if (window.ResizeObserver) { const ro = new ResizeObserver(setBarVars); ro.observe($(".top")); ro.observe($("#topStack")); ro.observe($("#mainTabs")); ro.observe($("#dlBar")); } addEventListener("resize", setBarVars); setBarVars();
 /* ── ползунок прокрутки для сенсорных экранов ──
    Системная полоска на телефоне — только индикатор: взять её пальцем нельзя, и по длинному списку приходится долго листать. Поэтому справа свой ползунок:
    появляется, когда листаешь, и держится ещё пару секунд — его можно взять и тянуть вверх-вниз. Работает на том, что прокручивалось последним:
@@ -2046,7 +2059,7 @@ Object.keys(VIEWDEF).forEach(vApply); vApplyTabs();
 function showDock(){
   if (!NARROW.matches) return $("#dock").classList.remove("collapsed");
   const b = $("#dlBtn"); b.classList.remove("ping"); void b.offsetWidth; b.classList.add("ping");
-  if (!dlHinted) { dlHinted = true; toast("Загрузка пошла. Ход — на значке ↓ вверху; нажмите на него, чтобы открыть список."); }
+  if (!dlHinted) { dlHinted = true; toast("Загрузка пошла и идёт в фоне. Ход — на значке ↓ вверху; нажмите на него, чтобы открыть список."); }
 }
 let dlHinted = false, dlAck = "";
 function dockOpen(){ return !$("#dock").classList.contains("collapsed"); }

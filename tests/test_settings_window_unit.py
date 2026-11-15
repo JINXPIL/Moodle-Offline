@@ -29,10 +29,10 @@ check("4. внутри окна кнопка закрытия с id, оканч�
 for key in ['id="modeBox"', 'data-s="zip"', 'id="outDir"', 'id="rulesBtn"', 'data-s="wait_for_server"', 'id="watchOpen"', 'id="trOpen"', 'id="mcpPanel"', 'id="mcpOpen"', 'id="updPanel"', 'id="updCheck"', 'id="updAuto"']:
     check(f"5. в «Настройках» есть {key}", key in body)
 check("6. в окне ровно четыре панели", len(re.findall(r'<div class="panel"', body)) == 4, str(len(re.findall(r'<div class="panel"', body))))
-# боковая колонка «Курсы» — только скачивание
-side = re.search(r'<aside class="side">(.*?)</aside>', html.split('id="coursesView"', 1)[1], re.S).group(1)
-check("7. в колонке «Курсы» остались только кнопки скачивания", side.count('<div class="panel"') == 1 and 'id="startBtn"' in side and 'id="syncBtn"' in side and 'id="updPanel"' not in side and 'data-s="zip"' not in side)
-for i in ['id="startBtn"', 'id="syncBtn"', 'id="selInfo"']:
+# в «Курсах» правой колонки больше нет: кнопки скачивания стоят в строке над карточками (подробности — test_courses_toolbar_unit.py)
+cv_html = html.split('id="coursesView"', 1)[1].split('id="scheduleView"', 1)[0]
+check("7. в «Курсах» нет боковой колонки, а настройки не вернулись в неё", "<aside" not in cv_html and 'id="updPanel"' not in cv_html and 'data-s="zip"' not in cv_html)
+for i in ['id="startBtn"', 'id="syncBtn"']:
     check(f"8. {i} на месте (однократно)", html.count(i) == 1)
 markup = html[html.index("<body>"):html.index("<script>")]
 ids = re.findall(r'\bid="([^"]+)"', markup)
