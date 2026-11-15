@@ -129,5 +129,46 @@ check("split_quiz: по разделителю", ai.split_quiz("## Вопрос�
 check("split_quiz: без разделителя, но с заголовком «Ответы»", ai.split_quiz("## Вопросы\n1. а\n## Ответы\n1. б") == ("## Вопросы\n1. а", "## Ответы\n1. б"))
 check("split_quiz: ответов нет вовсе", ai.split_quiz("1. а\n2. б") == ("1. а\n2. б", ""))
 
+# 10. маршрут запроса: напрямую / системный прокси (Happ, Clash Verge…) / свой прокси; системный SOCKS — понятный отказ
+import os
+_orig_sys = ai.system_proxy
+def with_sys(val, fn):
+    ai.system_proxy = lambda url: val
+    try: return fn()
+    finally: ai.system_proxy = _orig_sys
+check("маршрут: свой прокси из настроек — логин и пароль не показываются",
+      ai.route_info(cfg("claude", proxy="http://u:pw@127.0.0.1:10809")) == {"kind": "own", "proxy": "127.0.0.1:10809"})
+check("маршрут: прокси без схемы тоже считается своим", ai.route_info(cfg("claude", proxy="127.0.0.1:7897")) == {"kind": "own", "proxy": "127.0.0.1:7897"})
+check("маршрут: системный прокси (режим «системный прокси» в Happ / Clash Verge)",
+      with_sys("http://127.0.0.1:10809", lambda: ai.route_info(cfg("claude"))) == {"kind": "system", "proxy": "127.0.0.1:10809"})
+check("маршрут: системный прокси с логином — без логина и пароля",
+      with_sys("http://u:pw@127.0.0.1:7897", lambda: ai.route_info(cfg("gemini")))["proxy"] == "127.0.0.1:7897")
+check("маршрут: системный SOCKS — отдельный вид (программа его не использует)",
+      with_sys("socks5://127.0.0.1:7897", lambda: ai.route_info(cfg("claude"))) == {"kind": "system_socks", "proxy": "127.0.0.1:7897"})
+check("маршрут: прокси нет (в том числе TUN-режим) — напрямую", with_sys("", lambda: ai.route_info(cfg("claude"))) == {"kind": "direct", "proxy": ""})
+check("маршрут: свой прокси важнее системного", with_sys("http://127.0.0.1:1", lambda: ai.route_info(cfg("claude", proxy="http://127.0.0.1:2")))["proxy"] == "127.0.0.1:2")
+check("маршрут: испорченный свой прокси (socks) не ломает расчёт, берётся системный",
+      with_sys("http://127.0.0.1:3", lambda: ai.route_info(cfg("claude", proxy="socks5://127.0.0.1:1080"))) == {"kind": "system", "proxy": "127.0.0.1:3"})
+check("маршрут: сервис не выбран / кривой адрес «своего» — не падает",
+      with_sys("", lambda: ai.route_info(cfg("")))["kind"] == "direct" and with_sys("", lambda: ai.route_info(cfg("custom", base_url="http://example.com")))["kind"] == "direct")
+seen = []
+_o = ai.system_proxy
+ai.system_proxy = lambda url: seen.append(url) or ""
+ai.route_info(cfg("claude")); ai.route_info(cfg("custom", base_url="https://openrouter.ai/api")); ai.system_proxy = _o
+check("маршрут считается для адреса выбранного сервиса (у «своего» — для его адреса)", seen and seen[0].startswith(ai.PROVIDERS["claude"]["base"]) and seen[1].startswith("https://openrouter.ai"), str(seen))
+
+# системный SOCKS (например, ALL_PROXY=socks5://… в терминале) раньше давал сырое «Missing dependencies for SOCKS support» без объяснения
+_PX = ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy")
+_saved = {k: os.environ.pop(k) for k in _PX if k in os.environ}
+try:
+    os.environ["ALL_PROXY"] = "socks5://127.0.0.1:7897"; n_log = len(M.log)
+    e = err(lambda: ai.Client(cfg("claude"), "sk-ant-test-test-test").complete("s", "u", 16))
+    check("системный SOCKS-прокси: понятное сообщение про SOCKS и HTTP-порт, а не «Missing dependencies»",
+          e is not None and "SOCKS" in e and "HTTP" in e and "Missing dependencies" not in e, str(e))
+    check("до сервиса ничего не дошло (запрос не ушёл)", len(M.log) == n_log, f"{n_log} -> {len(M.log)}")
+finally:
+    for k in _PX: os.environ.pop(k, None)
+    os.environ.update(_saved)
+
 M.stop()
 print("FAILS:", FAILS); sys.exit(1 if FAILS else 0)

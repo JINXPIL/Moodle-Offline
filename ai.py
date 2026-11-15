@@ -20,6 +20,7 @@ import time
 from urllib.parse import urlsplit
 
 import requests
+from requests.utils import get_environ_proxies, select_proxy
 
 PROVIDERS = {
     "gemini": {"title": "Google Gemini", "kind": "gemini", "base": "https://generativelanguage.googleapis.com",
@@ -118,6 +119,42 @@ def check_proxy(url: str) -> str:
     if sp.scheme not in ("http", "https") or not sp.hostname:
         raise AiError("Прокси указывается как http://адрес:порт, например http://127.0.0.1:10809.")
     return f"{sp.scheme}://{sp.netloc}"
+
+
+def _host_port(url: str) -> str:
+    """Адрес прокси без схемы, логина и пароля — его можно показывать в окне."""
+    sp = urlsplit(url if "://" in url else "http://" + url)
+    return sp.netloc.rsplit("@", 1)[-1]
+
+
+def system_proxy(url: str) -> str:
+    """Какой прокси requests возьмёт у системы для этого адреса: переменные окружения, в Windows — «Прокси» в Параметрах
+    (так включают режим «системный прокси» Happ, Clash Verge, v2rayN), в macOS — системные настройки. "" — нет. В тестах подменяется."""
+    try:
+        return select_proxy(url, get_environ_proxies(url)) or ""
+    except Exception:           # кривая настройка системы не должна ломать окно настроек
+        return ""
+
+
+def route_info(cfg: dict) -> dict:
+    """Как пойдёт запрос к выбранному сервису: kind — own (прокси из настроек), system (системный прокси), system_socks (системный
+    SOCKS — программа его не использует) или direct (напрямую; в режиме TUN/VPN трафик всё равно уйдёт через VPN-клиент);
+    proxy — адрес без логина и пароля. Сети не касается."""
+    try:
+        own = check_proxy(cfg.get("proxy", ""))
+    except AiError:
+        own = ""
+    if own:
+        return {"kind": "own", "proxy": _host_port(own)}
+    pid = cfg.get("provider")
+    try:
+        base = check_base(cfg.get("base_url", "")) if pid == "custom" else PROVIDERS[pid]["base"]
+    except (AiError, KeyError):
+        base = "https://api.openai.com"
+    p = system_proxy(base)
+    if not p:
+        return {"kind": "direct", "proxy": ""}
+    return {"kind": "system_socks" if urlsplit(p).scheme.startswith("socks") else "system", "proxy": _host_port(p)}
 
 
 def consent_token(cfg: dict) -> str:
@@ -220,6 +257,12 @@ class Client:
             except requests.exceptions.Timeout as e:
                 raise AiError(f"{self.host} не ответил вовремя. Попробуйте ещё раз; если так каждый раз — включите VPN или укажите прокси в "
                               "настройках нейросети.") from e
+            except requests.exceptions.InvalidSchema as e:
+                if "socks" in str(e).lower():
+                    raise AiError("В системе задан SOCKS-прокси (например, переменная ALL_PROXY), а программа SOCKS не поддерживает. "
+                                  "Впишите в настройках нейросети HTTP-порт этого же VPN-клиента, например http://127.0.0.1:10809 "
+                                  "(у Clash Verge порт «mixed» принимает и HTTP: http://127.0.0.1:7897).") from e
+                raise AiError("Не получилось отправить запрос: " + scrub(_brief(e), self.key)) from e
             except requests.exceptions.ProxyError as e:
                 raise AiError("Не удалось подключиться через прокси из настроек нейросети: " + scrub(_brief(e), self.key)) from e
             except requests.exceptions.ConnectionError as e:

@@ -141,6 +141,7 @@ main{overflow:hidden;min-height:0}
 .times{display:flex;align-items:center;gap:6px;margin-top:8px}
 .times input{height:32px;border-radius:8px;border:1px solid var(--line);background:var(--raised);padding:0 8px}
 .hint{font-size:12px;color:var(--muted);margin-top:6px}
+.ai-route:empty{display:none}
 details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-top:4px}
 
 /* вход */
@@ -1324,7 +1325,8 @@ body[data-v-courses-style=list] #grid .ctitle{-webkit-line-clamp:3}
     </div>
     <div class="rsec"><h4>Если сервис недоступен из вашей сети</h4>
       <input class="txt" id="aiProxy" placeholder="http://127.0.0.1:10809 (необязательно)" autocomplete="off" spellcheck="false">
-      <div class="hint">Часть сервисов (Gemini, ChatGPT, Claude) закрыта для некоторых стран и сетей. Включите VPN на этом устройстве или укажите здесь HTTP-порт вашего VPN-клиента. Прокси SOCKS программа не поддерживает. Касается только запросов к нейросети, остальное (Moodle, сайты СевГУ) идёт напрямую.</div>
+      <div class="hint ai-route" id="aiRoute"></div>
+      <div class="hint">Часть сервисов (Gemini, ChatGPT, Claude) закрыта для некоторых стран и сетей. Включите VPN на этом устройстве или укажите здесь HTTP-порт вашего VPN-клиента. Если у VPN-клиента включён режим «системный прокси», программа найдёт его сама. Прокси SOCKS программа не поддерживает. Касается только запросов к нейросети, остальное (Moodle, сайты СевГУ) идёт напрямую.</div>
     </div>
     <div class="rsec"><h4>Согласие на отправку</h4>
       <label class="ai-consent"><span class="sw-t"><input type="checkbox" id="aiConsent"><span></span></span><span id="aiConsentTxt"></span></label>
@@ -2672,9 +2674,19 @@ async function openAiSettings(){
   $("#aiBase").value = c.base_url || ""; $("#aiProxy").value = c.proxy || ""; $("#aiKey").value = "";
   $("#aiModel").value = c.provider ? c.model : ""; $("#aiConsent").checked = !!AI.consent;
   ["aiTestOut", "aiModOut", "aiSetMsg"].forEach(i => $("#" + i).textContent = "");
-  aiSetProv(false);
+  aiSetProv(false); aiRouteShow();
   $("#aiSetModal").classList.remove("hidden");
 }
+// как пойдут запросы к нейросети: своё поле → системный прокси (Happ, Clash Verge… в режиме «системный прокси») → напрямую (в режиме TUN/VPN — всё равно через VPN-клиент)
+function aiRouteTxt(own){
+  const r = (AI && AI.sys_route) || {kind: "direct", proxy: ""};
+  if (own) return "Запросы к нейросети пойдут через прокси из этого поля — кнопка «Проверить связь» покажет, работает ли он.";
+  if (r.kind === "system") return `Найден системный прокси ${r.proxy} — запросы пойдут через него. Так работают Happ, Clash Verge и другие VPN-клиенты в режиме «системный прокси»: ничего вписывать не нужно.`;
+  if (r.kind === "system_socks") return `В системе задан SOCKS-прокси ${r.proxy}, программа его не использует. Впишите сюда HTTP-порт этого же VPN-клиента (например, http://127.0.0.1:10809).`;
+  return "Системного прокси нет — запросы идут напрямую. Если VPN-клиент работает в режиме TUN (как VPN на весь компьютер или телефон), они всё равно пойдут через него. Если сервис не открывается, включите в VPN-клиенте «системный прокси» или впишите сюда его HTTP-порт.";
+}
+const aiRouteShort = r => !r ? "" : r.kind === "own" ? ` · через ваш прокси ${r.proxy}` : r.kind === "system" ? ` · через системный прокси ${r.proxy}` : " · напрямую (или через VPN в режиме TUN)";
+const aiRouteShow = () => { $("#aiRoute").textContent = aiRouteTxt($("#aiProxy").value.trim()); };
 function aiSetHide(){ $("#aiKey").value = ""; $("#aiSetModal").classList.add("hidden"); }          // введённый ключ не живёт в странице дольше, чем нужно
 const aiForm = () => ({provider: $("#aiProv").value, model: $("#aiModel").value.trim(), base_url: $("#aiBase").value.trim(), proxy: $("#aiProxy").value.trim(), key: $("#aiKey").value.trim()});
 async function aiSettingsSave(){
@@ -2689,6 +2701,7 @@ async function aiSettingsSave(){
 }
 $("#aiProv").onchange = () => aiSetProv(true);
 $("#aiBase").oninput = aiConsentTxt;
+$("#aiProxy").oninput = aiRouteShow;
 $("#aiKeyLink").onclick = () => { const p = AI.providers.find(x => x.id === $("#aiProv").value); if (p && p.key_url) openUrl(p.key_url); };
 $("#aiKeyDrop").onclick = async () => {
   if (!confirm("Забыть сохранённый ключ этого сервиса? Согласие на отправку тоже будет снято.")) return;
@@ -2708,7 +2721,7 @@ $("#aiTest").onclick = async () => {
   try {
     const j = await api("/api/ai/test", aiForm());
     out.style.color = j.ok ? "" : "var(--bad)";
-    out.textContent = j.ok ? `Связь есть: ${j.model}, ответ за ${j.ms} мс.` : (j.error || "Не получилось.");
+    out.textContent = j.ok ? `Связь есть: ${j.model}, ответ за ${j.ms} мс${aiRouteShort(j.route)}.` : (j.error || "Не получилось.");
   } catch (e) { out.style.color = "var(--bad)"; out.textContent = "Нет связи с программой."; }
   $("#aiTest").disabled = !$("#aiProv").value;
 };
