@@ -44,6 +44,35 @@ def stop() -> None:
 
 
 # ── самопроверка (запускается из CI в эмуляторе: приложение открывают с флагом selftest) ──
+def _https_check(get=None, sleep=None, tries: int = 12, pause: float = 5.0) -> str:
+    """Пункт «https»: запрос к github.com с проверкой сертификатов.
+
+    Самопроверка стартует почти сразу после запуска эмулятора, а сеть (DNS) у него поднимается не мгновенно: так в сборке v1.27.0
+    пункт провалился на «не удалось найти github.com», хотя в соседнем задании прошёл. Поэтому, пока соединения нет, ждём и
+    повторяем (до `tries` раз, между попытками `pause` секунд). Ошибку сертификата (SSLError) не повторяем — это уже настоящая
+    проблема приложения. Если сети так и нет, бросаем последнюю ошибку: так заметно, например, пропавшее разрешение INTERNET.
+    `get` и `sleep` подставляются в тестах (tests/test_apk_selftest_https_unit.py)."""
+    import requests
+    import time
+    get = get or requests.get
+    sleep = sleep or time.sleep
+    last: Exception | None = None
+    for n in range(1, tries + 1):
+        try:
+            r = get("https://github.com", timeout=30)
+            break
+        except requests.exceptions.SSLError:
+            raise
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            last = e
+            if n < tries:
+                sleep(pause)
+    else:
+        raise last  # type: ignore[misc]
+    assert r.status_code < 500, r.status_code
+    return f"github.com → {r.status_code} (сертификаты проверяются)" + (f", с попытки {n}" if n > 1 else "")
+
+
 def _selftest() -> None:
     results = []
 
@@ -135,10 +164,7 @@ def _selftest() -> None:
         return f"файл передан по сокету, QR есть, адреса в сети: {transfer.local_ips() or 'не найдены'}"
 
     def https():
-        import requests
-        r = requests.get("https://github.com", timeout=30)
-        assert r.status_code < 500, r.status_code
-        return f"github.com → {r.status_code} (сертификаты проверяются)"
+        return _https_check()
 
     def bridge():
         import android
