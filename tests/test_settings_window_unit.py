@@ -59,7 +59,7 @@ check("21. шапка на телефоне в одну строку (nowrap), �
 # --- фильтры и карточки
 check("22. фильтры не прокручиваются вбок: контейнер и два ряда по две при крупном шрифте", "#filters{container-type:inline-size}" in html and "@container (max-width:26em){#filters .chip{flex:1 1 calc(50% - 3px)}}" in html)
 check("23. в карточках на телефоне число колонок считается в em (крупный шрифт — одна колонка)", "minmax(min(100%,11.5em),1fr)" in html)
-check("24. название до 4 строк, категория до 2, слова переносятся", ".ctitle{-webkit-line-clamp:4;overflow-wrap:anywhere" in html and ".cat{white-space:normal;display:-webkit-box;-webkit-line-clamp:2" in html)
+check("24. слова в названии и категории переносятся по краю карточки (сами названия не обрезаются — см. test_course_titles_unit.py)", ".ctitle{overflow-wrap:anywhere;hyphens:auto}" in html and ".cat{overflow-wrap:anywhere}" in html)
 check("25. подвал карточки переносится (кнопка «Папка» не вылезает)", ".cfoot{flex-wrap:wrap" in html and ".cfoot .mini{margin-left:auto}" in html)
 print("\nВСЕ ПРОВЕРКИ ПРОШЛИ" if not FAILS else f"\nПРОВАЛЕНО: {len(FAILS)}")
 sys.exit(1 if FAILS else 0)
