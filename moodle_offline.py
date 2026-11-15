@@ -14,6 +14,7 @@ Moodle Offline — выгрузка учебных материалов из Moo
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import email.utils
 import getpass
@@ -88,7 +89,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.26.0"
+VERSION = "1.27.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -381,8 +382,11 @@ def funlink(p) -> None:
         pass
 
 
-def write_text_atomic(path: Path, text: str) -> bool:
-    """Записывает текст через временный файл. Возвращает True, если содержимое изменилось."""
+def write_text_atomic(path: Path, text: str, durable: bool = False) -> bool:
+    """Записывает текст через временный файл. Возвращает True, если содержимое изменилось.
+    durable — дождаться, пока данные лягут на диск (настройки, состояние): без этого при отключении питания файл после
+    переименования мог оказаться пустым. Имя временного файла своё у каждого потока: два одновременных сохранения
+    одного файла раньше писали в один и тот же «.tmp» и могли перемешаться."""
     data = text.encode("utf-8")
     if fexists(path):
         try:
@@ -392,11 +396,51 @@ def write_text_atomic(path: Path, text: str) -> bool:
         except OSError:
             pass
     fmkdir(path.parent)
-    tmp = path.with_name(path.name + ".tmp")
-    with fopen(tmp, "wb") as f:
-        f.write(data)
-    freplace(tmp, path)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}-{threading.get_ident() % 100000}.tmp")
+    try:
+        with fopen(tmp, "wb") as f:
+            f.write(data)
+            if durable:
+                f.flush()
+                os.fsync(f.fileno())
+        freplace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(fsp(tmp))
+        raise
     return True
+
+
+def read_text_retry(path, tries: int = 6) -> str:
+    """Прочитать текстовый файл; в Windows файл может на мгновение держать антивирус, OneDrive или индексатор —
+    тогда PermissionError, и это НЕ значит, что файл испорчен. Повторяем; другие ошибки — сразу наружу."""
+    for i in range(tries):
+        try:
+            with fopen(path, "r", encoding="utf-8") as f:
+                return f.read()
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(0.15 * (i + 1))
+    raise PermissionError(str(path))
+
+
+def keep_broken(path: Path) -> Path | None:
+    """Испорченный файл данных (битый JSON) не затираем молча: переименовываем рядом в «… .broken-ГГГГММДД-ччммсс»,
+    чтобы его можно было отдать на разбор или вернуть руками. Хранится не больше трёх таких копий."""
+    path = Path(path)
+    dest = path.with_name(f"{path.name}.broken-{datetime.now():%Y%m%d-%H%M%S}")
+    try:
+        freplace(path, dest)
+    except OSError:
+        return None
+    try:
+        olds = sorted(path.parent.glob(path.name + ".broken-*"))
+        for old in olds[:-3]:
+            os.remove(fsp(old))
+    except OSError:
+        pass
+    return dest
 
 
 def sha1_file(path) -> str:
@@ -909,15 +953,39 @@ class Vault:
     def can_encrypt(self) -> bool:
         return _dpapi is not None
 
+    @property
+    def settings_backup(self) -> Path:
+        return self.settings_path.with_name("settings.json.bak")
+
     def load_settings(self) -> dict:
-        try:
-            with fopen(self.settings_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (OSError, ValueError):
-            return {}
+        """settings.json; если он испорчен (битый JSON, обрыв записи) — копия последнего удачного сохранения
+        settings.json.bak, а сам испорченный файл откладывается рядом (keep_broken). Раньше в этом случае все настройки
+        молча становились «по умолчанию» и при следующем сохранении затирались навсегда."""
+        self.restored = ""
+        for p in (self.settings_path, self.settings_backup):
+            try:
+                d = json.loads(read_text_retry(p))
+            except FileNotFoundError:
+                continue
+            except OSError:
+                continue                       # файл не прочитать (занят) — он не испорчен, не трогаем; берём копию
+            except ValueError:
+                d = None
+            if isinstance(d, dict):
+                if p != self.settings_path:
+                    self.restored = "settings.json был испорчен — настройки восстановлены из резервной копии (settings.json.bak)"
+                return d
+            if p == self.settings_path:
+                keep_broken(p)
+        return {}
 
     def save_settings(self, d: dict):
-        write_text_atomic(self.settings_path, json.dumps(d, ensure_ascii=False, indent=2))
+        text = json.dumps(d, ensure_ascii=False, indent=2)
+        write_text_atomic(self.settings_path, text, durable=True)
+        try:
+            write_text_atomic(self.settings_backup, text, durable=True)   # копия последнего удачного сохранения
+        except OSError:
+            pass
 
     @staticmethod
     def _read_secret(path: Path) -> dict:
@@ -947,6 +1015,8 @@ class Vault:
         tmp = path.with_name(path.stem + ".tmp")
         with fopen(tmp, "wb") as f:
             f.write(raw)
+            f.flush()
+            os.fsync(f.fileno())
         try:
             os.chmod(fsp(tmp), 0o600)
         except OSError:
@@ -2514,15 +2584,16 @@ class State:
         self.data = {"version": 1, "files": {}, "items": {}, "courses": {}, "news": {}}
         if fexists(path):
             try:
-                with fopen(path, "r", encoding="utf-8") as f:
-                    loaded = json.load(f)
+                loaded = json.loads(read_text_retry(path))
                 if isinstance(loaded, dict):
                     self.data.update(loaded)
-            except (OSError, ValueError):
+            except ValueError:                 # испорчен — откладываем (.bad), начинаем заново: докачка сверит файлы на диске
                 try:
                     freplace(path, path.with_name(path.name + ".bad"))
                 except OSError:
                     pass
+            except OSError:                    # не прочитать (занят другой программой) — НЕ портим: работаем, но не сохраняем поверх
+                self.readonly = True
         for k in ("files", "items", "courses", "news"):
             self.data.setdefault(k, {})
         self._owner = {}
@@ -2531,6 +2602,7 @@ class State:
                 self._owner[p.lower()] = k
         self._last_save = 0.0
         self._dirty = False
+        self.readonly = getattr(self, "readonly", False)
 
     def find(self, key, out: Path, prefer: str):
         e = self.data["files"].get(key)
@@ -2590,8 +2662,10 @@ class State:
             if not force and now - self._last_save < 1.5:
                 self._dirty = True
                 return
+            if self.readonly:            # прочитать файл не удалось — пустым состоянием поверх настоящего не пишем
+                return
             try:
-                write_text_atomic(self.path, json.dumps(self.data, ensure_ascii=False))
+                write_text_atomic(self.path, json.dumps(self.data, ensure_ascii=False), durable=force)
                 self._last_save = now
                 self._dirty = False
             except OSError:
@@ -4787,7 +4861,7 @@ def cli_main(argv=None) -> int:
         if not args.group or not book.valid_slug(slug):
             print("Укажите чужую группу: --group ib-b-25-1-o")
             return 2
-        if slug == (settings.get("schedule_group") or sched.DEFAULT_GROUP):
+        if settings.get("schedule_group") and sched.same_group(slug, settings["schedule_group"]):
             print("Это ваша группа — запустите без --other.")
             return 2
         try:
@@ -4812,8 +4886,12 @@ def cli_main(argv=None) -> int:
         out = Path(args.out or settings.get("out_dir") or DEFAULT_OUT)
         rep.open_log(out / LOG_FILE)
         sec = Vault().load_secret()
+        group = args.group or settings.get("schedule_group") or sched.saved_group(out / sched.SCHEDULE_DIR)
+        if not group:
+            print("Укажите свою группу: --group ib-b-25-2-o (или выберите её в окне программы, раздел «Расписание»).")
+            return 2
         try:
-            sched.run_cli(out, args.group or settings.get("schedule_group") or sched.DEFAULT_GROUP,
+            sched.run_cli(out, group,
                           settings.get("schedule_sources") or sched.DEFAULT_SOURCES, args.schedule, args.date_from, args.date_to,
                           creds=(sec["username"], sec["password"]) if sec.get("username") and sec.get("password") else None,
                           cookies=sec.get("sso_cookies"),

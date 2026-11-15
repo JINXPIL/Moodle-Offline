@@ -39,6 +39,7 @@ import deadlines
 import news
 import notes
 import search
+import uistate
 import watch
 import electives as el
 import iotapi
@@ -278,7 +279,10 @@ class App:
         self.settings.setdefault("base_url", mo.DEFAULT_URL)
         self.settings.setdefault("mode", 1)
         self.settings.setdefault("out_dir", str(mo.DEFAULT_OUT))
+        self.ui = uistate.Store(mo.DATA_DIR)          # настройки окна (вид, тема…) — переживают перезапуск и обновление
         self.rep = GuiReporter(self)
+        if getattr(self.vault, "restored", ""):
+            self.rep.log(self.vault.restored, "warn")
         self.idle_control = mo.Control()
         self.control = None
         self.client: mo.MoodleClient | None = None
@@ -1220,11 +1224,54 @@ class App:
         return self.update_status()
 
     # ── расписание ──
+    def settings_reset(self, b) -> dict:
+        """«Настройки» → «Сброс». what=view — только вид окна; all — ещё и настройки программы (кроме uistate.RESET_KEEP).
+        Перед сбросом настроек программы копия кладётся в settings.json.before-reset (вернуть — переименовать обратно)."""
+        what = b.get("what")
+        if what not in ("view", "all"):
+            return {"ok": False, "error": "неизвестно, что сбрасывать"}
+        dropped = []
+        if what == "all":
+            with self.lock:
+                try:
+                    mo.write_text_atomic(mo.DATA_DIR / "settings.json.before-reset",
+                                         json.dumps(self.settings, ensure_ascii=False, indent=2), durable=True)
+                except OSError as e:
+                    return {"ok": False, "error": "не удалось сохранить копию настроек: " + mo.describe_error(e)}
+                new, dropped = uistate.reset_settings(self.settings)
+                new.setdefault("base_url", mo.DEFAULT_URL)
+                new.setdefault("mode", 1)
+                new.setdefault("out_dir", str(mo.DEFAULT_OUT))
+                self.settings = new
+                self.save_settings()
+            self.rep.log(f"Настройки программы сброшены по умолчанию ({len(dropped)} шт.); копия — settings.json.before-reset")
+        r = self.ui.reset()
+        if not r.get("ok"):
+            return r
+        return {"ok": True, "reset": dropped}
+
+    def own_group(self) -> str:
+        """Своя группа. Раньше, пока её не выбрали, подставлялась группа автора программы (ИБ/б-25-2-о) — у всех новых
+        пользователей. Теперь пусто, пока не выбрали; у старых установок группа берётся из уже сохранённого расписания."""
+        g = self.settings.get("schedule_group")
+        if g or "schedule_group" in self.settings:      # пустая строка — человек сам очистил поле
+            return g or ""
+        try:
+            g = sched.saved_group(self._out() / sched.SCHEDULE_DIR)
+        except Exception:
+            g = ""
+        if g:
+            with self.lock:
+                self.settings["schedule_group"] = g
+                self.save_settings()
+        return g
+
     def schedule_status(self):
         out = Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
         st = self.settings
-        slug = st.get("schedule_group") or sched.DEFAULT_GROUP
-        info = {"group": slug, "group_name": sched.group_name(slug),
+        slug = self.own_group()
+        gname = sched.group_name(slug) if slug else ""
+        info = {"group": slug, "group_name": gname, "need_group": not slug,
                 "sources": st.get("schedule_sources") or list(sched.DEFAULT_SOURCES),
                 "order": list(sched.SOURCE_ORDER), "short": {k: v["short"] for k, v in sched.SOURCES.items()},
                 "auth": {k: bool(v.get("auth")) for k, v in sched.SOURCES.items()}, "has_creds": self._el_creds() is not None,
@@ -1236,7 +1283,7 @@ class App:
                 "excel": self.excel_status()}
         try:
             sched.refresh_viewer(out / sched.SCHEDULE_DIR)      # после обновления программы страница сама получает новый вид
-            for pr in book.list_profiles(out, slug)[1:]:        # …и у чужих расписаний тоже
+            for pr in book.list_profiles(out, slug or "own")[1:]:        # …и у чужих расписаний тоже
                 sched.refresh_viewer(out / Path(*pr["dir"].split("/")))
         except Exception:
             pass
@@ -1249,10 +1296,15 @@ class App:
             pub = d.get("meta", {}).get("published_until", "")
             if pub and pub < sched.semester_end(date.today()).isoformat():   # показываем, только если сайт выложил не весь семестр
                 info["published_until"] = pub
+            saved = sched.saved_group(out / sched.SCHEDULE_DIR)
+            if slug and saved and not sched.same_group(saved, slug):   # группу сменили, а скачано ещё расписание прежней
+                info["stale_group"] = d.get("meta", {}).get("group") or sched.group_name(saved) or saved
+                info["published_until"] = ""
         except (OSError, ValueError, KeyError, IndexError):
             pass
         try:
-            info["profiles"] = book.list_profiles(out, slug, info["group_name"])    # своё + чужие (история), для переключателя
+            own_title = gname or slug or "Моя группа"         # название выбранной группы, а не то, что лежит в старом файле
+            info["profiles"] = book.list_profiles(out, slug or "own", own_title)    # своё + чужие (история), для переключателя
         except Exception:
             info["profiles"] = []
         info["android_share"] = bool(ANDROID)
@@ -1268,11 +1320,11 @@ class App:
         if not text:
             return {"ok": False, "error": "укажите группу"}
         slug = sched.resolve_group(text)
-        own = self.settings.get("schedule_group") or sched.DEFAULT_GROUP
+        own = self.own_group()
         if not book.valid_slug(slug):
             return {"ok": False, "error": "не понял код группы — выберите её из списка СевГУ или напишите как на сайте (ИБ/б-25-1-о)"}
-        if slug == own:
-            return {"ok": False, "error": "это ваша группа — её расписание настраивается выше, в блоке «Группа и источники»"}
+        if own and sched.same_group(slug, own):
+            return {"ok": False, "error": "это ваша группа — её расписание настраивается в блоке «Группа и источники»"}
         sources = [x for x in (b.get("sources") or ["schedule"]) if x in ("schedule", "excel")] or ["schedule"]
         out = self._out()
         book.ensure_profile(out, slug, sched.group_name(slug) or text)
@@ -1317,9 +1369,9 @@ class App:
     def schedule_share(self, b):
         """Собрать .zip из выбранных расписаний (для друга: откроется и без программы, а в программу добавляется кнопкой «Загрузить из файла»)."""
         out = self._out()
-        slug = self.settings.get("schedule_group") or sched.DEFAULT_GROUP
+        slug = self.own_group()
         try:
-            z, notes = book.export_zip(out, [str(i) for i in (b.get("ids") or [])], slug, sched.group_name(slug), mo.VERSION)
+            z, notes = book.export_zip(out, [str(i) for i in (b.get("ids") or [])], slug or "own", sched.group_name(slug) if slug else "", mo.VERSION)
         except book.BookError as e:
             return {"ok": False, "error": str(e)}
         shared = bool(ANDROID and b.get("send") and android.share_file(z))
@@ -1347,7 +1399,7 @@ class App:
                                 reporter=self.rep, use_system_proxy=bool(self.settings.get("use_system_proxy")))
             c.no_wait = True
             if not cache.get("departments") or not fresh:
-                deps, cur = sched.fetch_departments(c, self.settings.get("schedule_group") or sched.DEFAULT_GROUP)
+                deps, cur = sched.fetch_departments(c, self.own_group() or sched.DEFAULT_GROUP)   # чья страница — неважно: список отделов на всех один
                 if deps:
                     cache.update(departments=deps, current=cur or cache.get("current", ""), ts=time.time())
             dept = dept or cache.get("current") or ""
@@ -1359,7 +1411,7 @@ class App:
             dept = dept or cache.get("current") or ""
         return {"ok": bool(cache.get("departments")), "error": err, "offline": bool(err),
                 "departments": cache.get("departments", []), "current": dept,
-                "groups": cache["groups"].get(dept, []), "selected": self.settings.get("schedule_group") or sched.DEFAULT_GROUP}
+                "groups": cache["groups"].get(dept, []), "selected": self.own_group()}
 
     # ── Excel-расписание университета ──
     def excel_status(self):
@@ -1402,14 +1454,14 @@ class App:
             links = sched.find_excel_links(c._text(r), r.url or page)
         except Exception as e:
             return {"ok": False, "error": mo.describe_error(e), "links": [], "page": page}
-        group = self.settings.get("schedule_group") or sched.DEFAULT_GROUP
-        ranked = sched.rank_excel(links, group)
+        group = self.own_group()
+        ranked = sched.rank_excel(links, group) if group else links
         top = ranked[0]["score"] if ranked else 0
         for i, l in enumerate(ranked):
             l["best"] = bool(top > 0 and l["score"] == top and i < 3)
         cfg = (self.settings.get("schedule_excel") or {}).get("sig")
         cur = sched.match_sig(links, cfg)
-        course, level = sched.excel_course(group)
+        course, level = sched.excel_course(group) if group else (0, "")
         return {"ok": True, "error": "", "page": page, "links": ranked, "current": cur["url"] if cur else "",
                 "hint": f"{course} курс, {level}" if course and level else ""}
 
@@ -1439,7 +1491,9 @@ class App:
         data = rfile.read(length) if length else b""
         if len(data) != length:
             return {"ok": False, "error": "файл передался не до конца — попробуйте ещё раз"}
-        group = self.settings.get("schedule_group") or sched.DEFAULT_GROUP
+        group = self.own_group()
+        if not group:
+            return {"ok": False, "error": "сначала выберите свою группу — по ней программа найдёт её блок в таблице"}
         try:
             names = xs.list_groups(xs.read_workbook(data))
         except xs.XlsxError as e:
@@ -1712,7 +1766,7 @@ class App:
         if params.get("profile"):
             return self._schedule_job_other(params, t0)
         try:
-            job = sched.ScheduleJob(Path(st.get("out_dir") or mo.DEFAULT_OUT), st.get("schedule_group") or sched.DEFAULT_GROUP,
+            job = sched.ScheduleJob(Path(st.get("out_dir") or mo.DEFAULT_OUT), self.own_group(),
                                     st.get("schedule_sources") or sched.DEFAULT_SOURCES, self.rep, self.control,
                                     urls=st.get("schedule_urls"), pdf=bool(st.get("schedule_pdf", True)),
                                     use_system_proxy=bool(st.get("use_system_proxy")),
@@ -1726,6 +1780,8 @@ class App:
                     with self.lock:
                         self.settings["schedule_excel"] = job.excel_out
                         self.save_settings()
+            if res["total"] == 0 and job.errors:          # например, группы с таким кодом нет на сайте — говорим об этом, а не «0 пар сохранено»
+                raise mo.MoodleError("; ".join(dict.fromkeys(job.errors.values())))
             text = (f"Расписание сохранено за {mo.fmt_dur(time.monotonic() - t0)}: {res['total']} пар "
                     f"({res['range'][0]} — {res['range'][1]})")
             if res.get("per_source", {}).get("excel"):
@@ -1750,8 +1806,9 @@ class App:
         """Расписание чужой группы: официальный сайт и (по желанию) Excel университета. Личные источники не используются,
         свои данные не трогаются — всё в Расписание/Другие группы/<код>/."""
         st, out, slug = self.settings, self._out(), params["profile"]
+        root = book.profile_dir(out, slug)
+        fresh = not (root / "schedule.json").exists()        # группу только что добавили: если не скачается, пустую запись не оставляем
         try:
-            root = book.profile_dir(out, slug)
             pr = book.read_profile(root)
             sources = [x for x in (params.get("sources") or pr.get("sources") or ["schedule"]) if x in ("schedule", "excel")] or ["schedule"]
             job = sched.ScheduleJob(out, slug, sources, self.rep, self.control, urls=st.get("schedule_urls"), pdf=False,
@@ -1765,7 +1822,12 @@ class App:
             title = book.pick_title(job.site_info.get("group_name") or "", slug, pr.get("title") or "")
             book.write_profile(root, title=title, sources=sources, last_used=int(time.time()), refreshed=int(time.time()))
             if res["total"] == 0:
-                text = f"Расписание группы «{title}»: пар не нашлось. Проверьте код группы и период; сайт мог ещё не выложить расписание."
+                why = "; ".join(dict.fromkeys(job.errors.values()))
+                text = (f"Расписание группы «{title}»: {why}" if why else
+                        f"Расписание группы «{title}»: пар не нашлось. Проверьте код группы и период; сайт мог ещё не выложить расписание.")
+                if fresh:
+                    book.delete_profile(out, slug)
+                    text += ". Группа не добавлена в список."
                 self.last_result = {"ok": False, "text": text, "aborted": "error", "kind": "schedule"}
             else:
                 text = f"Расписание группы «{title}» сохранено за {mo.fmt_dur(time.monotonic() - t0)}: {res['total']} пар"
@@ -1778,6 +1840,8 @@ class App:
         except Exception as e:
             self.last_result = {"ok": False, "text": f"Расписание группы: {mo.describe_error(e)}", "aborted": "error", "kind": "schedule"}
             self.rep.log(self.last_result["text"], "error")
+            if fresh and not (root / "schedule.json").exists():
+                book.delete_profile(out, slug)
         finally:
             with self.lock:
                 self.job_state = "idle"
@@ -2782,6 +2846,35 @@ def guess_ctype(name: str) -> str:
     return ct + "; charset=utf-8" if ct.startswith("text/") or ct in ("application/json", "application/xml") else ct
 
 
+# Файлы из курсов — чужое содержимое. Страница .html или картинка .svg из вложения (форум, отзыв на работу) раньше открывалась
+# с тем же адресом, что и окно программы, и её скрипт мог управлять программой: прочитать ключ окна и, например, запустить
+# скачанный .exe. Теперь такие файлы отдаются «в песочнице» (CSP sandbox без allow-same-origin: у страницы чужой, пустой
+# адрес — ни окна программы, ни её API, ни её хранилища), а API отвечает только запросам самого окна (Handler._same_origin).
+SANDBOX_EXT = {".html", ".htm", ".xhtml", ".shtml", ".svg", ".svgz", ".xml", ".xsl", ".mht", ".mhtml"}
+SANDBOX_CSP = "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
+# Программы и сценарии из материалов программа сама не запускает (у скачанного программой файла нет пометки «из интернета»,
+# и Windows не предупредит). Открыть такой файл можно только самому, из папки.
+RISKY_EXT = {".exe", ".msi", ".msix", ".appx", ".bat", ".cmd", ".com", ".scr", ".pif", ".cpl", ".vbs", ".vbe", ".js", ".jse",
+             ".wsf", ".wsh", ".ps1", ".psm1", ".hta", ".lnk", ".url", ".reg", ".jar", ".application", ".msc", ".sh", ".command",
+             ".app", ".desktop", ".run", ".bin", ".deb", ".rpm", ".apk", ".dmg", ".pkg"}
+
+
+def trusted_page(rel: str, target: Path) -> bool:
+    """Свои страницы программы, которым нужен её адрес (хранилище настроек, связь с окном): просмотрщик расписания —
+    своё и чужие (Расписание/index.html, Расписание/Другие группы/<код>/index.html) с отпечатком «<!--viewer:…-->» в начале
+    (его пишет schedule.render_viewer)."""
+    parts = rel.replace("\\", "/").split("/")
+    if not (parts == [sched.SCHEDULE_DIR, "index.html"] or
+            (len(parts) == 4 and parts[0] == sched.SCHEDULE_DIR and parts[1] == sched.OTHER_DIR and book.valid_slug(parts[2])
+             and parts[3] == "index.html")):
+        return False
+    try:
+        with open(target, "rb") as f:
+            return re.match(rb"(?:<!DOCTYPE html>\s*)?<!--viewer:[0-9a-f]{6,40}-->", f.read(80)) is not None
+    except OSError:
+        return False
+
+
 def inside(base: Path, target: Path) -> bool:
     try:
         target.resolve().relative_to(base.resolve())
@@ -2911,8 +3004,17 @@ class Handler(BaseHTTPRequestHandler):
     def _token_ok(self, tok: str) -> bool:
         return self._host_ok() and secrets.compare_digest(tok or "", APP.token)
 
+    def _same_origin(self) -> bool:
+        """Запрос пришёл от самого окна программы (или не из браузера: консоль, приложение .apk, вторая копия программы).
+        Страница из материалов курса в песочнице или чужой сайт получают отказ, даже если узнали ключ окна."""
+        sfs = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+        if sfs and sfs not in ("same-origin", "none"):
+            return False
+        origin = (self.headers.get("Origin") or "").strip()
+        return not origin or origin == "http://" + (self.headers.get("Host") or "")
+
     def _authorized(self, q) -> bool:
-        return self._token_ok(self.headers.get("X-Token") or q.get("t", ""))
+        return self._same_origin() and self._token_ok(self.headers.get("X-Token") or q.get("t", ""))
 
     def _serve_files(self, rel: str):
         """Файл из папки с материалами. Докачка частями (Range) нужна видео и аудио: без неё их нельзя перематывать."""
@@ -2942,6 +3044,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
+        if target.suffix.lower() in SANDBOX_EXT and not trusted_page(rel, target):
+            self.send_header("Content-Security-Policy", SANDBOX_CSP)
         if code == 206:
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
         self.end_headers()
@@ -2971,7 +3075,10 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         if u.path in ("/", "/index.html"):
-            return self._send(200, (UI_DIR / "index.html").read_bytes(), "text/html; charset=utf-8")
+            page = (UI_DIR / "index.html").read_bytes()
+            if self._authorized(q):        # с ключом окна — сразу вписываем его настройки (вид, тема…), чтобы страница открылась уже настроенной
+                page = page.replace(b"<head>", b"<head>" + uistate.page_script(APP.ui.get()), 1)
+            return self._send(200, page, "text/html; charset=utf-8")
         if u.path == "/api/ping":
             ok = self._authorized(q)
             return self._send(200, {"ok": ok, **({"version": mo.VERSION, "pid": os.getpid()} if ok else {})})
@@ -3013,6 +3120,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.mcp_info())
         if u.path == "/api/ai":
             return self._send(200, APP.ai_info())
+        if u.path == "/api/ui":
+            return self._send(200, APP.ui.get())
         if u.path == "/api/ai/job":
             return self._send(200, APP.ai_job_state(q))
         if u.path == "/api/notes":
@@ -3173,14 +3282,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": False, "geo": APP.geo["warning"]})
             return self._send(200, APP.start_job({"sync": bool(b.get("sync")), "course_ids": b.get("course_ids"),
                                                   "wait_for_server": bool(b.get("wait_for_server"))}))
+        if p == "/api/ui":
+            return self._send(200, APP.ui.update(b))
+        if p == "/api/settings/reset":
+            return self._send(200, APP.settings_reset(b))
         if p == "/api/schedule/save":
             for k in ("schedule_group", "schedule_sources", "schedule_urls", "schedule_pdf", "schedule_auto", "schedule_auto_range"):
                 if k in b:
                     APP.settings[k] = b[k]
-            if b.get("schedule_group"):   # можно писать по-русски, как на сайте, — храним код из адреса
-                APP.settings["schedule_group"] = sched.resolve_group(b["schedule_group"])
+            if "schedule_group" in b:     # можно писать по-русски, как на сайте, — храним код из адреса
+                APP.settings["schedule_group"] = sched.resolve_group(str(b["schedule_group"] or "")) if b["schedule_group"] else ""
             APP.save_settings()
             if b.get("start"):
+                if not APP.own_group():
+                    return self._send(200, {"ok": False, "need_group": True, "error": "сначала выберите свою группу (блок «Группа и источники»)"})
                 return self._send(200, APP.start_job({"kind": "schedule", "range": b.get("range", "2weeks"),
                                                       "from": b.get("from"), "to": b.get("to")}))
             return self._send(200, {"ok": True})
@@ -3264,6 +3379,9 @@ class Handler(BaseHTTPRequestHandler):
                 if rel:
                     return self._send(200, {"ok": False, "error": "файл не найден"})
                 target.mkdir(parents=True, exist_ok=True)
+            if not b.get("reveal") and target.is_file() and target.suffix.lower() in RISKY_EXT:
+                return self._send(200, {"ok": False, "risky": True, "error": f"«{target.name}» — программа или сценарий: из окна такие файлы "
+                                        "не запускаются. Если доверяете автору, откройте его сами — кнопка «Показать в папке»."})
             try:
                 open_path(target, reveal=bool(b.get("reveal")))
             except Exception as e:

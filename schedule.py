@@ -35,7 +35,8 @@ import xlsx_schedule as xs
 SCHEDULE_DIR = "Расписание"
 OTHER_DIR = "Другие группы"           # Расписание/Другие группы/<код группы>/ — чужие расписания (см. sch_book.py)
 IMPORT_SRC = "imported"               # «источник» для пар, пришедших из файла другого человека (data/imported.json)
-DEFAULT_GROUP = "ib-b-25-2-o"
+DEFAULT_GROUP = "ib-b-25-2-o"          # ТОЛЬКО пример страницы группы, откуда сайт отдаёт список отделов. Своей группой пользователя
+                                       # не подставлять: раньше у каждого нового пользователя «своей» оказывалась группа автора (1.27.0)
 MSK = timezone(timedelta(hours=3))   # Севастополь/Москва: UTC+3 без перехода на летнее время
 
 SOURCES = {
@@ -127,6 +128,18 @@ def resolve_group(text: str) -> str:
             if n in (_norm_group(g.get("name")), _norm_group(g.get("slug"))):
                 return g.get("slug") or group_slug(t)
     return group_slug(t)
+
+
+def same_group(a: str, b: str) -> bool:
+    """Одна ли это группа: код из адреса или название как на сайте/в Excel («ИБ/б-25-2-о» и «ib-b-25-2-o» — одна)."""
+    if not a or not b:
+        return True                         # в старых файлах группа могла не записываться — считаем своими
+    key = lambda g: group_slug(resolve_group(g)).replace("-", "")       # «ИБ/б-25-2о» в Excel и «ib-b-25-2-o» на сайте — одна группа
+    return a == b or key(a) == key(b)
+
+
+class GroupNotFound(mo.MoodleError):
+    """На сайте расписания нет страницы такой группы (опечатка в коде или группы больше нет)."""
 
 
 def group_name(slug: str) -> str:
@@ -740,7 +753,9 @@ class ScheduleJob:
         self.profile = profile or None
         self.own = not self.profile
         self.root = Path(out_dir) / SCHEDULE_DIR / ((OTHER_DIR + "/" + self.profile) if self.profile else "")
-        self.group = resolve_group((group or DEFAULT_GROUP).strip()) or DEFAULT_GROUP
+        self.group = resolve_group((group or "").strip())
+        if not self.group:
+            raise mo.MoodleError("не выбрана группа — укажите её в расписании («Группа и источники»)")
         self.sources = [s for s in SOURCE_ORDER if s in sources]
         self.urls = {k: (urls or {}).get(k) or SOURCES[k]["url"] for k in SOURCES}
         self.rep, self.control = rep, control
@@ -758,6 +773,7 @@ class ScheduleJob:
         self.limit_note = ""      # «сайт выложил не весь период» — показываем в окне, а не только в журнале
         self.excel = dict(excel or {})     # выбор Excel-файла: {"mode": "site"/"local", "sig": {...}, "name": "…"}
         self.excel_out = None              # если файл нашли сами — запомнить выбор (его сохранит вызывающий)
+        self.errors = {}                   # источник → почему не получилось (чтобы показать человеку, а не только в журнале)
 
     def _browser_result(self, ok):
         """Если фоновый браузер дважды подряд не справился — отключаем его до конца, чтобы не ждать зря."""
@@ -844,7 +860,8 @@ class ScheduleJob:
                 raise
             except Exception as e:
                 results[src] = None
-                self.rep.log(f"  ✗ {SOURCES[src]['title']}: {mo.describe_error(e)}", "error")
+                self.errors[src] = mo.describe_error(e) if not isinstance(e, GroupNotFound) else str(e)
+                self.rep.log(f"  ✗ {SOURCES[src]['title']}: {self.errors[src]}", "error")
         merged = self.write_outputs()
         self.stats["lessons"] = len(merged)
         if results.get("excel") and self.limit_note:
@@ -1009,6 +1026,9 @@ class ScheduleJob:
         self.rep.log(f"  {page_url}")
         c = self.client(page_url)
         r = c.request("GET", page_url, kind="page")
+        if r.status_code == 404:
+            raise GroupNotFound(f"группы «{group_name(self.group) or self.group}» нет на сайте schedule.sevsu.ru — проверьте написание "
+                                f"или выберите группу из списка СевГУ")
         t = c._text(r) if r.status_code < 400 else ""
         name = re.search(r"\bgroup\s*:\s*['\"]([^'\"]+)['\"]", t)
         if not name:
@@ -1253,6 +1273,8 @@ class ScheduleJob:
                 old = json.load(f)
         except (OSError, ValueError):
             pass
+        if not isinstance(old, dict) or not same_group(str(old.get("group") or ""), self.group):
+            old = {}                        # файл остался от прежней группы (группу сменили) — его пары и «отвеченные даты» не наши
         keep = [le for le in old.get("lessons", []) if not (a.isoformat() <= le["date"] <= b.isoformat())]
         cov_end = b
         pu = self.site_info.get("published_until") if src == "schedule" else ""
@@ -1271,17 +1293,39 @@ class ScheduleJob:
         return build_outputs(self.root, self.group, self.site_info, self.own)
 
 
+def saved_group(root: Path) -> str:
+    """Чья группа лежит в папке расписания: код из data/*.json (официальный сайт первым), иначе название из meta.json."""
+    root = Path(root)
+    for src in SOURCE_ORDER + [IMPORT_SRC]:
+        try:
+            with mo.fopen(root / "data" / f"{src}.json", "r", encoding="utf-8") as f:
+                g = json.load(f).get("group")
+            if g:
+                return resolve_group(str(g))
+        except (OSError, ValueError, AttributeError):
+            continue
+    try:
+        with mo.fopen(root / "data" / "meta.json", "r", encoding="utf-8") as f:
+            g = json.load(f).get("group_name")
+        return resolve_group(str(g)) if g else ""
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
 def build_outputs(root: Path, group: str, site_info: dict | None = None, own: bool = True) -> list:
     """Из сохранённых по источникам данных (data/*.json) собирает итог: schedule.json, офлайн-страницу и .ics."""
     root = Path(root)
-    merged = load_merged(root)
+    merged = load_merged(root, group)
     meta_p = root / "data" / "meta.json"
     try:
         with mo.fopen(meta_p, "r", encoding="utf-8") as f:
             site = json.load(f)
     except (OSError, ValueError):
         site = {}
+    if not isinstance(site, dict) or not same_group(str(site.get("slug") or site.get("group_name") or ""), group):
+        site = {}                           # сведения сайта о прежней группе (название, «выложено до») к новой не относятся
     site.update(site_info or {})
+    site["slug"] = resolve_group(group)
     mo.write_text_atomic(meta_p, json.dumps(site, ensure_ascii=False))
     try:
         with mo.fopen(root / "data" / "streams.json", "r", encoding="utf-8") as f:
@@ -1319,15 +1363,20 @@ def _merge_ranges(rs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return [(a, b) for a, b in out]
 
 
-def load_merged(root: Path) -> list:
+def load_merged(root: Path, group: str = "") -> list:
+    """Пары из всех источников папки. group — чья это папка: файл источника, записанный для другой группы
+    (осталось после смены своей группы), пропускается — иначе в расписании смешались бы две группы."""
     by_key = {}
     loaded = {}
     for src in SOURCE_ORDER + [IMPORT_SRC]:
         try:
             with mo.fopen(root / "data" / f"{src}.json", "r", encoding="utf-8") as f:
-                loaded[src] = json.load(f)
+                d = json.load(f)
         except (OSError, ValueError):
             continue
+        if not isinstance(d, dict) or (group and not same_group(str(d.get("group") or ""), group)):
+            continue
+        loaded[src] = d
     # Excel — «план на семестр»: там, где другие источники уже отвечали (даже «пар нет»), главнее они
     # (отмены и переносы есть только на сайте), а Excel заполняет остальные даты.
     covered = _merge_ranges([r for s_, d in loaded.items() if s_ not in ("excel", IMPORT_SRC) for r in _covered_of(d)])
