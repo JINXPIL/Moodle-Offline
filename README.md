@@ -1,5 +1,7 @@
 # Moodle Offline — все материалы курсов Moodle на вашем компьютере
 
+🇷🇺 **Русский** · 🇬🇧 [English](README.en.md)
+
 Программа входит в ваш личный кабинет Moodle (по умолчанию — `do.sevsu.ru`) и сохраняет учебные материалы выбранных курсов для работы без интернета:
 
 - **файлы** — лекции, методички, шаблоны отчётов, презентации;
@@ -1449,6 +1451,7 @@ document.querySelector('li.section .sectionname')?.textContent       // назв
 | `datadir.py` | где лежат данные программы и перенос с прошлой версии: папка пользователя, portable-режим, поиск и копирование старых данных (без сторонних библиотек) |
 | `dl_rules.py` | правила скачивания и шаблоны имён: фильтры, группы расширений, готовые наборы (без сторонних библиотек) |
 | `cdp.py` | фоновый Edge/Chrome без сторонних библиотек: страницы, которые строит скрипт, вход, кнопки, PDF |
+| `README.en.md` | English version of this README (a self-contained guide with pointers into the sections here); language switch at the top of both files; `tests/test_readme_en_unit.py` keeps the two in step |
 | `CHANGELOG.md`, `CHANGELOG.en.md` | история изменений по версиям (по-русски и по-английски); верхняя запись должна совпадать с `VERSION` — это проверяет `tests/test_changelog_unit.py` |
 | `requirements.txt` | библиотеки: requests, beautifulsoup4, tqdm, python-dotenv, truststore, pypdfium2 |
 | `.env.example` | образец файла настроек |
