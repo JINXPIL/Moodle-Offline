@@ -156,6 +156,18 @@ def make_event(kind: str, course_id, course: str, title: str, *, detail="", url=
     return ev
 
 
+
+def _read_retry(path, tries: int = 6) -> str:
+    """Прочитать файл; в Windows его может на мгновение держать антивирус/OneDrive (PermissionError) — это не порча, повторяем."""
+    for i in range(tries):
+        try:
+            return Path(path).read_text(encoding="utf-8")
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(0.15 * (i + 1))
+    raise PermissionError(str(path))
+
 class NewsLog:
     """Лента событий в файле .moodle_news.json. Читает заново, если файл изменила другая программа (консольный запуск)."""
 
@@ -178,20 +190,27 @@ class NewsLog:
         if self._mtime is None:
             return
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
+            data = json.loads(_read_retry(self.path))
             ev = data.get("events") if isinstance(data, dict) else None
             self.events = [e for e in (ev or []) if isinstance(e, dict) and e.get("id")]
-        except (OSError, ValueError):
+        except ValueError:                     # испорчен — откладываем; «занят антивирусом» (OSError) испорченным не считаем
             try:
                 self.path.replace(self.path.with_name(self.path.name + ".bad"))
             except OSError:
                 pass
+        except OSError:
+            self._mtime = None                 # прочитаем в следующий раз
+            self._unread = True
+            return
+        self._unread = False
 
     def _refresh(self):
         if self._stat() != self._mtime:
             self._load()
 
     def _save(self):
+        if getattr(self, "_unread", False):    # ленту не удалось прочитать (файл занят) — новым почти пустым списком её не затираем
+            return
         tmp = self.path.with_name(self.path.name + ".tmp")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp.write_text(json.dumps({"version": 1, "events": self.events}, ensure_ascii=False), encoding="utf-8")

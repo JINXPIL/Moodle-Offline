@@ -260,6 +260,18 @@ def _atomic_write(path: Path, text: str):
     os.replace(tmp, path)
 
 
+
+def _read_retry(path, tries: int = 6) -> str:
+    """Прочитать файл; в Windows его может на мгновение держать антивирус/OneDrive (PermissionError) — это не порча, повторяем."""
+    for i in range(tries):
+        try:
+            return Path(path).read_text(encoding="utf-8")
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(0.15 * (i + 1))
+    raise PermissionError(str(path))
+
 class Store:
     """Файл .moodle_deadlines.json. Перечитывает его, если файл изменила другая программа (консольный запуск)."""
 
@@ -287,16 +299,21 @@ class Store:
         if self._mtime is None:
             return
         try:
-            d = json.loads(self.path.read_text(encoding="utf-8"))
+            d = json.loads(_read_retry(self.path))
             if isinstance(d, dict):
                 for k in ("events", "done", "notified", "sync"):
                     if isinstance(d.get(k), dict):
                         self.data[k].update(d[k]) if k == "sync" else self.data[k].update(d[k])
-        except (OSError, ValueError):
+        except ValueError:                     # испорчен — откладываем; «занят антивирусом» (OSError) испорченным не считаем
             try:
                 self.path.replace(self.path.with_name(self.path.name + ".bad"))
             except OSError:
                 pass
+        except OSError:
+            self._mtime = None
+            self._unread = True
+            return
+        self._unread = False
 
     def refresh(self):
         with self.lock:
@@ -305,6 +322,8 @@ class Store:
 
     def save(self):
         with self.lock:
+            if getattr(self, "_unread", False):   # файл не удалось прочитать (занят) — пустыми данными его не затираем
+                return
             _atomic_write(self.path, json.dumps(self.data, ensure_ascii=False))
             self._mtime = self._stat()
 

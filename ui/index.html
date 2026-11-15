@@ -114,6 +114,10 @@ main{overflow:hidden;min-height:0}
 .cfoot .mini{height:26px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:transparent;cursor:pointer;color:var(--muted);font-size:12px}
 .cfoot .mini:hover{color:var(--text);border-color:var(--line-strong)}
 .empty{padding:50px 20px;text-align:center;color:var(--muted)}
+.empty .btn{margin-top:12px}
+.schnote{margin:0 0 8px;padding:8px 12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--warn,#d9a400) 45%,transparent);
+  background:color-mix(in srgb,var(--warn,#d9a400) 12%,transparent);font-size:13px;line-height:1.4;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.schnote span{flex:1 1 14em}
 
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
 .panel h3{margin:0 0 12px;font:600 14px var(--font-display)}
@@ -879,6 +883,7 @@ body[data-v-courses-style=list] #grid .ctitle{-webkit-line-clamp:3}
           <div class="toolbar"><h2>Расписание</h2><select class="txt schsel" id="schSelD" aria-label="Какое расписание показать"></select><span class="hint" id="schInfo" style="margin:0"></span><button class="icon-btn vwbtn" data-vw="schedule" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
           <div id="schEmpty" class="empty hidden">Расписание ещё не сохранено. Выберите период в блоке «Период для офлайна» и нажмите «Сохранить для офлайна».</div>
           <div class="schhead"><select class="txt schsel" id="schSelM" aria-label="Какое расписание показать"></select><button class="btn" id="schToSettings" aria-haspopup="dialog">Настройки</button><button class="icon-btn vwbtn" data-vw="schedule" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
+          <div class="schnote hidden" id="schStale" role="status"></div>
           <iframe class="schedframe hidden" id="schFrame"></iframe>
         </div>
         <aside class="side">
@@ -902,7 +907,7 @@ body[data-v-courses-style=list] #grid .ctitle{-webkit-line-clamp:3}
           </div>
           <div class="panel own-only">
             <h3>Группа и источники</h3>
-            <div class="field"><label>Группа</label><input class="txt" id="schGroup" list="schGroupList" placeholder="ИБ/б-25-2-о" autocomplete="off">
+            <div class="field"><label>Группа</label><input class="txt" id="schGroup" list="schGroupList" placeholder="например, ИБ/б-25-2-о" autocomplete="off">
               <datalist id="schGroupList"></datalist>
               <p class="hint" id="schGroupHint">Пишите как на сайте (ИБ/б-25-2-о) или как в адресе (ib-b-25-2-o) — подойдёт любой вариант.</p></div>
             <details class="adv" id="schPick"><summary>Выбрать из списка СевГУ</summary>
@@ -1143,6 +1148,15 @@ body[data-v-courses-style=list] #grid .ctitle{-webkit-line-clamp:3}
             <div class="updnew hidden" id="updNew"></div>
             <div class="row"><div class="lbl">Проверять само<small>раз в сутки спрашиваю только GitHub «какая версия последняя»; личные данные не отправляются</small></div><label class="sw-t"><input type="checkbox" id="updAuto"><span></span></label></div>
             <div class="row"><div class="lbl">Как часто</div><select class="txt" id="updEvery" style="width:auto"><option value="6">каждые 6 ч</option><option value="12">каждые 12 ч</option><option value="24">раз в сутки</option><option value="72">раз в 3 дня</option><option value="168">раз в неделю</option></select></div>
+          </div>
+          <div class="panel" id="resetPanel">
+            <h3>Сброс к настройкам по умолчанию</h3>
+            <p class="hint" style="margin-top:0">Всё, что вы настроили, сохраняется в программе и переживает перезапуск и обновление. Если захотите начать с чистого листа:</p>
+            <div class="row" style="border-top:0;padding-top:0"><div class="lbl">Вид окна<small>«Вид» во всех разделах, тема и цвет, порядок вкладок, вид расписания</small></div>
+              <button class="btn" id="resetView">Сбросить вид</button></div>
+            <div class="row"><div class="lbl">Все настройки<small>ещё и как сохранять, бережный режим, уведомления, календарь, источники расписания</small></div>
+              <button class="btn danger" id="resetAll">Сбросить всё</button></div>
+            <p class="hint">Останутся: вход в Moodle, папка и всё скачанное, выбранные курсы, ваша группа, заметки, ключи нейросетей и доступ для них, автозапуск и ночная синхронизация. Перед сбросом настроек программа сохраняет их копию (settings.json.before-reset в папке данных).</p>
           </div>
   </div>
 </div></div>
@@ -1422,6 +1436,53 @@ body[data-v-courses-style=list] #grid .ctitle{-webkit-line-clamp:3}
 const T = new URLSearchParams(location.search).get("t") || sessionStorage.getItem("mo_t") || "";
 if (T) sessionStorage.setItem("mo_t", T);
 history.replaceState(null, "", "/");
+/* ── настройки окна (вид разделов, тема, цвет, выбор в расписании) хранятся в программе (uistate.py, ui_state.json).
+   Адрес окна — http://127.0.0.1:<порт>, порт у каждого запуска свой, а браузер держит localStorage отдельно для каждого
+   адреса: раньше всё настроенное пропадало при каждом перезапуске и обновлении. Теперь при открытии окна программа отдаёт
+   сохранённое (вписывает в страницу, а после перезагрузки — GET /api/ui), а каждое изменение уходит ей (POST /api/ui).
+   Синхронизируются ключи mo_*, rs_* и rs:* (их пишет и просмотрщик расписания в рамке — слышим через событие storage). */
+const UI_RE = /^(mo_|rs_|rs:)/, uiSyncable = k => typeof k === "string" && UI_RE.test(k) && k !== "mo_t";
+const UI_PEND = {set: {}, del: new Set(), init: false};
+let UI_TIMER = 0;
+function uiQueue(k, v){
+  if (!uiSyncable(k)) return;
+  if (v === null || v === undefined) { delete UI_PEND.set[k]; UI_PEND.del.add(k); } else { UI_PEND.set[k] = String(v); UI_PEND.del.delete(k); }
+  clearTimeout(UI_TIMER); UI_TIMER = setTimeout(uiFlush, 400);
+}
+function uiFlush(){
+  if (!T || (!Object.keys(UI_PEND.set).length && !UI_PEND.del.size && !UI_PEND.init)) return;
+  const body = {set: UI_PEND.set, del: [...UI_PEND.del], init: UI_PEND.init};
+  UI_PEND.set = {}; UI_PEND.del = new Set(); UI_PEND.init = false;
+  fetch("/api/ui", {method: "POST", keepalive: true, headers: {"X-Token": T, "Content-Type": "application/json"}, body: JSON.stringify(body)})
+    .then(r => r.ok ? r.json() : null).then(j => { if (!j || !j.ok) uiRequeue(body); }).catch(() => uiRequeue(body));
+}
+function uiRequeue(b){ for (const k in b.set) if (!(k in UI_PEND.set) && !UI_PEND.del.has(k)) UI_PEND.set[k] = b.set[k]; b.del.forEach(k => { if (!(k in UI_PEND.set)) UI_PEND.del.add(k); }); clearTimeout(UI_TIMER); UI_TIMER = setTimeout(uiFlush, 5000); }
+(function uiHydrate(){
+  let st = window.__MO_UI;
+  if (!st && T) {            // страницу перезагрузили (адрес уже без ключа) — спрашиваем программу один раз, до остального кода
+    try { const x = new XMLHttpRequest(); x.open("GET", "/api/ui", false); x.setRequestHeader("X-Token", T); x.send(); if (x.status === 200) st = JSON.parse(x.responseText); } catch (e) {}
+  }
+  if (!st || typeof st !== "object") return;
+  try {
+    if (st.init) {           // программа — главная: ставим её значения, лишнее (сброшенное) убираем
+      const data = st.data || {};
+      for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (uiSyncable(k) && !(k in data)) localStorage.removeItem(k); }
+      for (const k in data) if (uiSyncable(k) && localStorage.getItem(k) !== data[k]) localStorage.setItem(k, data[k]);
+    } else {                 // в программе ещё пусто (первый запуск этой версии) — отдаём ей то, что уже есть в браузере
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (uiSyncable(k)) UI_PEND.set[k] = localStorage.getItem(k); }
+      UI_PEND.init = true; UI_TIMER = setTimeout(uiFlush, 50);
+    }
+  } catch (e) {}
+})();
+(() => {                     // дальше — каждое изменение (после загрузки, чтобы восстановление выше не отправлялось обратно)
+  const P = Storage.prototype, set0 = P.setItem, del0 = P.removeItem, clear0 = P.clear;
+  P.setItem = function (k, v) { set0.call(this, k, v); if (this === window.localStorage) uiQueue(String(k), String(v)); };
+  P.removeItem = function (k) { del0.call(this, k); if (this === window.localStorage) uiQueue(String(k), null); };
+  P.clear = function () { const ks = this === window.localStorage ? [...Array(this.length).keys()].map(i => this.key(i)) : []; clear0.call(this); ks.forEach(k => uiQueue(k, null)); };
+})();
+addEventListener("storage", e => { if (e.storageArea !== localStorage) return; if (e.key === null) return; uiQueue(e.key, e.newValue); });
+addEventListener("pagehide", uiFlush);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") uiFlush(); });
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let ANDROID = false;   // окно открыто в браузере телефона (программа работает в Termux)
@@ -2168,7 +2229,11 @@ document.addEventListener("click", e => {
   api("/api/open", {path: b.dataset.ext || b.dataset.rev, reveal: !!b.dataset.rev}).then(r => { if (!r.ok) toast(r.error, "bad"); });
 });
 let mPath = "";
-function preview(p, hash = ""){ mPath = p; $("#mTitle").textContent = p.split("/").pop(); $("#mFrame").src = fileUrl(p) + hash; $("#modal").classList.remove("hidden"); }
+// страницы и SVG из курсов — в песочнице (свой пустой адрес: ни окна программы, ни её ключа); PDF — без неё (встроенный просмотр PDF в песочнице не работает)
+const SANDBOXED = /\.(html?|xhtml|shtml|svgz?|xml|xsl|mht(ml)?)$/i;
+function preview(p, hash = ""){ mPath = p; $("#mTitle").textContent = p.split("/").pop(); const f = $("#mFrame");
+  if (SANDBOXED.test(p)) f.setAttribute("sandbox", "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"); else f.removeAttribute("sandbox");
+  f.src = fileUrl(p) + hash; $("#modal").classList.remove("hidden"); }
 $("#mClose").onclick = () => { $("#modal").classList.add("hidden"); $("#mFrame").src = "about:blank"; };
 // Системная кнопка «Назад» на Android (MainActivity.onBackPressed): закрывает верхнее открытое окно, затем курс. true — что-то закрыто, false — закрывать нечего (тогда приложение сворачивается).
 window.moBack = () => {
@@ -2728,6 +2793,23 @@ $("#aiTest").onclick = async () => {
 $("#aiSetSave").onclick = aiSettingsSave;
 $("#aiSetCancel").onclick = $("#aiSetClose").onclick = aiSetHide;
 aiLoad();
+
+// ── «Настройки» → «Сброс»: вид окна (ui_state.json и localStorage) или ещё и настройки программы ──
+async function resetSettings(what){
+  const msg = what === "all"
+    ? "Сбросить все настройки программы и вид окна к значениям по умолчанию?\n\nОстанутся: вход, папка и скачанное, выбранные курсы, ваша группа, заметки, ключи нейросетей, автозапуск. Копия прежних настроек сохранится в папке данных."
+    : "Вернуть вид окна по умолчанию? Сбросятся «Вид» во всех разделах, тема и цвет, порядок вкладок и вид расписания.";
+  if (!confirm(msg)) return;
+  let r; try { r = await api("/api/settings/reset", {what}); } catch (e) { return toast("Нет связи с программой.", "bad"); }
+  if (!r.ok) return toast(r.error || "Не получилось сбросить", "bad");
+  clearTimeout(UI_TIMER); UI_PEND.set = {}; UI_PEND.del = new Set(); UI_PEND.init = false;
+  try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (uiSyncable(k)) Storage.prototype.removeItem.call(localStorage, k); } } catch (e) {}
+  clearTimeout(UI_TIMER); UI_PEND.del = new Set();     // программа уже всё стёрла — повторно слать не нужно
+  toast(what === "all" ? "Настройки сброшены. Перезагружаю окно…" : "Вид сброшен. Перезагружаю окно…", "ok");
+  setTimeout(() => location.reload(), 700);
+}
+$("#resetView").onclick = () => resetSettings("view");
+$("#resetAll").onclick = () => resetSettings("all");
 
 // ── Доступ для нейросетей (mcp_server.py): окно и панель в настройках ──
 let MCP = null, MCPT = "";
@@ -3451,7 +3533,7 @@ async function loadGroups(dept){
 }
 $("#schDept").onchange = () => loadGroups($("#schDept").value);
 $("#schGrpSel").onchange = async () => { const o = $("#schGrpSel").selectedOptions[0]; if (!o || !o.value) return;
-  $("#schGroup").value = o.textContent; await api("/api/schedule/save", {schedule_group: o.value}); toast("Группа: " + o.textContent, "ok"); loadSchedule(false); };
+  $("#schGroup").value = o.textContent; toast("Группа: " + o.textContent, "ok"); schSetGroup(o.value); };
 const themeHash = () => { const t = localStorage.getItem("mo_theme") || "auto"; const a = localStorage.getItem("mo_accent") || ACCENTS[0];
   return "#" + (t !== "auto" ? "theme=" + t + "&" : "") + "accent=" + encodeURIComponent(a); };
 async function loadSchedule(reloadFrame = true){
@@ -3474,10 +3556,34 @@ async function loadSchedule(reloadFrame = true){
   const pub = other ? "" : (SCH.published_until || "");
   lim.classList.toggle("hidden", !pub);
   if (pub) lim.textContent = `На сайте СевГУ расписание этой группы выложено до ${ru(pub)}. Всё, что позже, программа сохранит, когда сайт его покажет (нажмите «Сохранить для офлайна» позже или оставьте автообновление включённым).`;
-  $("#schEmpty").textContent = other ? "Расписание этой группы не сохранено. Нажмите «Обновить с сайта» в блоке «Другие группы» ниже."
+  if (!other && SCH.need_group) $("#schEmpty").innerHTML = `Сначала выберите свою группу — программа скачает её расписание.<br><button class="btn primary" id="schPickGroup">Выбрать группу</button>`;
+  else $("#schEmpty").textContent = other ? "Расписание этой группы не сохранено. Нажмите «Обновить с сайта» в блоке «Другие группы» ниже."
     : "Расписание ещё не сохранено. Выберите период в блоке «Период для офлайна» и нажмите «Сохранить для офлайна».";
-  $("#schEmpty").classList.toggle("hidden", cur.saved); $("#schFrame").classList.toggle("hidden", !cur.saved);
+  const pick = $("#schPickGroup"); if (pick) pick.onclick = schGoGroup;
+  const stale = !other && SCH.stale_group ? SCH.stale_group : "";      // группу сменили, а на диске ещё расписание прежней
+  $("#schStale").classList.toggle("hidden", !stale);
+  if (stale) { $("#schStale").innerHTML = `<span>Показано сохранённое расписание группы <b>${esc(stale)}</b>, а выбрана <b>${esc(SCH.group_name || SCH.group)}</b>.</span><button class="btn primary" id="schStaleGo">Скачать для ${esc(SCH.group_name || SCH.group)}</button>`;
+    $("#schStaleGo").onclick = () => schDownloadOwn(); }
+  $("#schEmpty").classList.toggle("hidden", cur.saved && !(!other && SCH.need_group)); $("#schFrame").classList.toggle("hidden", !cur.saved || (!other && SCH.need_group));
   if (cur.saved && (reloadFrame || $("#schFrame").dataset.dir !== cur.dir)) { $("#schFrame").dataset.dir = cur.dir; $("#schFrame").src = fileUrl(cur.dir + "/index.html") + "?v=" + Date.now() + themeHash(); }
+}
+/* открыть настройки расписания на нужном поле: на телефоне они — лист поверх расписания (прокрутка скрытого блока ничего не давала) */
+function schGoTo(sel){
+  if (NARROW.matches) schSide(true);
+  const el = $(sel); if (!el) return;
+  const det = el.closest("details"); if (det) det.open = true;
+  setTimeout(() => { el.scrollIntoView({behavior: "smooth", block: "center"}); el.focus({preventScroll: true}); }, NARROW.matches ? 60 : 0);
+}
+function schGoGroup(){ if (SCH_VIEW !== "own") { schSetView("own"); loadSchedule(true); } schGoTo("#schGroup"); }
+async function schDownloadOwn(){        // своя группа выбрана/сменена — сразу скачать её расписание (период — выбранный в «Период для офлайна»)
+  const r = await api("/api/schedule/save", {start: true, range: schRange === "custom" ? "2weeks" : schRange});
+  if (!r.ok) { toast(r.need_group ? "Сначала выберите свою группу" : "Группа сохранена. Скачать сейчас не получилось: " + (r.error || "") + " — нажмите «Сохранить для офлайна» позже", "bad"); return false; }
+  showDock(); toast("Скачиваю расписание группы…"); return true;
+}
+async function schSetGroup(value){
+  const r = await api("/api/schedule/save", {schedule_group: value}); if (!r.ok) return toast(r.error || "Не сохранилось", "bad");
+  await loadSchedule(false);
+  if (SCH && SCH.group && (SCH.stale_group || !schProfs()[0] || !schProfs()[0].saved)) schDownloadOwn();   // расписания этой группы ещё нет — качаем сразу
 }
 /* ── чужие расписания: переключатель, список, «поделиться», загрузка из файла ── */
 const schLabel = p => (p.own ? "Моё · " : "") + (p.title || p.slug) + (p.origin === "file" ? " (из файла)" : "");
@@ -3496,7 +3602,7 @@ function schBookRender(){
   if (other) $("#schCurAuto").checked = !!cur.auto;
 }
 async function schUse(id){
-  if (id === "__add") { schBookRender(); $("#scheduleView .side").scrollIntoView({behavior: "smooth", block: "start"}); setTimeout(() => $("#schOtherGroup").focus(), 350); return; }
+  if (id === "__add") { schBookRender(); schGoTo("#schOtherGroup"); return; }
   schSetView(id); if (id !== "own") api("/api/schedule/profile/use", {slug: id}); loadSchedule(true);
 }
 ["#schSelD", "#schSelM"].forEach(id => $(id).onchange = () => schUse($(id).value));
@@ -3579,9 +3685,9 @@ function schPayload(start){
 $$("#schRanges button").forEach(b => b.onclick = () => { schRange = b.dataset.r; $$("#schRanges button").forEach(x => x.classList.toggle("on", x === b)); $("#schCustom").classList.toggle("hidden", schRange !== "custom"); });
 $("#schSave").onclick = async () => { const p = schPayload(true); if (!p.schedule_sources.length) return toast("Выберите хотя бы один источник", "bad");
   if (schRange === "custom" && !(p.from && p.to)) return toast("Укажите даты «с» и «по»", "bad");
-  const r = await api("/api/schedule/save", p); if (!r.ok) return toast(r.error || "Не удалось начать", "bad"); showDock(); toast("Сохраняю расписание…"); };
+  const r = await api("/api/schedule/save", p); if (!r.ok) { if (r.need_group) schGoGroup(); return toast(r.error || "Не удалось начать", "bad"); } showDock(); toast("Сохраняю расписание…"); };
 ["#schPdf", "#schAuto", "#schAutoRange"].forEach(id => $(id).onchange = () => api("/api/schedule/save", schPayload(false)));
-$("#schGroup").onchange = async () => { await api("/api/schedule/save", schPayload(false)); loadSchedule(false); };
+$("#schGroup").onchange = () => schSetGroup($("#schGroup").value.trim());
 $("#schOpen").onclick = () => api("/api/open", {path: schDirNow() + "/index.html"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); });
 $("#schIcs").onclick = () => api("/api/open", {path: schDirNow() + "/raspisanie.ics"}).then(r => { if (!r.ok) toast("Сначала сохраните расписание", "bad"); else toast("Откроется программа календаря — подтвердите импорт"); });
 $("#schSnaps").onclick = () => api("/api/open", {path: schDirNow() + "/снимки"}).then(r => { if (!r.ok) toast("Снимков пока нет", "bad"); });

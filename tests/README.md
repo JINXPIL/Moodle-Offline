@@ -15,6 +15,7 @@
 - `_root.py` — подключает корень проекта (`import _root` — первая строка любого теста).
 - `mock_moodle.py` — фейковый Moodle (разметка как у do.sevsu.ru, обезличена); `mock_iot.py` — фейковый iot.sevsu.ru (Keycloak + API).
   Нужные макеты `run_all.py` запускает сам (таблица `MOCKS` в нём) и останавливает после теста.
+- `mock_schedule.py` — фейковый schedule.sevsu.ru (страница группы, список групп, пары по неделям; у каждой пары подписана группа) для `test_schedule_groups_e2e.py`.
 - `mock_llm.py` — фейковые нейросети (Claude, Gemini, OpenAI и совместимые, списки моделей) для `test_ai_unit.py` и `test_ai_api_unit.py`; ключи и тексты вымышленные, сервер поднимает сам тест в потоке.
 - `test_mcp_unit.py` / `test_mcp_api_unit.py` / `test_mcp_stdio_e2e.py` — доступ для внешних нейросетей: инструменты и защита путей, HTTP на настоящем сокете (токен, Host/Origin, блокировка, лимиты), окно `/api/mcp*`, токен в `mcp.bin`, настоящий процесс `--mcp`; настоящих клиентов (Claude Code, Cursor…) тут нет.
 - `test_desktop_unit.py` / `test_desktop_gui_unit.py` — Linux и macOS (`desktop.py`): команды `osascript`/`notify-send`/`zenity`/`kdialog` и защита текста в аргументах, файлы автозапуска (`.desktop`, LaunchAgent) и таймера systemd, включение/выключение на подставных `systemctl`/`launchctl`, окно (`/api/watch/autostart`, `/api/schedule`, `/api/pick_folder`). `test_updater_platforms_unit.py` — виды сборок, файлы релиза по архитектуре, проверка ELF, право на запуск. Настоящих macOS и systemd в этих тестах нет.
