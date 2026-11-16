@@ -806,13 +806,48 @@ body.android .no-android{display:none!important}
   .dlbar #syncBtn{flex:0 1 auto;min-width:7.5em}
   #coursesView.has-sel .content{padding-bottom:calc(var(--dl-h,0px) + 18px)}   /* последний ряд карточек не прячется под плашкой */
 }
+
+/* ── Успеваемость (lk.sevsu.ru) ── */
+#gradesView .gr-act{display:flex;flex-wrap:wrap;gap:8px}
+#gradesView .gr-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5em),1fr));gap:10px;margin:4px 0 14px}
+#gradesView .gr-card{background:var(--surface-solid);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px}
+#gradesView .gr-card b{display:block;font-size:1.35rem;line-height:1.2}
+#gradesView .gr-card small{color:var(--muted)}
+#gradesView .gr-sems{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+#gradesView .gr-sems .chip{height:auto;min-height:32px;padding:4px 12px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2}
+#gradesView .gr-sems .chip small{font-size:11px;opacity:.8}
+#gradesView .gr-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-solid)}
+#gradesView table.gr{width:100%;border-collapse:collapse;font-size:14px}
+#gradesView table.gr th,#gradesView table.gr td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}
+#gradesView table.gr th{font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap}
+#gradesView table.gr tr:last-child td{border-bottom:0}
+#gradesView table.gr td.n,#gradesView table.gr th.n{text-align:center;white-space:nowrap}
+#gradesView tr.gr-none td{color:var(--muted)}
+#gradesView .gb{display:inline-block;padding:1px 9px;border-radius:999px;font-size:13px;white-space:nowrap;border:1px solid transparent}
+#gradesView .gb5,#gradesView .gbp{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+#gradesView .gb4{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+#gradesView .gb3{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
+#gradesView .gb2,#gradesView .gbf{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+#gradesView .gb0{color:var(--faint)}
+#gradesView .gr-empty{padding:18px;color:var(--muted)}
+@media (max-width:700px){
+  #gradesView table.gr thead{display:none}
+  #gradesView table.gr,#gradesView table.gr tbody,#gradesView table.gr tr,#gradesView table.gr td{display:block;width:100%}
+  #gradesView table.gr tr{padding:8px 10px;border-bottom:1px solid var(--line)}
+  #gradesView table.gr td{border:0;padding:1px 0;text-align:left}
+  #gradesView table.gr td.n{text-align:left}
+  #gradesView table.gr td.s{font-weight:600}
+  #gradesView table.gr td.m{color:var(--muted);font-size:13px}
+  #gradesView table.gr td.i{display:none}
+  #gradesView table.gr td[data-l]:not(:empty)::after{content:" " attr(data-l)}
+}
 </style>
 </head>
 <body>
 <div id="app">
   <header class="top">
     <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>Moodle Offline</div>
-    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/></svg><span class="tl">Курсы</span></button><button data-view="search"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg><span class="tl">Поиск</span></button><button data-view="notes"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 11h8M8 15h5"/></svg><span class="tl">Заметки</span></button><button data-view="calendar"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="tl">Календарь</span><span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="tl">Расписание</span></button><button data-view="electives"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="tl">Элективы</span></button><button data-view="news"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="tl">Что нового</span><span class="nbadge hidden" id="newsBadge"></span></button></div>
+    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/></svg><span class="tl">Курсы</span></button><button data-view="search"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg><span class="tl">Поиск</span></button><button data-view="notes"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 11h8M8 15h5"/></svg><span class="tl">Заметки</span></button><button data-view="calendar"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="tl">Календарь</span><span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="tl">Расписание</span></button><button data-view="electives"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="tl">Элективы</span></button><button data-view="grades"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="tl">Успеваемость</span></button><button data-view="news"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="tl">Что нового</span><span class="nbadge hidden" id="newsBadge"></span></button></div>
     <div class="pill" id="net" title="Проверка доступности Moodle (частоту можно изменить: «Таймер и автообновление»)"><span class="dot"></span><span class="txt"><span class="lg">Проверяю сервер…</span><span class="sh">Проверка…</span></span></div>
     <div class="pill hidden" id="ip"></div>
     <button class="icon-btn dlbtn hidden" id="dlBtn" title="Загрузки" aria-label="Загрузки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg><span class="dlpct" id="dlPct"></span><span class="dlmark" id="dlMark"></span></button>
@@ -981,6 +1016,29 @@ body.android .no-android{display:none!important}
             <p class="hint">Программа входит на сайт под вашей учётной записью и делает то же, что кнопки на сайте. Выбор сохраняется и запись делается только по вашему нажатию — «ловить» места автоматически она не будет. Работает и на телефоне: браузер не нужен.</p>
           </div>
         </aside>
+      </div>
+    </section>
+    <section class="view hidden" id="gradesView">
+      <div class="layout">
+        <div class="content">
+          <div class="toolbar"><h2>Успеваемость</h2><span class="hint" id="grInfo" style="margin:0"></span></div>
+          <div id="grMsg" class="hint hidden" style="margin:0 0 10px"></div>
+          <div id="grBody"></div>
+          <div class="panel" id="grPanel" style="margin-top:14px">
+            <div class="gr-act">
+              <button class="btn" id="grRefresh">Обновить с сайта</button>
+              <button class="btn ghost" id="grFile">Из файла…</button>
+              <button class="btn ghost" id="grSite">Открыть на сайте</button>
+              <button class="btn ghost hidden" id="grClear">Удалить сохранённое</button>
+              <input type="file" id="grFileIn" accept=".html,.htm,text/html" class="hidden">
+            </div>
+            <div id="grPassBox" class="hidden" style="margin-top:12px">
+              <div class="field"><label>Логин учётной записи СевГУ</label><input class="txt" id="grUser" autocomplete="username"></div>
+              <div class="field"><label>Пароль (как для Moodle)</label><input class="txt" type="password" id="grPass" autocomplete="current-password"></div>
+              <button class="btn" id="grPassGo">Войти и обновить</button></div>
+            <p class="hint" style="margin:12px 0 0">Данные берутся из вашего личного кабинета lk.sevsu.ru («Сведения об успеваемости») и лежат только у вас на устройстве, в папке «Успеваемость». Они не переносятся на другие устройства и не попадают в поиск. Средний балл считает программа по оценкам 5–2 (зачёты в него не входят) — он может отличаться от официального. Если вход на сайт не получается: откройте страницу в браузере, сохраните её (Ctrl+S, «Веб-страница, только HTML») и нажмите «Из файла…».</p>
+          </div>
+        </div>
       </div>
     </section>
     <section class="view hidden" id="newsView">
@@ -1995,7 +2053,7 @@ const VIEWDEF = {
     {k: "chips", t: "Счётчики сверху", b: 1}, {k: "sub", t: "Курс и подпись под названием", b: 1}, {k: "left", t: "Сколько осталось («через 5 ч»)", b: 1}]},
   electives: {name: "Элективы", opts: [V_DENS]},
 };
-const V_TABS = [["courses", "Курсы"], ["search", "Поиск"], ["notes", "Заметки"], ["calendar", "Календарь"], ["schedule", "Расписание"], ["electives", "Элективы"], ["news", "Что нового"]];
+const V_TABS = [["courses", "Курсы"], ["search", "Поиск"], ["notes", "Заметки"], ["calendar", "Календарь"], ["schedule", "Расписание"], ["electives", "Элективы"], ["grades", "Успеваемость"], ["news", "Что нового"]];
 const VKEY = "mo_view";
 let VS = (() => { try { const j = JSON.parse(localStorage.getItem(VKEY) || "{}"); return j && typeof j === "object" && !Array.isArray(j) ? j : {}; } catch (e) { return {}; } })();
 const vSave = () => { try { localStorage.setItem(VKEY, JSON.stringify(VS)); } catch (e) {} };
@@ -2906,6 +2964,72 @@ $("#mcpLogClear").onclick = async () => { try { await api("/api/mcp/log_clear", 
 setInterval(() => { if (!$("#mcpModal").classList.contains("hidden")) mcpLoad().then(mcpRender); }, 5000);   // пока окно открыто — журнал обновляется
 mcpLoad();
 
+/* ── Успеваемость (lk.sevsu.ru) ── */
+let GR = null, grProg = 0, grSem = null, grBusy = false, grClearAt = 0;
+const GR_BADGE = {"5": "gb5", "4": "gb4", "3": "gb3", "2": "gb2", pass: "gbp", fail: "gbf", absent: "gbf", none: "gb0", other: "gb0"};
+const grNum = v => v == null ? "—" : String(v).replace(".", ",");
+const grWhen = ts => { if (!ts) return ""; const d = new Date(ts * 1000); return d.toLocaleDateString("ru-RU") + " " + d.toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"}); };
+function grMsg(text, bad){ const m = $("#grMsg"); m.textContent = text || ""; m.classList.toggle("hidden", !text); m.style.color = bad ? "var(--bad)" : ""; }
+async function loadGrades(){ try { GR = await api("/api/lk"); } catch (e) { return; } renderGrades(); }
+function renderGrades(){
+  const s = GR; if (!s) return;
+  $("#grPassBox").classList.toggle("hidden", !!s.has_creds && !s.need_password);
+  if (document.activeElement !== $("#grUser") && !$("#grUser").value) $("#grUser").value = s.username || "";
+  $("#grClear").classList.toggle("hidden", !s.has);
+  if (!s.has) {
+    $("#grInfo").textContent = "";
+    $("#grBody").innerHTML = '<div class="panel"><div class="gr-empty">Пока ничего не сохранено. Нажмите «Обновить с сайта» — программа войдёт в личный кабинет под вашей учётной записью СевГУ и сохранит ведомость. Или откройте страницу в браузере, сохраните её и нажмите «Из файла…».</div></div>';
+    return;
+  }
+  $("#grInfo").textContent = s.fetched ? "обновлено " + grWhen(s.fetched) : "";
+  const progs = s.data.programs; if (grProg >= progs.length) grProg = 0;
+  const p = progs[grProg], sm = s.summary[grProg], st = sm.stats;
+  if (grSem == null || !p.semesters.some(x => x.n === grSem)) grSem = sm.cur;
+  const sem = p.semesters.find(x => x.n === grSem) || p.semesters[0];
+  let h = "";
+  if (progs.length > 1) h += `<div class="field"><label>Программа</label><select class="txt" id="grProg">${progs.map((x, i) => `<option value="${i}"${i === grProg ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>`;
+  else h += `<p class="hint" style="margin:0 0 8px">${esc(p.name)}</p>`;
+  h += `<div class="gr-cards"><div class="gr-card"><small>Средний балл</small><b>${st.avg == null ? "—" : grNum(st.avg)}</b><small>5: ${st.n5} · 4: ${st.n4} · 3: ${st.n3}${st.n2 ? " · 2: " + st.n2 : ""}</small></div>`
+     + `<div class="gr-card"><small>Сдано</small><b>${st.passed} из ${st.total}</b><small>${st.left ? "ещё без оценки: " + st.left : "всё сдано"}${st.failed ? " · не сдано: " + st.failed : ""}</small></div>`
+     + `<div class="gr-card"><small>ЗЕТ набрано</small><b>${grNum(st.zet_done)} из ${grNum(st.zet_all)}</b><small>за сданное</small></div></div>`;
+  h += '<div class="gr-sems">' + sm.semesters.map(x => `<button class="chip${x.n === sem.n ? " on" : ""}" data-sem="${x.n}">${x.n} семестр<small>${x.stats.passed}/${x.stats.total}</small></button>`).join("") + "</div>";
+  h += '<div class="gr-wrap"><table class="gr"><thead><tr><th class="n">#</th><th>Предмет</th><th>Вид контроля</th><th>Оценка</th><th class="n">ЗЕТ</th><th class="n">Дата</th></tr></thead><tbody>'
+     + sem.rows.map(r => `<tr class="${r.gk === "none" ? "gr-none" : ""}"><td class="n i">${r.n == null ? "" : r.n}</td><td class="s">${esc(r.subject)}</td><td class="m">${esc(r.control)}</td>`
+       + `<td><span class="gb ${GR_BADGE[r.gk] || "gb0"}">${esc(r.grade || "—")}</span></td><td class="n m" data-l="ЗЕТ">${r.zet == null ? "" : grNum(r.zet)}</td><td class="n m">${esc(r.date)}</td></tr>`).join("")
+     + "</tbody></table></div>";
+  $("#grBody").innerHTML = h;
+}
+$("#grBody").addEventListener("click", e => { const b = e.target.closest("[data-sem]"); if (b) { grSem = +b.dataset.sem; renderGrades(); } });
+$("#grBody").addEventListener("change", e => { if (e.target.id === "grProg") { grProg = +e.target.value; grSem = null; renderGrades(); } });
+async function grRefresh(){
+  if (grBusy) return; grBusy = true; $("#grRefresh").disabled = $("#grPassGo").disabled = true; grMsg("Открываю личный кабинет…");
+  const r = await api("/api/lk/refresh", {password: $("#grPass").value || "", username: $("#grUser").value.trim()}).catch(e => ({ok: false, error: String(e)}));
+  grBusy = false; $("#grRefresh").disabled = $("#grPassGo").disabled = false;
+  if (!r.ok) {
+    grMsg(r.error || "Не получилось обновить", true);
+    if (r.need_password && GR) { GR.need_password = true; renderGrades(); }
+    return;
+  }
+  $("#grPass").value = ""; GR = r.state; grMsg(""); renderGrades();
+  toast(r.changes ? `Новых оценок: ${r.changes}` : "Успеваемость обновлена", "ok");
+}
+$("#grRefresh").onclick = grRefresh; $("#grPassGo").onclick = grRefresh;
+$("#grSite").onclick = () => openUrl("https://lk.sevsu.ru/student/grade");
+$("#grFile").onclick = () => $("#grFileIn").click();
+$("#grFileIn").onchange = async () => {
+  const f = $("#grFileIn").files[0]; $("#grFileIn").value = ""; if (!f) return;
+  grMsg("Читаю файл…");
+  let r; try { r = await (await fetch(`/api/lk/import?t=${encodeURIComponent(T)}`, {method: "POST", body: f})).json(); } catch (e) { r = {ok: false, error: "файл не передался"}; }
+  if (!r.ok) return grMsg(r.error || "Не удалось прочитать файл", true);
+  grMsg(""); GR = r.state; renderGrades(); toast(r.changes ? `Новых оценок: ${r.changes}` : "Страница прочитана", "ok");
+};
+$("#grClear").onclick = async () => {
+  const b = $("#grClear");
+  if (Date.now() - grClearAt > 4000) { grClearAt = Date.now(); b.textContent = "Точно удалить?"; setTimeout(() => { if (Date.now() - grClearAt >= 3900) b.textContent = "Удалить сохранённое"; }, 4100); return; }
+  grClearAt = 0; b.textContent = "Удалить сохранённое";
+  const r = await api("/api/lk/clear", {}).catch(() => ({ok: false})); if (r.ok) { GR = r.state; renderGrades(); toast("Сохранённая успеваемость удалена", "ok"); }
+};
+
 /* ── вкладки ── */
 let view = "courses";
 function showView(v){
@@ -2913,11 +3037,13 @@ function showView(v){
   if (NARROW.matches) { const on = $('#mainTabs button.on'); if (on) on.scrollIntoView({inline: "center", block: "nearest"}); }
   $("#coursesView").classList.toggle("hidden", v !== "courses"); $("#scheduleView").classList.toggle("hidden", v !== "schedule");
   $("#electivesView").classList.toggle("hidden", v !== "electives"); $("#newsView").classList.toggle("hidden", v !== "news");
+  $("#gradesView").classList.toggle("hidden", v !== "grades");
   $("#searchView").classList.toggle("hidden", v !== "search"); $("#calView").classList.toggle("hidden", v !== "calendar");
   $("#notesView").classList.toggle("hidden", v !== "notes");
   if (v === "notes") loadNotes();
   if (v === "calendar") openCalTab();
   if (v === "schedule") loadSchedule(); if (v === "electives") loadElectives(); if (v === "news") loadNews(); if (v === "search") openSearchTab();
+  if (v === "grades") loadGrades();
 }
 $$("#mainTabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
 const openUrl = url => ANDROID ? (window.open(url, "_blank"), Promise.resolve({ok: true})) : api("/api/open_url", {url});
@@ -3658,6 +3784,9 @@ function schXlRender(){
   let t = x.mode === "local" ? `Файл с устройства: ${x.name || "xlsx"}.` : x.mode === "site" ? `Выбран файл: «${x.text || x.name}»${x.ctx ? " (" + x.ctx + ")" : ""}.`
         : "Файл не выбран — при сохранении программа сама подберёт таблицу для вашей группы по курсу и проверит, есть ли в ней группа.";
   if (x.last) t += ` Последний раз: ${x.last.updated} · пар: ${x.last.count} · ${ru(x.last.first)} — ${ru(x.last.last)}.`;
+  if (x.last && x.last.state === "same") t += ` Файл на сайте не менялся (проверено ${x.last.checked}).`;
+  if (x.last && x.last.state === "updated") t += ` Файл на сайте обновили: пар добавилось ${x.last.added}, убралось ${x.last.removed} (проверено ${x.last.checked}).`;
+  if (x.last && x.last.state === "stale") t += ` ⚠ Сайт университета сейчас недоступен (${x.last.reason || "нет ответа"}) — расписание по сохранённому файлу, проверка была ${x.last.checked}. Как только сайт заработает, файл обновится сам.`;
   if (!x.on) t += " Источник «Excel» сейчас выключен — включите его в списке выше.";
   $("#schXlInfo").textContent = t; $("#schXlAuto").classList.toggle("hidden", x.mode !== "site" && x.mode !== "local");
 }
@@ -4091,7 +4220,7 @@ async function poll(){
       $("#loginView").classList.toggle("hidden", ok); $("#coursesView").classList.toggle("hidden", !ok); $("#user").classList.toggle("hidden", !ok);
       $("#dock").classList.toggle("hidden", !ok && st.job.state === "idle"); $("#dlBtn").classList.toggle("hidden", !ok && st.job.state === "idle");
       $("#mainTabs").classList.toggle("hidden", !ok); $("#setBtn").classList.toggle("hidden", !ok);
-      if (!ok) { $("#scheduleView").classList.add("hidden"); $("#electivesView").classList.add("hidden"); $("#newsView").classList.add("hidden"); $("#searchView").classList.add("hidden"); $("#notesView").classList.add("hidden"); }
+      if (!ok) { $("#scheduleView").classList.add("hidden"); $("#electivesView").classList.add("hidden"); $("#gradesView").classList.add("hidden"); $("#newsView").classList.add("hidden"); $("#searchView").classList.add("hidden"); $("#notesView").classList.add("hidden"); }
       else showView(view);
       if (ok) loadCourses();
       if (!ok && lastLogin === null) { $("#lUrl").value = L.base || "https://do.sevsu.ru"; $("#lUser").value = L.username || ""; $("#lRemember").checked = L.remember; }

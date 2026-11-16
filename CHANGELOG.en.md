@@ -15,6 +15,25 @@ Moodle Offline is built for students of Sevastopol State University (SevSU) and 
 
 ---
 
+## 1.29.0 — 2026-11-16
+
+**New: “Успеваемость” (academic record)**
+- A new “Успеваемость” tab: your electronic record from the lk.sevsu.ru personal account (“Сведения об успеваемости”) — every semester of the study plan with subject, type of assessment, grade, credits (ZET), hours and date. At the top: average grade, how many subjects are passed and how many credits are earned; the last semester that already has grades opens first.
+- “Обновить с сайта” signs in to the personal account with your SevSU login (the same way electives and the schedule do). If the sign-in fails or the site changed, open the page in a browser, save it (Ctrl+S, “Web page, HTML only”) and press “Из файла…”.
+- The record is saved in the “Успеваемость” folder (the data plus a page that opens without the app and without internet). If the site is down, what is saved stays. A new or corrected grade adds an entry to “Что нового” (the grade itself is not sent to external notifications by default). “Удалить сохранённое” erases everything.
+- The “Успеваемость” folder is not moved to other devices, is not searchable, and is closed to external AI tools. The average grade is calculated by the app from grades 5–2 (pass/fail credits are not included) and may differ from the official figure.
+
+**Schedule: Excel files from the university site**
+- Fixed: on the real sevsu.ru/univers/shedule page the links to the spreadsheets look like `download.php?file=…` without “.xlsx” (the file icon marks them as Excel), so the old search would have found no files there at all. Links are now found, and each keeps its headings: academic year, kind of schedule, institute and semester. A remembered choice survives a new year or semester; for part-time (ZFO) groups the session table comes first.
+- File updates: every time the schedule is saved, the table is compared with the saved one. The app says “file unchanged” or “file updated: N classes added, M removed” (and adds an entry to “Что нового”). A new file replaces the saved one only after it is checked to contain your group.
+- If the university site does not answer, returns an error, the page was rebuilt, or garbage comes back instead of a file, the app stays on the saved file; the window shows “site unavailable, schedule from the file saved on <date>”, and when the site works again the file is refreshed on its own. Until a file has been saved at least once, the error is shown as before.
+
+**Security**
+- The password for “Успеваемость” is sent only to https pages on sevsu.ru; if a login form points to a foreign address the app refuses to submit it. The sign-in log contains only addresses and form names — no password, no grades, no name.
+
+**For developers**
+- New module `lk.py` (page parsing, figures, comparison, storage, sign-in); tests `test_lk_unit.py`, `test_lk_api_unit.py`, `test_excel_update_unit.py` on made-up pages with the real markup. Not verified: signing in to the real lk.sevsu.ru, a real `download.php` download, Windows/Edge, an Android phone.
+
 ## 1.28.0 — 2026-11-15
 
 **Fixed**

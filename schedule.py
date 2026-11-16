@@ -507,8 +507,10 @@ def lesson_key(le: dict) -> str:
 #  EXCEL-РАСПИСАНИЕ СевГУ: поиск ссылок на странице университета и выбор нужного файла
 # ════════════════════════════════════════════════════════════════════════════
 _XLS_HREF = re.compile(r"\.xlsx?(?:$|[?#])", re.I)
+_XLS_ICON = re.compile(r"^file-(?:xlsx?|excel)", re.I)       # настоящая страница: <div class="icon file-xlsx"> и адрес download.php?file=…
 MAX_XLSX = 40 * 1024 * 1024        # файл больше этого — не расписание, не скачиваем
-EXCEL_TRY = 6                      # сколько подходящих файлов скачать по очереди, пока ищем свою группу
+EXCEL_TRY = 12                     # сколько подходящих файлов скачать по очереди, пока ищем свою группу (потом выбор запоминается)
+EXCEL_META = ".excel_meta.json"    # что сохранено в «Расписание/excel»: имя, откуда, контрольная сумма, когда
 LOCAL_XLSX = "local.xlsx"          # файл, который человек выбрал на своём устройстве
 
 
@@ -532,6 +534,28 @@ def _file_key(name: str) -> str:
     return re.sub(r"[\d.\-_ ]+$", "", stem).lower()
 
 
+def _is_excel_link(a, href: str) -> bool:
+    """Ссылка на Excel: либо в адресе .xls/.xlsx, либо (как на sevsu.ru/univers/shedule) значок file-xlsx внутри ссылки —
+    адрес там без расширения: /univers/shedule/download.php?file=…"""
+    return bool(_XLS_HREF.search(href)) or a.find(class_=_XLS_ICON) is not None or \
+        any(_XLS_ICON.match(c) for c in (a.get("class") or []))
+
+
+def _site_ctx(a) -> list[str]:
+    """Заголовки вокруг ссылки на странице sevsu.ru/univers/shedule (сверху вниз): учебный год → вид расписания →
+    институт/факультет → семестр. Возвращает [], если страница устроена иначе — тогда работает обход соседних блоков."""
+    out = []
+    for cls, sel in (("schedule-table", ".schedule-table__title"), ("schedule-table__column", ".schedule-table__column-name"),
+                     ("document-accordion", ".document-accordion__header h4, .document-accordion__header h3"),
+                     ("document-link__group", ".document-link__group-name")):
+        box = a.find_parent(class_=cls)
+        h = box.select_one(sel) if box is not None else None
+        t = _txt(h) if h is not None else ""
+        if t and t not in out:
+            out.append(t[:120])
+    return out
+
+
 def find_excel_links(html_text: str, base: str) -> list[dict]:
     """Все ссылки на xls/xlsx на странице: {url, file, text, ctx (заголовки сверху вниз), col}.
     Страницу сайт может строить как угодно (раскрывающиеся списки, таблица), поэтому заголовки берём из
@@ -540,7 +564,7 @@ def find_excel_links(html_text: str, base: str) -> list[dict]:
     out, seen = [], set()
     for a in soup.find_all("a", href=True):
         href = htmllib.unescape(a["href"]).strip()
-        if not _XLS_HREF.search(href):
+        if not _is_excel_link(a, href):
             continue
         url = urljoin(base, href)
         if url in seen:
@@ -561,23 +585,26 @@ def find_excel_links(html_text: str, base: str) -> list[dict]:
                     col = _txt(hcells[idx])[:120]
                 if row_label and (len(re.sub(r"[^A-Za-zА-Яа-я]", "", text)) <= 6 or re.fullmatch(r"(?i)(скачать|xlsx?|excel|файл)", text)):
                     text = row_label[:120]
-        chain, node = [], a
-        for _ in range(10):
-            for sib in node.previous_siblings:
-                if not hasattr(sib, "find_all"):
-                    continue
-                if sib.find("a", href=_XLS_HREF) or (sib.name == "a" and _XLS_HREF.search(sib.get("href", ""))):
-                    break                               # дошли до соседнего блока со своими ссылками
-                t = _txt(sib)
-                if t and len(t) <= 120:
-                    chain.append(t)
-            parent = node.parent
-            if parent is None or getattr(parent, "name", "") in ("[document]", "html", "body"):
-                break
-            node = parent
+        chain = _site_ctx(a)
+        if not chain:
+            node = a
+            for _ in range(10):
+                for sib in node.previous_siblings:
+                    if not hasattr(sib, "find_all"):
+                        continue
+                    if sib.find("a", href=_XLS_HREF) or (sib.name == "a" and _XLS_HREF.search(sib.get("href", ""))) \
+                            or sib.find(class_=_XLS_ICON) is not None:
+                        break                               # дошли до соседнего блока со своими ссылками
+                    t = _txt(sib)
+                    if t and len(t) <= 120:
+                        chain.append(t)
+                parent = node.parent
+                if parent is None or getattr(parent, "name", "") in ("[document]", "html", "body"):
+                    break
+                node = parent
+            chain = [c for c in dict.fromkeys(reversed(chain))][:4]
         name = Path(unquote(urlparse(url).path)).name
-        out.append({"url": url, "file": name, "text": text[:120], "col": col,
-                    "ctx": [c for c in dict.fromkeys(reversed(chain))][:4]})
+        out.append({"url": url, "file": name if _XLS_HREF.search(name) else "", "text": text[:120], "col": col, "ctx": chain[:4]})
         if len(out) >= 400:
             break
     return out
@@ -619,7 +646,13 @@ def rank_excel(links: list[dict], group: str, today: date | None = None) -> list
             sc += 2
         if "учебн" in blob and "занят" in blob:
             sc += 1
-        if re.search(r"сесси|аттестац|экзамен", blob):
+        zf = bool(re.search(r"(?<![а-яa-z])зфо", blob))            # «ЗФО» отдельным словом (не «ОЗФО»)
+        form = group_slug(group).split("-")[4] if len(group_slug(group).split("-")) >= 5 else ""
+        if re.search(r"сесси|аттестац|экзамен", blob) and not (form == "z" and zf):   # у заочников сессия — их основное расписание
+            sc -= 3
+        if form == "z":
+            sc += 3 if zf else -1
+        elif form in ("o", "oz") and zf:
             sc -= 3
         scored.append((-sc, i, l))
     scored.sort(key=lambda x: (x[0], x[1]))
@@ -630,9 +663,15 @@ def link_sig(l: dict) -> dict:
     return {"text": l.get("text", ""), "col": l.get("col", ""), "ctx": list(l.get("ctx", [])), "fkey": _file_key(l.get("file", ""))}
 
 
-def match_sig(links: list[dict], sig: dict | None) -> dict | None:
+def _stable_ctx(ctx) -> list:
+    """Заголовки без учебного года и семестра: в новом году и в новом семестре файл лежит в том же месте страницы."""
+    return [c for c in (ctx or []) if not re.search(r"учебн\w*\s+год|\d{4}\s*[-–]\s*\d{4}|семестр", c, re.I)]
+
+
+def match_sig(links: list[dict], sig: dict | None, today: date | None = None) -> dict | None:
     """Найти на странице тот файл, что человек выбрал раньше. Имя файла меняется (в нём дата), поэтому
-    сначала сверяем «имя без даты», потом заголовки и текст ссылки."""
+    сначала сверяем «имя без даты», потом заголовки и текст ссылки; если страницу перестроили на новый год
+    или семестр — те же заголовки без года и семестра (из нескольких семестров берём текущий)."""
     if not sig:
         return None
     fk = sig.get("fkey") or ""
@@ -644,6 +683,15 @@ def match_sig(links: list[dict], sig: dict | None) -> dict | None:
              and list(l.get("ctx", [])) == list(sig.get("ctx", []))]
     if exact:
         return exact[0]
+    stable = [l for l in pool if l.get("text") == sig.get("text") and l.get("col", "") == sig.get("col", "")
+              and _stable_ctx(l.get("ctx")) == _stable_ctx(sig.get("ctx")) and _stable_ctx(sig.get("ctx"))]
+    if len(stable) > 1:                       # одна и та же строка в разных семестрах: берём семестр сезона
+        t = today or date.today()
+        cur = 1 if (t.month >= 8 or t.month == 1) else 2
+        best = [l for l in stable if (_semester_of(" ".join(l.get("ctx", []))) or 0) % 2 == cur % 2]
+        stable = best or stable
+    if stable:
+        return stable[0]
     loose = [l for l in pool if l.get("text") == sig.get("text") and l.get("col", "") == sig.get("col", "")]
     return loose[0] if len(loose) == 1 else (same[0] if same else None)
 
@@ -773,6 +821,7 @@ class ScheduleJob:
         self.limit_note = ""      # «сайт выложил не весь период» — показываем в окне, а не только в журнале
         self.excel = dict(excel or {})     # выбор Excel-файла: {"mode": "site"/"local", "sig": {...}, "name": "…"}
         self.excel_out = None              # если файл нашли сами — запомнить выбор (его сохранит вызывающий)
+        self.excel_report = None           # что вышло с Excel: {state: new/same/updated/stale/local, name, added, removed, reason, saved}
         self.errors = {}                   # источник → почему не получилось (чтобы показать человеку, а не только в журнале)
 
     def _browser_result(self, ok):
@@ -877,10 +926,14 @@ class ScheduleJob:
                  .replace("{date}", (mon or date.today()).isoformat()).replace("{monday}", (mon or date.today()).isoformat()))
 
     # ── Excel-таблица университета (https://www.sevsu.ru/univers/shedule/) ──
+    # Файл на сайте могут заменить. Поэтому каждый раз сверяем скачанное с сохранённым (контрольная сумма):
+    # «не менялся» / «обновили» (и сколько пар изменилось). Новый файл заменяет сохранённый только после
+    # того, как в нём нашлась наша группа. Сайт не отвечает или страницу перестроили — остаёмся на сохранённом.
     def _run_excel(self) -> int:
         """Скачать (или взять выбранный на устройстве) xlsx, найти в нём свою группу и сохранить пары за весь файл."""
         root = self.root / "excel"
         mo.fmkdir(root)
+        fs = {"state": "local" if self.excel.get("mode") == "local" else "new"}
         if self.excel.get("mode") == "local":
             p = root / LOCAL_XLSX
             if not mo.fexists(p):
@@ -891,7 +944,25 @@ class ScheduleJob:
             self.rep.log(f"  файл с устройства: {name}")
             lessons, info = xs.parse_workbook(data, self.group)
         else:
-            lessons, info, name = self._excel_from_site(root)
+            try:
+                lessons, info, name, fs = self._excel_from_site(root)
+            except (mo.Stopped, KeyboardInterrupt):
+                raise
+            except Exception as e:
+                saved = self._excel_saved(root)
+                if not saved:
+                    raise
+                if isinstance(e, xs.XlsxError) and (saved["meta"].get("sig") or None) != (self.excel.get("sig") or None):
+                    raise        # сайт отвечает, но выбран другой файл, чем сохранённый, и нашей группы в нём нет — это ошибка выбора
+                try:
+                    lessons, info = xs.parse_workbook(saved["data"], self.group)
+                except xs.XlsxError:
+                    raise e from None                  # в сохранённом файле нашей группы нет — понятнее исходная причина
+                name = saved["name"]
+                when = saved["meta"].get("saved_text") or "неизвестно когда"
+                reason = mo.describe_error(e)
+                fs = {"state": "stale", "reason": reason, "saved": when}
+                self.rep.log(f"  ⚠ Excel с сайта взять не удалось ({reason}) — остаюсь на сохранённом файле «{name}» от {when}", "warn")
         if not lessons:
             raise xs.XlsxError(f"в файле группа {info['group']} есть, но пар в ней нет — возможно, таблица ещё не заполнена")
         for le in lessons:
@@ -899,35 +970,127 @@ class ScheduleJob:
             le["subgroup"] = "" if le["subgroup"] in ("0",) else le["subgroup"]
         self.rep.log(f"  группа {info['group']}: {info['count']} пар, {info['weeks']} недель "
                      f"({info['first'][8:]}.{info['first'][5:7]} — {info['last'][8:]}.{info['last'][5:7]}.{info['last'][:4]})")
+        added, removed = self._excel_changes(lessons)
+        if fs["state"] == "updated":
+            fs["added"], fs["removed"] = added, removed
+            self.rep.log(f"  ✎ файл на сайте обновили: пар добавилось {added}, убралось {removed}")
+        elif fs["state"] == "same":
+            self.rep.log("  файл на сайте не менялся")
+        self.excel_report = {**fs, "name": name}
         first, last = date.fromisoformat(info["first"]), date.fromisoformat(info["last"])
-        self._store("excel", first, last, lessons, extra={"file": name, "group": info["group"]})
+        extra = {"file": name, "group": info["group"], "file_state": fs["state"],
+                 "file_checked": datetime.now().strftime("%d.%m.%Y %H:%M")}
+        for k in ("added", "removed", "reason"):
+            if k in fs:
+                extra["file_" + k] = fs[k]
+        if fs["state"] == "stale":
+            extra["updated"] = fs["saved"]            # данные не свежее сохранённого файла — так и показываем
+        self._store("excel", first, last, lessons, extra=extra)
         return len(lessons)
 
-    def _excel_fetch(self, url: str, root: Path, referer: str) -> tuple[bytes, str]:
-        if not is_sevsu_url(url):
-            raise mo.MoodleError("ссылка на Excel ведёт не на sevsu.ru (https) — такие адреса программа не открывает")
-        name = mo.safe_filename(Path(unquote(urlparse(url).path)).name) or "raspisanie.xlsx"
-        if not name.lower().endswith((".xlsx", ".xls")):
-            name += ".xlsx"
+    @staticmethod
+    def _lesson_key(le: dict) -> tuple:
+        return tuple(str(le.get(k) or "") for k in ("date", "start", "subject", "type", "room", "subgroup", "teacher"))
+
+    def _excel_changes(self, lessons: list) -> tuple[int, int]:
+        """Сколько пар добавилось и убралось по сравнению с тем, что хранилось от Excel раньше (для той же группы)."""
+        try:
+            with mo.fopen(self.root / "data" / "excel.json", "r", encoding="utf-8") as f:
+                old = json.load(f)
+        except (OSError, ValueError):
+            return 0, 0
+        if not isinstance(old, dict) or not same_group(str(old.get("group") or ""), self.group):
+            return 0, 0
+        before = {self._lesson_key(le) for le in old.get("lessons", [])}
+        after = {self._lesson_key(le) for le in lessons}
+        return len(after - before), len(before - after)
+
+    # сохранённый файл: «excel/<имя>.xlsx» + «.excel_meta.json» (откуда, контрольная сумма, когда сохранён)
+    def _excel_saved(self, root: Path):
+        try:
+            with mo.fopen(root / EXCEL_META, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            name = mo.safe_filename(str(meta.get("name") or ""))
+            with mo.fopen(root / name, "rb") as f:
+                data = f.read()
+        except (OSError, ValueError, TypeError):
+            return None
+        if not name or hashlib.sha256(data).hexdigest() != meta.get("sha256"):
+            return None                          # файл повреждён или подменён — как сохранённый не берём
+        return {"data": data, "name": name, "meta": meta}
+
+    def _excel_commit(self, root: Path, data: bytes, name: str, url: str, sig: dict | None) -> dict:
+        """Положить проверенный файл на место прежнего и записать, что это за файл. → {state, …}."""
+        prev = self._excel_saved(root)
+        sha = hashlib.sha256(data).hexdigest()
+        state = "new" if not prev else ("same" if prev["meta"].get("sha256") == sha else "updated")
+        now = datetime.now()
         dest = root / name
-        self.rep.log(f"  скачиваю {name}")
-        self.client(url).download(url, dest, title=name, referer=referer, quiet=True, max_bytes=MAX_XLSX)
-        with mo.fopen(dest, "rb") as f:
-            data = f.read()
-        for old in root.glob("*.xls*"):          # храним только последнюю скачанную таблицу (в имени — дата обновления)
+        tmp = dest.with_name(dest.name + ".tmp")
+        with mo.fopen(tmp, "wb") as f:
+            f.write(data)
+        mo.freplace(tmp, dest)
+        for old in root.glob("*.xls*"):          # храним только последнюю таблицу
             if old.name not in (name, LOCAL_XLSX):
                 try:
                     old.unlink()
                 except OSError:
                     pass
+        meta = {"name": name, "url": url, "sha256": sha, "size": len(data), "sig": sig or (prev["meta"].get("sig") if prev else None),
+                "saved": int(now.timestamp()) if state != "same" else (prev["meta"].get("saved") or int(now.timestamp())),
+                "saved_text": now.strftime("%d.%m.%Y %H:%M") if state != "same" else (prev["meta"].get("saved_text") or now.strftime("%d.%m.%Y %H:%M")),
+                "checked": int(now.timestamp())}
+        mo.write_text_atomic(root / EXCEL_META, json.dumps(meta, ensure_ascii=False, indent=1))
+        return {"state": state, "sha": sha[:12]}
+
+    @staticmethod
+    def _disposition_name(disposition: str) -> str:
+        m = re.search(r"filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)", disposition or "")
+        if m:
+            return unquote(m.group(1)).strip().strip('"')
+        m = re.search(r'filename\s*=\s*"?([^";]+)"?', disposition or "")
+        if not m:
+            return ""
+        raw = m.group(1).strip()
+        try:                                     # заголовки приходят как latin-1: кириллица в имени — «Ð¿…»
+            raw = raw.encode("latin-1").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+        return raw
+
+    def _excel_fetch(self, url: str, root: Path, referer: str, link: dict | None = None) -> tuple[bytes, str]:
+        """Скачать файл во временное место и вернуть (содержимое, имя). Сохранённый файл не трогаем: заменит его
+        _excel_commit, когда в новом найдётся наша группа."""
+        if not is_sevsu_url(url):
+            raise mo.MoodleError("ссылка на Excel ведёт не на sevsu.ru (https) — такие адреса программа не открывает")
+        cand = root / f".cand-{hashlib.sha1(url.encode()).hexdigest()[:8]}.xlsx"
+        self.rep.log(f"  скачиваю «{(link or {}).get('text') or Path(unquote(urlparse(url).path)).name}»")
+        try:
+            res = self.client(url).download(url, cand, title=(link or {}).get("text") or "расписание", referer=referer,
+                                            quiet=True, max_bytes=MAX_XLSX)
+            with mo.fopen(cand, "rb") as f:
+                data = f.read()
+        finally:
+            mo.funlink(cand)
+        url_name = Path(unquote(urlparse(url).path)).name if _XLS_HREF.search(urlparse(url).path or "") else ""
+        label = " ".join(x for x in [(link or {}).get("text", ""), *reversed((link or {}).get("ctx", [])[-2:])] if x)
+        name = next((mo.safe_filename(x) for x in (self._disposition_name(res.get("disposition", "")), url_name, label) if x), "raspisanie")
+        if not name.lower().endswith((".xlsx", ".xls")):
+            name += ".xlsx"
         return data, name
 
     def _excel_from_site(self, root: Path):
+        for stale in root.glob(".cand-*"):                 # остатки прерванной загрузки
+            try:
+                stale.unlink()
+            except OSError:
+                pass
         page = self.urls.get("excel") or SOURCES["excel"]["url"]
         if _XLS_HREF.search(urlparse(page).path or ""):          # в «Адреса источников» вставили прямую ссылку на файл
             data, name = self._excel_fetch(page, root, referer=SOURCES["excel"]["url"])
             lessons, info = xs.parse_workbook(data, self.group)
-            return lessons, info, name
+            fs = self._excel_commit(root, data, name, page, None)
+            return lessons, info, name, fs
         self.rep.log(f"  {page}")
         c = self.client(page)
         r = c.request("GET", page, kind="page")
@@ -946,19 +1109,23 @@ class ScheduleJob:
         last_err = None
         for cand in cands:
             self.control.checkpoint()
-            data, name = self._excel_fetch(cand["url"], root, referer=page)
+            data, name = self._excel_fetch(cand["url"], root, referer=page, link=cand)
             try:
                 lessons, info = xs.parse_workbook(data, self.group)
             except xs.XlsxError as e:
                 last_err = e
                 if picked:
                     raise
-                self.rep.log(f"  в {name} моей группы нет — пробую следующий", "debug")
+                self.rep.log(f"  в «{cand['text']}» моей группы нет — пробую следующий", "debug")
                 continue
+            sig = link_sig(cand)
+            fs = self._excel_commit(root, data, name, cand["url"], sig)
             if not picked:
-                self.excel_out = {"mode": "site", "sig": link_sig(cand), "name": name}
-                self.rep.log(f"  нашёл: «{cand['text']}» ({name}) — запомню выбор")
-            return lessons, info, name
+                self.excel_out = {"mode": "site", "sig": sig, "name": name}
+                self.rep.log(f"  нашёл: «{cand['text']}» ({' › '.join(cand.get('ctx', []))}) — запомню выбор")
+            elif self.excel.get("sig") != sig:        # страницу перестроили (новый год/семестр) — запоминаем новое место
+                self.excel_out = {"mode": "site", "sig": sig, "name": name}
+            return lessons, info, name, fs
         raise last_err or xs.XlsxError("подходящий файл не нашёлся — выберите его вручную в окне «Расписание»")
 
     def _run_single(self, src, a, b):
