@@ -38,6 +38,7 @@ LK_DIR = "Успеваемость"
 DATA_FILE = "lk_grades.json"
 PAGE_FILE = "index.html"
 MAX_IMPORT = 5 * 1024 * 1024          # сохранённая страница больше 5 МБ — это не она
+FORMAT = 2                          # формат снимка (1 — до исправления: разбор принимал за ведомость любую страницу с вкладками)
 TRUSTED_SUFFIX = ".sevsu.ru"
 INSECURE_TEST = False                 # только в тестах: разрешить http и 127.0.0.1
 
@@ -180,14 +181,17 @@ def _semester(title: str, index: int, scope) -> dict:
 
 
 def parse(text: str) -> dict:
-    """Страница /student/grade → {"v":1,"programs":[{"name","semesters":[{"n","title","rows":[…]}]}]}.
+    """Страница /student/grade → {"v":2,"programs":[{"name","semesters":[{"n","title","rows":[…]}]}]}.
     Имя студента и всё остальное, что не оценки, не читается. Пустой список programs — страница не та."""
     soup = BeautifulSoup(text or "", "html.parser")
-    widget = soup.select_one(".grade-widget") or soup
-    head = widget.select_one(".grade-header-title")
+    widget = soup.select_one(".grade-widget")
+    containers = soup.select(".grade-container")
+    if widget is None and not containers:
+        # Не ведомость: у кабинета есть и другие страницы с вкладками и таблицами (новости, реклама) — их за оценки не принимаем.
+        return {"v": FORMAT, "url": GRADE_URL, "programs": []}
+    head = (widget if widget is not None else soup).select_one(".grade-header-title")
     head_name = _program_name(head.get_text(" ")) if head is not None else ""
     labels = {o.get("value", ""): _program_name(o.get_text(" ")) for o in soup.select("#speciality-select option")}
-    containers = soup.select(".grade-container")
     programs = []
     for ci, cont in enumerate(containers or [widget]):
         tabs = {a.get("href", "")[1:]: _clean(a.get_text(" ")) for a in cont.select("ul.nav-tabs a[href^='#']")}
@@ -204,7 +208,7 @@ def parse(text: str) -> dict:
             continue
         name = labels.get(cont.get("id", "")) or (head_name if len(containers) <= 1 else "") or f"Программа {ci + 1}"
         programs.append({"name": name, "semesters": sems})
-    return {"v": 1, "url": GRADE_URL, "programs": programs}
+    return {"v": FORMAT, "url": GRADE_URL, "programs": programs}
 
 
 def has_rows(data) -> bool:
@@ -313,6 +317,8 @@ def load(out_dir) -> dict | None:
         data = json.loads(mo.read_text_retry(f))
         if not isinstance(data, dict) or not isinstance(data.get("programs"), list):
             raise ValueError("не тот формат")
+        if data.get("v") != FORMAT:
+            return None        # снимок прежнего формата: мог быть снят не с той страницы — не верим, при следующем обновлении перезапишется
         return data
     except ValueError:
         mo.keep_broken(f)
@@ -421,6 +427,18 @@ class _Portal(el.Portal):
             self.c.request = orig
 
 
+def _is_grade_page(url: str) -> bool:
+    return (urlparse(url).path or "").rstrip("/").lower().startswith(urlparse(GRADE_URL).path.rstrip("/").lower())
+
+
+def _marks(url: str, text: str) -> str:
+    """Для журнала диагностики: только путь и числа (сколько каких блоков на странице), без текста страницы."""
+    soup = BeautifulSoup(text or "", "html.parser")
+    return (f"путь {urlparse(url).path or '/'} · .grade-widget {len(soup.select('.grade-widget'))} · "
+            f".grade-container {len(soup.select('.grade-container'))} · .tab-pane {len(soup.select('.tab-pane'))} · "
+            f"таблиц {len(soup.select('table'))}")
+
+
 def fetch(rep, control, creds=None, cookies=None, use_system_proxy=False, page_delay=None, url=None):
     """Открыть страницу успеваемости под своей учётной записью → (данные, cookie для следующего раза, журнал входа).
     Журнал — только адреса и названия форм, без паролей и без содержимого страницы."""
@@ -436,8 +454,22 @@ def fetch(rep, control, creds=None, cookies=None, use_system_proxy=False, page_d
             raise LkError(str(e)) from e
         if not trusted_url(r.url):
             raise LkError("сайт перенаправил не на страницу успеваемости")
+        if not _is_grade_page(r.url):
+            # Кабинет после входа иногда открывает главную вместо запрошенной страницы — просим ведомость ещё раз (один раз).
+            portal.diag.append(f"  открылась не ведомость ({_marks(r.url, text)}) — запрашиваю ещё раз")
+            try:
+                r, text, _soup = portal.get()
+            except el.PortalError as e:
+                raise LkError(str(e)) from e
+            if not trusted_url(r.url):
+                raise LkError("сайт перенаправил не на страницу успеваемости")
         data = parse(text)
         if not has_rows(data):
+            portal.diag.append(f"  разбор не нашёл оценок ({_marks(r.url, text)})")
+            if not _is_grade_page(r.url):
+                raise LkError(f"открылась не страница успеваемости (адрес «{(urlparse(r.url).path or '/')[:60]}») — "
+                              "сайт ведёт на другую страницу кабинета. Откройте «Сведения об успеваемости» в браузере, "
+                              "сохраните страницу и нажмите «Из файла…»")
             raise LkError("страница открылась, но таблиц успеваемости на ней нет (сайт мог поменять вёрстку) — "
                           "можно сохранить страницу из браузера и открыть её кнопкой «Из файла»")
     except LkError as e:
