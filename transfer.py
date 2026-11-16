@@ -69,7 +69,7 @@ SETTINGS_KEYS = ("rules", "layout_dir", "layout_file", "mode", "original_names",
                  "schedule_auto_range", "schedule_excel", "news", "calendar", "electives_url", "keep_versions", "save_grades")
 _SECRET_KEY = re.compile(r"token|secret|passw|webhook|telegram|cookie|chat_id|bot_|api_?key", re.I)
 
-SERVICE_TOP = {"_бэкапы", "_debug", "Расписание", "Календарь", "Элективы", "Заметки", "снимки", "Перенос"}   # в корне папки сохранения — не курсы
+SERVICE_TOP = {"_бэкапы", "_debug", "Расписание", "Календарь", "Элективы", "Заметки", "Успеваемость", "снимки", "Перенос"}   # в корне папки сохранения — не курсы
 SKIP_NAMES = {"desktop.ini", "Thumbs.db", ".DS_Store"}
 SKIP_SUFFIX = (".tmp", ".part")
 

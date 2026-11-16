@@ -89,7 +89,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.28.0"
+VERSION = "1.29.0"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -1929,6 +1929,7 @@ class MoodleClient:
                         continue
                     r.raise_for_status()
                     ctype = r.headers.get("Content-Type", "")
+                    disposition = r.headers.get("Content-Disposition", "")
                     if "text/html" in ctype.lower() and "pluginfile.php" not in urlparse(r.url).path:
                         raise MoodleError("сервер вернул веб-страницу вместо файла")
                     if r.status_code == 206:
@@ -1975,7 +1976,7 @@ class MoodleClient:
                     before_replace(tmp)      # новый файл уже целиком скачан; прежний ещё на месте — можно убрать в резерв
                 freplace(tmp, dest)
                 self.rep.file_end("new")
-                return {"size": size, "final_url": final_url, "content_type": ctype}
+                return {"size": size, "final_url": final_url, "content_type": ctype, "disposition": disposition}
             except SkipFile:
                 self.rep.file_end("skip")
                 raise

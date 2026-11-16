@@ -43,6 +43,7 @@ import uistate
 import watch
 import electives as el
 import iotapi
+import lk
 import mcp_server
 import qr
 import reader
@@ -315,6 +316,7 @@ class App:
         self.closing_why = ""         # зачем: "restart" (кнопка) / "update" (новая версия) — чтобы окно написало верно, даже если пропустило промежуточное состояние
         self.closing = ""             # почему эта копия закрывается: "update" (ставит новую версию) / "replaced" (новая просит место); окна по этому закрываются сами
         self.el_lock = threading.Lock()
+        self.lk_lock = threading.Lock()       # «Успеваемость»: одно обновление за раз
         self.reader_lock = threading.Lock()     # читалка: по одному запросу к Moodle за раз
         self.electives_checked = 0.0
         self.upd_lock = threading.Lock()      # одна проверка обновлений за раз
@@ -1427,7 +1429,10 @@ class App:
                 d = json.load(f)
             ls = d.get("lessons", [])
             info["last"] = {"updated": d.get("updated", ""), "file": d.get("file", ""), "count": len(ls),
-                            "first": ls[0]["date"] if ls else "", "last": ls[-1]["date"] if ls else ""}
+                            "first": ls[0]["date"] if ls else "", "last": ls[-1]["date"] if ls else "",
+                            "state": d.get("file_state", ""), "checked": d.get("file_checked", ""),
+                            "added": d.get("file_added", 0), "removed": d.get("file_removed", 0),
+                            "reason": d.get("file_reason", "")}
         except (OSError, ValueError, KeyError, IndexError):
             pass
         return info
@@ -1663,6 +1668,77 @@ class App:
             self._keep_portal_cookies(e, host)
             return {"ok": res["ok"], "messages": res["messages"], "state": self.electives_state()}
 
+    # ── «Успеваемость»: электронная ведомость lk.sevsu.ru (lk.py) ──
+    def lk_out(self) -> Path:
+        return Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
+
+    def lk_state(self):
+        data = lk.load(self.lk_out())
+        d = {"has": bool(data and lk.has_rows(data)), "url": lk.GRADE_URL, "dir": lk.LK_DIR,
+             "has_creds": self._el_creds() is not None, "username": self.settings.get("username") or "",
+             "debug": str(mo.DATA_DIR / "lk_debug.txt")}
+        if d["has"]:
+            d.update(data=data, summary=lk.summary(data), fetched=data.get("fetched"))
+        return d
+
+    def _news_push(self, evs, what):
+        """События — в «Что нового» и в уведомления (если вид событий включён). Сбой уведомлений работу не ломает."""
+        ncfg = news.normalize(self.settings.get("news"))
+        evs = [e for e in evs if ncfg["enabled"] and ncfg["track"].get(e["kind"])]
+        if not evs:
+            return
+        try:
+            news.NewsLog(self.lk_out() / mo.NEWS_FILE).add(evs)
+            mo.deliver_news(evs, self.settings, self.vault, self.rep)
+        except Exception as e:
+            self.rep.log(f"{what}: уведомления не отправлены ({mo.describe_error(e)})", "warn")
+
+    def _lk_done(self, changes, imported=False):
+        """Новые оценки — в «Что нового» (и в уведомления, если они включены)."""
+        self._news_push(lk.news_events(changes), "Успеваемость")
+        self.rep.log(f"Успеваемость: {'прочитана сохранённая страница' if imported else 'обновлена с lk.sevsu.ru'}"
+                     + (f", новых оценок — {len(changes)}" if changes else ""))
+        return {"ok": True, "changes": len(changes), "state": self.lk_state()}
+
+    def lk_refresh(self, password=None, username=None):
+        with self.lk_lock:
+            try:
+                data, cookies, _diag = lk.fetch(self.rep, mo.Control(), creds=self._el_creds(password, username),
+                                                cookies=self._sso_cookies(),
+                                                use_system_proxy=bool(self.settings.get("use_system_proxy")),
+                                                page_delay=mo.parse_delay(self.settings.get("page_delay"), mo.PAGE_DELAY))
+                self._save_sso(cookies)
+                return self._lk_done(lk.save(self.lk_out(), data))
+            except Exception as ex:
+                msg = str(ex) if isinstance(ex, lk.LkError) else mo.describe_error(ex)
+                diag = getattr(ex, "diag", None)
+                if diag:       # только адреса и названия форм входа — без паролей и без содержимого страницы
+                    try:
+                        mo.write_text_atomic(mo.DATA_DIR / "lk_debug.txt", "\n".join(diag) + "\n")
+                    except OSError:
+                        pass
+                self.rep.log(f"Успеваемость: {msg}", "warn")
+                return {"ok": False, "error": msg, "debug": str(mo.DATA_DIR / "lk_debug.txt"),
+                        "need_password": "логин и пароль" in msg or "вход не удался" in msg or "страницу входа" in msg}
+
+    def lk_import(self, rfile, length):
+        """Страница, сохранённая из браузера: читаем ровно столько, сколько заявлено, и не больше потолка."""
+        if length <= 0 or length > lk.MAX_IMPORT:
+            return {"ok": False, "error": "файл пустой или слишком большой для страницы успеваемости"}
+        raw = rfile.read(length)
+        with self.lk_lock:
+            try:
+                _data, changes = lk.import_html(self.lk_out(), raw)
+            except lk.LkError as e:
+                return {"ok": False, "error": str(e)}
+            return self._lk_done(changes, imported=True)
+
+    def lk_clear(self):
+        import shutil
+        with self.lk_lock:
+            shutil.rmtree(self.lk_out() / lk.LK_DIR, ignore_errors=True)
+        return {"ok": True, "state": self.lk_state()}
+
     # ── задание ──
     def start_job(self, params):
         with self.lock:
@@ -1786,6 +1862,15 @@ class App:
                     f"({res['range'][0]} — {res['range'][1]})")
             if res.get("per_source", {}).get("excel"):
                 text += f". Из Excel-таблицы взят весь семестр ({res['per_source']['excel']} пар)"
+                xr = job.excel_report or {}
+                if xr.get("state") == "updated":
+                    text += f"; файл на сайте обновили (пар +{xr.get('added', 0)}, −{xr.get('removed', 0)})"
+                    if xr.get("added") or xr.get("removed"):
+                        self._news_push([news.make_event("schedule_file", 0, "Расписание", "Excel-таблица расписания обновлена",
+                                                         detail=f"добавилось пар: {xr.get('added', 0)}, убралось: {xr.get('removed', 0)}",
+                                                         section=xr.get("name", ""), key=xr.get("sha") or xr.get("name", ""))], "Расписание")
+                elif xr.get("state") == "stale":
+                    text += f"; сайт недоступен — расписание по сохранённому файлу от {xr.get('saved', '?')}"
             if res.get("note"):
                 text += ". " + res["note"]
             self.last_result = {"ok": True, "text": text, "aborted": None, "kind": "schedule"}
@@ -3110,6 +3195,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.schedule_status())
         if u.path == "/api/electives":
             return self._send(200, APP.electives_state())
+        if u.path == "/api/lk":
+            return self._send(200, APP.lk_state())
         if u.path == "/api/transfer":
             return self._send(200, APP.transfer_state())
         if u.path == "/api/rules":
@@ -3172,6 +3259,8 @@ class Handler(BaseHTTPRequestHandler):
                                                        q.get("force") == "1"))
         if p == "/api/schedule/excel/upload":
             return self._send(200, APP.excel_upload(self.rfile, int(self.headers.get("Content-Length") or 0), q.get("name", "")))
+        if p == "/api/lk/import":
+            return self._send(200, APP.lk_import(self.rfile, int(self.headers.get("Content-Length") or 0)))
         if p == "/api/schedule/import":
             return self._send(200, APP.schedule_import(self.rfile, int(self.headers.get("Content-Length") or 0), q.get("name", "")))
         b = self._body()
@@ -3324,6 +3413,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": False, "error": "отметьте, что переносить"})
             return self._send(200, APP.start_job({"kind": "transfer", "action": p.rsplit("/", 1)[1], "cats": b.get("cats") or [],
                                                   "address": b.get("address") or "", "force": bool(b.get("force"))}))
+        if p == "/api/lk/refresh":
+            return self._send(200, APP.lk_refresh(b.get("password") or None, b.get("username") or None))
+        if p == "/api/lk/clear":
+            return self._send(200, APP.lk_clear())
         if p == "/api/electives/refresh":
             for k in ("electives_url", "electives_watch", "electives_watch_hours"):
                 if k in b:
