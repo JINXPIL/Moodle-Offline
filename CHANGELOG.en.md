@@ -15,6 +15,13 @@ Moodle Offline is built for students of Sevastopol State University (SevSU) and 
 
 ---
 
+## 1.29.1 — 2026-11-16
+
+**Fixed**
+- “Успеваемость” (Academic record) showed an empty “Программа 1” with an advertisement instead of grades: after sign-in the portal sometimes opens its home page (tabs and ads), and the program took any page with tabs and tables for the grade sheet. Grades are now taken only from the grade-sheet page; if another page opens, the program asks for the grade sheet once more, and if that fails it shows a clear error and saves a diagnostic log (addresses and counts, no page text). A snapshot saved from the wrong page is replaced on the next refresh, with no bogus “new grade” notices.
+
+---
+
 ## 1.29.0 — 2026-11-16
 
 **New: “Успеваемость” (academic record)**

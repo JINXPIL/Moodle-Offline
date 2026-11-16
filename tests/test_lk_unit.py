@@ -124,6 +124,17 @@ check("save: то же ещё раз — тихо", c3 == [])
 check("load: битый файл → None и отложен в сторону", lk.load(tmp) is None and any(".broken" in x.name for x in (tmp / "Успеваемость").iterdir()))
 (tmp / "Успеваемость" / "lk_grades.json").write_text('{"programs": 5}', encoding="utf-8")
 check("load: не тот формат → None", lk.load(tmp) is None)
+# снимок, который прежняя версия записала с чужой страницы («Программа 1», реклама вместо предметов): его нет и «прошлым разом» он не считается
+old_snap = {"v": 1, "url": lk.GRADE_URL, "programs": [{"name": "Программа 1", "semesters": [
+    {"n": 1, "title": "Вкладка 1", "rows": [{"n": 1, "subject": "Реклама", "control": "", "ck": "other", "grade": "", "gk": "none",
+                                             "score": None, "zet": None, "hours": None, "date": "", "iso": ""}]}]}]}
+(tmp / "Успеваемость" / "lk_grades.json").write_text(json.dumps(old_snap, ensure_ascii=False), encoding="utf-8")
+check("load: снимок старого формата (v1, мог быть с чужой страницы) → None", lk.load(tmp) is None)
+tmp2 = Path(tempfile.mkdtemp(prefix="lk_old_"))
+(tmp2 / "Успеваемость").mkdir()
+(tmp2 / "Успеваемость" / "lk_grades.json").write_text(json.dumps(old_snap, ensure_ascii=False), encoding="utf-8")
+check("save: после старого снимка не сыплются «новые оценки» (первый настоящий разбор — молча)", lk.save(tmp2, d, now=1_800_000_300) == [])
+check("parse: формат снимка — 2", d.get("v") == 2, d.get("v"))
 
 # ── страница ──
 html = lk.render_html({**d, "fetched": 1_800_000_000})
@@ -147,13 +158,23 @@ for label, raw in (("пустой файл", b""), ("не та страница"
     except lk.LkError as e:
         check(f"import_html: {label} → понятная ошибка", bool(str(e)), str(e))
 
+# ── страница, на которой есть вкладки и таблицы, но это не ведомость (случай с настоящего кабинета: реклама СНО в таблице) ──
+HOME = ("<html><head><title>Личный кабинет</title></head><body><div class='container'><ul class='nav nav-tabs'>"
+        + "".join(f"<li><a href='#t{i}' data-toggle='tab'>Вкладка {i}</a></li>" for i in range(1, 5)) + "</ul><div class='tab-content'>"
+        + "".join(f"<div class='tab-pane' id='t{i}'><table class='table'><tr><td>1</td><td>Хочешь активно участвовать в научно-образовательной "
+                  f"жизни университета — присоединяйся к студенческому научному обществу!</td></tr></table></div>" for i in range(1, 5))
+        + "</div></div></body></html>")
+hd = lk.parse(HOME)
+check("parse: страница с вкладками и таблицами, но без ведомости → пусто (не «Программа 1»)", not lk.has_rows(hd) and hd["programs"] == [], hd)
+check("parse: пустая страница и просто таблица → пусто", not lk.has_rows(lk.parse("<html><body><table><tr><td>1</td><td>a</td></tr></table></body></html>")))
+
 # ── адреса ──
 check("trusted_url: lk.sevsu.ru по https", lk.trusted_url("https://lk.sevsu.ru/student/grade") and lk.trusted_url("https://auth.sevsu.ru/x"))
 check("trusted_url: http и чужие — нет", not lk.trusted_url("http://lk.sevsu.ru/") and not lk.trusted_url("https://sevsu.ru.evil.com/")
       and not lk.trusted_url("https://evilsevsu.ru/") and not lk.trusted_url("https://lk.sevsu.ru@evil.com/") and not lk.trusted_url(""))
 
 # ── вход на макете сайта ──
-STATE = {"logins": 0, "bad": 0, "grade_gets": 0, "evil_form": False, "page": PAGE}
+STATE = {"logins": 0, "bad": 0, "grade_gets": 0, "evil_form": False, "page": PAGE, "mode": "ok", "home_gets": 0}
 
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.0"
@@ -171,8 +192,13 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/student/grade"):
             if not self.logged():
                 return self._send(302, headers={"Location": "/user/sign-in/login"})
+            if STATE["mode"] == "home" or (STATE["mode"] == "home_once" and STATE["home_gets"] == 0):
+                return self._send(302, headers={"Location": "/"})       # кабинет уводит на главную вместо ведомости
             STATE["grade_gets"] += 1
             return self._send(200, STATE["page"])
+        if self.path == "/":
+            STATE["home_gets"] += 1
+            return self._send(200, HOME)
         if self.path.startswith("/user/sign-in/login"):
             action = "http://203.0.113.9/steal" if STATE["evil_form"] else "/user/sign-in/login"
             return self._send(200, f'<html><body><form method="post" action="{action}"><input type="hidden" name="_csrf" value="abc">'
@@ -221,6 +247,16 @@ try:
 except lk.LkError as e:
     check("fetch: пароль на чужой адрес не отправляется", "не сайт СевГУ" in str(e) and STATE["bad"] == bad_before, str(e))
 STATE["evil_form"] = False
+STATE["mode"] = "home_once"; STATE["home_gets"] = 0
+got3, _, diag3 = lk.fetch(rep, mo.Control(), cookies=cookies, **kw)
+check("fetch: кабинет увёл на главную один раз → программа сама повторяет запрос ведомости", lk.has_rows(got3) and STATE["home_gets"] == 1, diag3)
+STATE["mode"] = "home"; STATE["home_gets"] = 0
+try:
+    lk.fetch(rep, mo.Control(), cookies=cookies, **kw); check("fetch: кабинет всегда уводит на главную → ошибка, а не «Программа 1»", False)
+except lk.LkError as e:
+    check("fetch: ошибка говорит, что открылась не страница ведомости", "не страница успеваемости" in str(e), str(e))
+    check("fetch: в журнале есть признаки страницы (числа, без текста)", any("grade-widget" in x for x in e.diag) and "научно" not in "\n".join(e.diag), e.diag)
+STATE["mode"] = "ok"
 STATE["page"] = "<html><body>Сайт на обслуживании</body></html>"
 try:
     lk.fetch(rep, mo.Control(), cookies=cookies, **kw); check("fetch: страница без таблиц → ошибка", False)
