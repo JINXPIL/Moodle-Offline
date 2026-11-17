@@ -44,6 +44,7 @@ import watch
 import electives as el
 import iotapi
 import lk
+import oldver
 import mcp_server
 import qr
 import reader
@@ -317,6 +318,7 @@ class App:
         self.closing = ""             # почему эта копия закрывается: "update" (ставит новую версию) / "replaced" (новая просит место); окна по этому закрываются сами
         self.el_lock = threading.Lock()
         self.lk_lock = threading.Lock()       # «Успеваемость»: одно обновление за раз
+        self.ov_lock = threading.Lock()       # «Старые версии программы»: поиск и удаление не мешают друг другу
         self.reader_lock = threading.Lock()     # читалка: по одному запросу к Moodle за раз
         self.electives_checked = 0.0
         self.upd_lock = threading.Lock()      # одна проверка обновлений за раз
@@ -1669,6 +1671,34 @@ class App:
             return {"ok": res["ok"], "messages": res["messages"], "state": self.electives_state()}
 
     # ── «Успеваемость»: электронная ведомость lk.sevsu.ru (lk.py) ──
+    # ── старые версии самой программы ──
+    def oldver_scan(self) -> dict:
+        """Найти скачанные раньше файлы программы (exe, apk, архивы) и остатки обновлений. Сеть не трогает."""
+        system = "android" if ANDROID else desktop.system()
+        running = os.path.abspath(sys.executable) if getattr(sys, "frozen", False) else None
+        shared, need = None, False
+        if ANDROID:                       # общая память видна только с доступом ко всем файлам (apk) или после termux-setup-storage
+            sh = android.shared_storage(Path.home())
+            shared, need = (str(sh) if sh else None), sh is None
+        dirs = oldver.search_dirs(Path.home(), system, os.path.dirname(running) if running else None, shared)
+        busy = []
+        with self.lock:
+            installing = self.upd_install["state"] in ("downloading", "ready")
+        if running and installing:        # пока идёт обновление, его временные файлы не трогаем
+            busy = [updater.new_path(running), updater.part_path(running), running + ".new.part", updater.old_path(running)]
+        with self.ov_lock:
+            r = oldver.scan(dirs, mo.VERSION, running=running, busy=busy, skip=[mo.DATA_DIR, self.lk_out()])
+        r.update(ok=True, current=mo.VERSION, system=system, need_access=need, can_ask=android.is_apk(), apk=android.is_apk())
+        return r
+
+    def oldver_delete(self, ids) -> dict:
+        if not isinstance(ids, list) or not ids:
+            return {"ok": False, "error": "ничего не отмечено"}
+        found = self.oldver_scan()
+        with self.ov_lock:
+            res = oldver.delete(found, [str(i) for i in ids[:oldver.MAX_ITEMS]])
+        return {"ok": True, **res, "state": self.oldver_scan()}
+
     def lk_out(self) -> Path:
         return Path(self.settings.get("out_dir") or mo.DEFAULT_OUT)
 
@@ -3197,6 +3227,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.electives_state())
         if u.path == "/api/lk":
             return self._send(200, APP.lk_state())
+        if u.path == "/api/oldver":
+            return self._send(200, APP.oldver_scan())
         if u.path == "/api/transfer":
             return self._send(200, APP.transfer_state())
         if u.path == "/api/rules":
@@ -3417,6 +3449,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.lk_refresh(b.get("password") or None, b.get("username") or None))
         if p == "/api/lk/clear":
             return self._send(200, APP.lk_clear())
+        if p == "/api/oldver/delete":
+            return self._send(200, APP.oldver_delete(b.get("ids")))
         if p == "/api/electives/refresh":
             for k in ("electives_url", "electives_watch", "electives_watch_hours"):
                 if k in b:

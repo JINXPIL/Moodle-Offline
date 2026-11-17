@@ -228,6 +228,10 @@ Every section has a “Вид” button: a sheet of “item — choice” rows (
 
 **Updating.** “Настройки → Обновление программы” has “Проверить сейчас”, an automatic daily check (on by default; period 6 hours – a week), “Пропустить эту версию” and a notice when a new version appears. The check sends one request to `api.github.com` and nothing personal. On Windows `.exe` and Linux, “Обновить сейчас” downloads the release file, verifies SHA-256, size and file type, and swaps itself in; macOS and Android update by hand. If the program is started a second time, the new copy asks the old one to close and takes its place. **(RU §7в)**
 
+**Old program versions.** “Настройки → Старые версии программы” finds earlier downloaded files of the program itself — `.exe`, `.apk`, archives, `.sha256` files and update leftovers (`.old`, `.new`, unfinished downloads) — in Downloads, on the desktop, in Documents and next to the program (on a phone: shared storage, which needs “all files” access). Each file has a checkbox, with “Выбрать все” / “Снять все” and “Удалить выбранные”; deletion asks first and is permanent. Old versions and leftovers are ticked for you; newer, identical and unrecognised files are not. The version comes from the file name (for an `.apk`, from the file itself); the running program is never listed, only regular files are deleted, and only ones a fresh search just showed. **(RU §7в-1)**
+
+**Notices in the window** can be closed with the cross, swiped sideways on a touch screen, or all at once with “Закрыть все”; they stay while the pointer or a finger is on them, and no more than five are stacked. **(RU §7в-2)**
+
 **Where data lives** **(RU §7а, §7г)**:
 
 | System | Data (login, settings, keys) |
@@ -322,7 +326,7 @@ The code is plain Python plus one HTML/JS file for the window (`ui/index.html`);
 | `news.py`, `deadlines.py`, `notes.py`, `search.py`, `reserve.py`, `reader.py` | feed, calendar, notes, search, file reserve, reader |
 | `ai.py`, `mcp_server.py` | AI window and the read-only MCP server |
 | `transfer.py`, `qr.py`, `uistate.py`, `datadir.py` | data transfer, QR codes, saved window settings, data location |
-| `updater.py`, `watch.py`, `desktop.py`, `android.py`, `apk_main.py`, `android-app/` | updates, timer, Linux/macOS, Android |
+| `updater.py`, `oldver.py`, `watch.py`, `desktop.py`, `android.py`, `apk_main.py`, `android-app/` | updates, old program versions, timer, Linux/macOS, Android |
 
 (Full table: RU §12.) Everything is described for contributors in `CLAUDE.md` (in Russian).
 
@@ -340,4 +344,4 @@ Licence: [MIT](LICENSE).
 
 The university's sites require a login, so they cannot be tested automatically. The program was developed against saved pages sent by its author, against mock copies of the sites, in Chromium (phone and desktop widths), in an Android emulator, and on GitHub's Linux and macOS servers (builds start and quit correctly; the whole test suite passes on macOS).
 
-**Not verified:** the real electives login and sign-up, the real Excel-timetable page, Moodle 4.x pages, a real Android phone (WebView), Windows with Edge in app-window mode, real Linux and Mac desktops (folder dialogs, notifications, autostart, Gatekeeper), real Gemini/Claude/OpenAI keys and real MCP clients. Per-version details are in the [changelog](CHANGELOG.en.md) and in each pull request's “not verified” section. If something works differently for you, please [open an issue](https://github.com/JINXPIL/Moodle-Offline/issues) and attach `errors.log` (it contains no secrets).
+**Not verified:** the real electives login and sign-up, the real Excel-timetable page, Moodle 4.x pages, a real Android phone (WebView), Windows with Edge in app-window mode, real Linux and Mac desktops (folder dialogs, notifications, autostart, Gatekeeper), real Gemini/Claude/OpenAI keys and real MCP clients, the “all files” folder listing for old program versions on a real phone and deleting a file that another program holds open on Windows. Per-version details are in the [changelog](CHANGELOG.en.md) and in each pull request's “not verified” section. If something works differently for you, please [open an issue](https://github.com/JINXPIL/Moodle-Offline/issues) and attach `errors.log` (it contains no secrets).

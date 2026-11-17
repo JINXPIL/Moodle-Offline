@@ -28,7 +28,7 @@ body = m.group(1) if m else ""
 check("4. внутри окна кнопка закрытия с id, оканчивающимся на Close", 'id="setClose"' in body)
 for key in ['id="modeBox"', 'data-s="zip"', 'id="outDir"', 'id="rulesBtn"', 'data-s="wait_for_server"', 'id="watchOpen"', 'id="trOpen"', 'id="mcpPanel"', 'id="mcpOpen"', 'id="updPanel"', 'id="updCheck"', 'id="updAuto"']:
     check(f"5. в «Настройках» есть {key}", key in body)
-check("6. в окне пять панелей (пятая — «Сброс», 1.27.0)", len(re.findall(r'<div class="panel"', body)) == 5 and 'id="resetPanel"' in body, str(len(re.findall(r'<div class="panel"', body))))
+check("6. в окне шесть панелей («Сброс» — 1.27.0, «Старые версии программы» — 1.30.0)", len(re.findall(r'<div class="panel"', body)) == 6 and 'id="resetPanel"' in body and 'id="oldPanel"' in body, str(len(re.findall(r'<div class="panel"', body))))
 # в «Курсах» правой колонки больше нет: кнопки скачивания стоят в строке над карточками (подробности — test_courses_toolbar_unit.py)
 cv_html = html.split('id="coursesView"', 1)[1].split('id="scheduleView"', 1)[0]
 check("7. в «Курсах» нет боковой колонки, а настройки не вернулись в неё", "<aside" not in cv_html and 'id="updPanel"' not in cv_html and 'data-s="zip"' not in cv_html)
