@@ -15,6 +15,20 @@ Moodle Offline is built for students of Sevastopol State University (SevSU) and 
 
 ---
 
+## 1.31.0 — 2026-11-18
+
+**New**
+- “Успеваемость” (academic record) is now comfortable on a phone: a compact summary card on top (average grade, how many subjects are passed, credits, a progress bar, how many 5s, 4s and 3s), then a strip of semesters (“2 семестр · 8 из 14”) that stays under the header while you scroll, a filter “Все / С оценкой / Ждут” (all / graded / waiting) and a search across all semesters at once. Subjects are tidy cards: a coloured edge by grade, a round grade badge on the right, and a dashed “ждёт” (waiting) card for subjects not yet passed.
+- The update buttons, the password box and “Удалить сохранённое” (delete saved) moved into a collapsed block “Обновление и вход” (update and sign-in) under the list — it opens by itself when there is no data yet or a sign-in is needed. “Обновить” (update) stays at the top.
+- On a phone the tab label is “Оценки” instead of the truncated “Успевае…” (on a computer it is still “Успеваемость”).
+
+**Fixed**
+- Long subject names did not fit on a phone screen: the table had to be scrolled sideways and a big round arc was drawn over the rows. The cause was that the grades table shared its name with the grade badge on a course card and picked up its rules. The tab now has its own names, there is no table at all, and long names wrap.
+
+**What was verified and what was not.** The window was checked in Chromium on a made-up page (screen widths 390, 360 and 320 px, large system font, dark theme, a 1280 px computer) and by a text test. A real Android WebView and Windows/Edge were not checked; nor was signing in to the real lk.sevsu.ru.
+
+---
+
 ## 1.30.0 — 2026-11-17
 
 **New**

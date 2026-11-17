@@ -225,7 +225,7 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 
 /* вкладки, экран курса, расписание, элективы */
 .mtabs .tic{display:none}
-.mtabs .tl{display:inline}
+.mtabs .tl{display:inline}.mtabs .tl-sh{display:none}
 .mtabs{margin-left:6px}.mtabs button{padding:6px 14px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center}
 .cv-head{border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);margin-bottom:14px}
 .cv-cover{height:120px;background-size:cover;background-position:center;position:relative}
@@ -665,6 +665,7 @@ body.android .no-android{display:none!important}
   .mtabs button{position:relative;flex:1 0 50px;min-width:0;min-height:50px;padding:4px 1px;border-radius:10px;font-size:clamp(8.5px,2.3vw,10.5px);line-height:1.15;
     flex-direction:column;gap:3px;white-space:nowrap;overflow:hidden}
   .mtabs .tl{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em}
+  .mtabs .tl-lg{display:none}.mtabs .tl-sh{display:inline}   /* «Успеваемость» на узкой вкладке обрезалась до «Успеваем…» — на телефоне подпись короче */
   .mtabs .tic{display:block}
   .mtabs button.on{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);box-shadow:none}
   .mtabs .nbadge{position:absolute;top:1px;left:calc(50% + 4px);margin:0;min-width:16px;height:16px;line-height:16px;font-size:10px;padding:0 4px}
@@ -807,39 +808,75 @@ body.android .no-android{display:none!important}
   #coursesView.has-sel .content{padding-bottom:calc(var(--dl-h,0px) + 18px)}   /* последний ряд карточек не прячется под плашкой */
 }
 
-/* ── Успеваемость (lk.sevsu.ru) ── */
-#gradesView .gr-act{display:flex;flex-wrap:wrap;gap:8px}
-#gradesView .gr-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5em),1fr));gap:10px;margin:4px 0 14px}
-#gradesView .gr-card{background:var(--surface-solid);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px}
-#gradesView .gr-card b{display:block;font-size:1.35rem;line-height:1.2}
-#gradesView .gr-card small{color:var(--muted)}
-#gradesView .gr-sems{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
-#gradesView .gr-sems .chip{height:auto;min-height:32px;padding:4px 12px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2}
-#gradesView .gr-sems .chip small{font-size:11px;opacity:.8}
-#gradesView .gr-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-solid)}
-#gradesView table.gr{width:100%;border-collapse:collapse;font-size:14px}
-#gradesView table.gr th,#gradesView table.gr td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}
-#gradesView table.gr th{font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap}
-#gradesView table.gr tr:last-child td{border-bottom:0}
-#gradesView table.gr td.n,#gradesView table.gr th.n{text-align:center;white-space:nowrap}
-#gradesView tr.gr-none td{color:var(--muted)}
-#gradesView .gb{display:inline-block;padding:1px 9px;border-radius:999px;font-size:13px;white-space:nowrap;border:1px solid transparent}
+/* ── Успеваемость (lk.sevsu.ru) ──
+   Классы здесь — только с префиксом gv-. Нельзя называть что-то просто `.gr`: так уже зовётся плашка оценки у карточки курса
+   (white-space:nowrap + рамка с радиусом 999px) — таблица с таким классом не переносила строки и рисовала круглую «дугу» поверх строк. */
+#gradesView .gv-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin:0 0 12px}
+#gradesView .gv-top h2{margin:0;font:600 20px var(--font-display)}
+#gradesView .gv-top .hint{margin:2px 0 0}
+#gradesView .gv-top .btn{flex:none}
+#gradesView .gv-sum{background:var(--surface-solid);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin:0 0 12px}
+#gradesView .gv-prog{font-size:13px;color:var(--muted);margin:0 0 10px;overflow-wrap:anywhere}
+#gradesView .gv-sum select.txt{margin:0 0 10px}
+#gradesView .gv-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+#gradesView .gv-stats small{display:block;color:var(--muted);font-size:12px;line-height:1.25}
+#gradesView .gv-stats b{display:block;margin-top:2px;font:700 1.45rem/1.15 var(--font-display);overflow-wrap:anywhere}
+#gradesView .gv-stats b i{font-style:normal;font-weight:500;font-size:.8rem;color:var(--muted)}
+#gradesView .gv-meter{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin:10px 0 0}
+#gradesView .gv-meter i{display:block;height:100%;border-radius:99px;background:var(--ok)}
+#gradesView .gv-dist{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0 0;font-size:12.5px;color:var(--muted)}
+#gradesView .gv-dc{display:inline-flex;align-items:center;gap:5px;padding:2px 9px 2px 3px;border-radius:99px;background:var(--bg2)}
+#gradesView .gv-dc b{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;font-size:12px}
+#gradesView .gv-sems{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+#gradesView .gv-sem{position:relative;overflow:hidden;min-width:76px;padding:6px 12px 8px;border-radius:12px;border:1px solid var(--line);background:var(--surface-solid);color:var(--text);font:inherit;line-height:1.2;text-align:center;cursor:pointer}
+#gradesView .gv-sem b{display:block;font-weight:600;font-size:13.5px}
+#gradesView .gv-sem small{display:block;font-size:11.5px;color:var(--muted)}
+#gradesView .gv-sem i{position:absolute;left:0;bottom:0;height:3px;background:var(--ok)}
+#gradesView .gv-sem.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+#gradesView .gv-sem.on small{color:inherit;opacity:.85}
+#gradesView .gv-sem.on i{background:var(--accent-ink);opacity:.7}
+#gradesView .gv-flt{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+#gradesView .gv-seg{display:inline-flex;min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-solid)}
+#gradesView .gv-seg button{border:0;background:none;color:var(--muted);font:inherit;font-size:13px;padding:8px 10px;white-space:nowrap;cursor:pointer}
+#gradesView .gv-seg button small{margin-left:3px;font-size:11.5px;opacity:.8}
+#gradesView .gv-seg button.on{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font-weight:600}
+#gradesView .gv-flt .icon-btn{flex:none;margin-left:auto}
+#gradesView .gv-qrow{margin:0 0 10px}
+#gradesView .gv-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,22rem),1fr));gap:8px}
+#gradesView .gv-row{display:flex;align-items:center;gap:10px;min-width:0;padding:9px 10px 9px 12px;background:var(--surface-solid);border:1px solid var(--line);border-left:3px solid var(--line-strong);border-radius:var(--r-sm)}
+#gradesView .gv-txt{flex:1 1 auto;min-width:0}
+#gradesView .gv-subj{font-weight:600;font-size:14.5px;line-height:1.3;overflow-wrap:anywhere;hyphens:auto}
+#gradesView .gv-meta{margin-top:2px;font-size:12.5px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}
+#gradesView .gv-g{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;font:700 17px/1 var(--font-display)}
+#gradesView .gv-pill{flex:none;max-width:40%;padding:4px 10px;border-radius:99px;font-size:12.5px;font-weight:600;text-align:center;line-height:1.25;overflow-wrap:anywhere}
+#gradesView .gv-row.k5,#gradesView .gv-row.kp{border-left-color:var(--ok)}
+#gradesView .gv-row.k4{border-left-color:var(--accent)}
+#gradesView .gv-row.k3{border-left-color:var(--warn)}
+#gradesView .gv-row.k2,#gradesView .gv-row.kf{border-left-color:var(--bad)}
+#gradesView .gv-row.k0{background:transparent;border-style:dashed;border-left-width:1px;border-left-color:var(--line)}
+#gradesView .gv-row.k0 .gv-subj{font-weight:500;color:var(--text)}
+#gradesView .gv-wait{flex:none;font-size:12px;color:var(--faint);white-space:nowrap}
 #gradesView .gb5,#gradesView .gbp{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
 #gradesView .gb4{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
 #gradesView .gb3{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
 #gradesView .gb2,#gradesView .gbf{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
 #gradesView .gb0{color:var(--faint)}
-#gradesView .gr-empty{padding:18px;color:var(--muted)}
+#gradesView .gv-empty{padding:18px 6px;color:var(--muted);text-align:center}
+#gradesView .gv-more{margin-top:14px}
+#gradesView .gv-more>summary{cursor:pointer;font-weight:600;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:28px}
+#gradesView .gv-more>summary::-webkit-details-marker{display:none}
+#gradesView .gv-more>summary::after{content:"";width:8px;height:8px;border:solid var(--muted);border-width:0 2px 2px 0;transform:rotate(45deg);margin:-3px 4px 0 0;transition:transform .15s}
+#gradesView .gv-more[open]>summary::after{transform:rotate(-135deg);margin:3px 4px 0 0}
+#gradesView .gv-act{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 @media (max-width:700px){
-  #gradesView table.gr thead{display:none}
-  #gradesView table.gr,#gradesView table.gr tbody,#gradesView table.gr tr,#gradesView table.gr td{display:block;width:100%}
-  #gradesView table.gr tr{padding:8px 10px;border-bottom:1px solid var(--line)}
-  #gradesView table.gr td{border:0;padding:1px 0;text-align:left}
-  #gradesView table.gr td.n{text-align:left}
-  #gradesView table.gr td.s{font-weight:600}
-  #gradesView table.gr td.m{color:var(--muted);font-size:13px}
-  #gradesView table.gr td.i{display:none}
-  #gradesView table.gr td[data-l]:not(:empty)::after{content:" " attr(data-l)}
+  /* полоска семестров — одна строка, прокручивается вбок и прилипает под шапкой, пока листаешь предметы */
+  #gradesView .gv-sems{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;scroll-snap-type:x proximity;
+    position:sticky;top:var(--top-h,0px);z-index:5;margin:0 -12px 8px;padding:6px 12px;background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(10px)}
+  #gradesView .gv-sems::-webkit-scrollbar{display:none}
+  #gradesView .gv-sem{flex:none;scroll-snap-align:center}
+  #gradesView .gv-stats b{font-size:1.3rem}
+  #gradesView .gv-seg button{padding:8px 9px}
+  #gradesView .gv-more .btn{flex:1 1 auto;justify-content:center}
 }
 /* ── 1.30.0: старые версии программы и уведомления, которые можно закрыть ──
    Блок стоит после большого @media (max-width:700px), поэтому действует везде; телефонные поправки — в своём @media ниже. */
@@ -876,7 +913,7 @@ body.android .no-android{display:none!important}
 <div id="app">
   <header class="top">
     <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>Moodle Offline</div>
-    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/></svg><span class="tl">Курсы</span></button><button data-view="search"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg><span class="tl">Поиск</span></button><button data-view="notes"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 11h8M8 15h5"/></svg><span class="tl">Заметки</span></button><button data-view="calendar"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="tl">Календарь</span><span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="tl">Расписание</span></button><button data-view="electives"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="tl">Элективы</span></button><button data-view="grades"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="tl">Успеваемость</span></button><button data-view="news"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="tl">Что нового</span><span class="nbadge hidden" id="newsBadge"></span></button></div>
+    <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/></svg><span class="tl">Курсы</span></button><button data-view="search"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg><span class="tl">Поиск</span></button><button data-view="notes"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 11h8M8 15h5"/></svg><span class="tl">Заметки</span></button><button data-view="calendar"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="tl">Календарь</span><span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="tl">Расписание</span></button><button data-view="electives"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="tl">Элективы</span></button><button data-view="grades"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="tl"><span class="tl-lg">Успеваемость</span><span class="tl-sh">Оценки</span></span></button><button data-view="news"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="tl">Что нового</span><span class="nbadge hidden" id="newsBadge"></span></button></div>
     <div class="pill" id="net" title="Проверка доступности Moodle (частоту можно изменить: «Таймер и автообновление»)"><span class="dot"></span><span class="txt"><span class="lg">Проверяю сервер…</span><span class="sh">Проверка…</span></span></div>
     <div class="pill hidden" id="ip"></div>
     <button class="icon-btn dlbtn hidden" id="dlBtn" title="Загрузки" aria-label="Загрузки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg><span class="dlpct" id="dlPct"></span><span class="dlmark" id="dlMark"></span></button>
@@ -1050,12 +1087,15 @@ body.android .no-android{display:none!important}
     <section class="view hidden" id="gradesView">
       <div class="layout">
         <div class="content">
-          <div class="toolbar"><h2>Успеваемость</h2><span class="hint" id="grInfo" style="margin:0"></span></div>
+          <div class="gv-top">
+            <div><h2>Успеваемость</h2><div class="hint" id="grInfo"></div></div>
+            <button class="btn" id="grRefresh">Обновить</button>
+          </div>
           <div id="grMsg" class="hint hidden" style="margin:0 0 10px"></div>
           <div id="grBody"></div>
-          <div class="panel" id="grPanel" style="margin-top:14px">
-            <div class="gr-act">
-              <button class="btn" id="grRefresh">Обновить с сайта</button>
+          <details class="panel gv-more" id="grPanel">
+            <summary>Обновление и вход</summary>
+            <div class="gv-act">
               <button class="btn ghost" id="grFile">Из файла…</button>
               <button class="btn ghost" id="grSite">Открыть на сайте</button>
               <button class="btn ghost hidden" id="grClear">Удалить сохранённое</button>
@@ -1066,7 +1106,7 @@ body.android .no-android{display:none!important}
               <div class="field"><label>Пароль (как для Moodle)</label><input class="txt" type="password" id="grPass" autocomplete="current-password"></div>
               <button class="btn" id="grPassGo">Войти и обновить</button></div>
             <p class="hint" style="margin:12px 0 0">Данные берутся из вашего личного кабинета lk.sevsu.ru («Сведения об успеваемости») и лежат только у вас на устройстве, в папке «Успеваемость». Они не переносятся на другие устройства и не попадают в поиск. Средний балл считает программа по оценкам 5–2 (зачёты в него не входят) — он может отличаться от официального. Если вход на сайт не получается: откройте страницу в браузере, сохраните её (Ctrl+S, «Веб-страница, только HTML») и нажмите «Из файла…».</p>
-          </div>
+          </details>
         </div>
       </div>
     </section>
@@ -3042,20 +3082,54 @@ setInterval(() => { if (!$("#mcpModal").classList.contains("hidden")) mcpLoad().
 mcpLoad();
 
 /* ── Успеваемость (lk.sevsu.ru) ── */
-let GR = null, grProg = 0, grSem = null, grBusy = false, grClearAt = 0;
-const GR_BADGE = {"5": "gb5", "4": "gb4", "3": "gb3", "2": "gb2", pass: "gbp", fail: "gbf", absent: "gbf", none: "gb0", other: "gb0"};
+let GR = null, grProg = 0, grSem = null, grBusy = false, grClearAt = 0, grFilter = "all", grQ = "", grQOpen = false, grNeedPrev = false, grScrollSem = false;
+const GR_KIND = {"5": "5", "4": "4", "3": "3", "2": "2", pass: "p", fail: "f", absent: "f", none: "0", other: "0"};
 const grNum = v => v == null ? "—" : String(v).replace(".", ",");
 const grWhen = ts => { if (!ts) return ""; const d = new Date(ts * 1000); return d.toLocaleDateString("ru-RU") + " " + d.toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"}); };
 function grMsg(text, bad){ const m = $("#grMsg"); m.textContent = text || ""; m.classList.toggle("hidden", !text); m.style.color = bad ? "var(--bad)" : ""; }
 async function loadGrades(){ try { GR = await api("/api/lk"); } catch (e) { return; } renderGrades(); }
+function grRowHtml(r, semN){                                   // одна строка предмета: название, «вид · ЗЕТ · дата», справа оценка
+  const k = GR_KIND[r.gk] || "0", meta = [];
+  if (semN) meta.push(semN + " сем.");
+  if (r.control) meta.push(esc(r.control));
+  if (r.zet != null) meta.push(grNum(r.zet) + " ЗЕТ");
+  if (r.date) meta.push(esc(r.date));
+  const word = esc(r.grade || "ещё нет оценки");
+  const mark = r.gk === "none" ? '<span class="gv-wait">ждёт</span>'
+    : /^[2-5]$/.test(r.gk) ? `<span class="gv-g gb${r.gk}" title="${word}" aria-label="${word}">${r.gk}</span>`
+    : `<span class="gv-pill gb${k === "p" ? "p" : k === "f" ? "f" : "0"}">${word}</span>`;
+  return `<div class="gv-row k${k}"><div class="gv-txt"><div class="gv-subj">${esc(r.subject)}</div><div class="gv-meta">${meta.join(" · ")}</div></div>${mark}</div>`;
+}
+function grVisibleRows(p, sem){                                // строки списка: семестр или, если что-то ищут, все семестры программы
+  const q = grQ.trim().toLowerCase(), all = [];
+  const src = q ? p.semesters.map(x => ({n: x.n, rows: x.rows.filter(r => r.subject.toLowerCase().includes(q))})) : [{n: 0, rows: sem.rows}];
+  for (const g of src) for (const r of g.rows) all.push({r, n: g.n});
+  const part = {all, done: all.filter(x => x.r.gk !== "none"), wait: all.filter(x => x.r.gk === "none")};
+  return {q, part, rows: part[grFilter] || all};
+}
+function renderGrList(){                                       // только список: поиск и фильтр не должны перерисовывать полоску семестров и поле ввода
+  const s = GR; if (!s || !s.has) return;
+  const p = s.data.programs[grProg], sem = p.semesters.find(x => x.n === grSem) || p.semesters[0];
+  const v = grVisibleRows(p, sem), box = $("#gvList"); if (!box) return;
+  for (const b of $$("#gvSeg [data-f]")) { b.classList.toggle("on", b.dataset.f === grFilter); b.setAttribute("aria-pressed", b.dataset.f === grFilter ? "true" : "false"); const c = b.querySelector("small"); if (c) c.textContent = v.part[b.dataset.f].length; }
+  if (!v.rows.length) {
+    const t = v.q ? "Ничего не нашлось." : grFilter === "done" ? "В этом семестре пока нет оценок." : grFilter === "wait" ? "Все предметы семестра уже с оценками." : "В этом семестре нет предметов.";
+    box.innerHTML = `<div class="gv-empty">${t}</div>`; return;
+  }
+  box.innerHTML = '<div class="gv-list">' + v.rows.map(x => grRowHtml(x.r, v.q ? x.n : 0)).join("") + "</div>";
+}
 function renderGrades(){
   const s = GR; if (!s) return;
-  $("#grPassBox").classList.toggle("hidden", !!s.has_creds && !s.need_password);
+  const needLogin = !s.has_creds || !!s.need_password;
+  $("#grPassBox").classList.toggle("hidden", !needLogin);
+  if (needLogin && !grNeedPrev) $("#grPanel").open = true;     // нужен вход — раскрываем «Обновление и вход» один раз, дальше как решит человек
+  grNeedPrev = needLogin;
   if (document.activeElement !== $("#grUser") && !$("#grUser").value) $("#grUser").value = s.username || "";
   $("#grClear").classList.toggle("hidden", !s.has);
   if (!s.has) {
     $("#grInfo").textContent = "";
-    $("#grBody").innerHTML = '<div class="panel"><div class="gr-empty">Пока ничего не сохранено. Нажмите «Обновить с сайта» — программа войдёт в личный кабинет под вашей учётной записью СевГУ и сохранит ведомость. Или откройте страницу в браузере, сохраните её и нажмите «Из файла…».</div></div>';
+    $("#grBody").innerHTML = '<div class="panel"><div class="gv-empty">Пока ничего не сохранено. Нажмите «Обновить» — программа войдёт в личный кабинет под вашей учётной записью СевГУ и сохранит ведомость. Или откройте страницу в браузере, сохраните её и нажмите «Из файла…» (внизу, в «Обновление и вход»).</div></div>';
+    $("#grPanel").open = true;
     return;
   }
   $("#grInfo").textContent = s.fetched ? "обновлено " + grWhen(s.fetched) : "";
@@ -3063,25 +3137,40 @@ function renderGrades(){
   const p = progs[grProg], sm = s.summary[grProg], st = sm.stats;
   if (grSem == null || !p.semesters.some(x => x.n === grSem)) grSem = sm.cur;
   const sem = p.semesters.find(x => x.n === grSem) || p.semesters[0];
-  let h = "";
-  if (progs.length > 1) h += `<div class="field"><label>Программа</label><select class="txt" id="grProg">${progs.map((x, i) => `<option value="${i}"${i === grProg ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>`;
-  else h += `<p class="hint" style="margin:0 0 8px">${esc(p.name)}</p>`;
-  h += `<div class="gr-cards"><div class="gr-card"><small>Средний балл</small><b>${st.avg == null ? "—" : grNum(st.avg)}</b><small>5: ${st.n5} · 4: ${st.n4} · 3: ${st.n3}${st.n2 ? " · 2: " + st.n2 : ""}</small></div>`
-     + `<div class="gr-card"><small>Сдано</small><b>${st.passed} из ${st.total}</b><small>${st.left ? "ещё без оценки: " + st.left : "всё сдано"}${st.failed ? " · не сдано: " + st.failed : ""}</small></div>`
-     + `<div class="gr-card"><small>ЗЕТ набрано</small><b>${grNum(st.zet_done)} из ${grNum(st.zet_all)}</b><small>за сданное</small></div></div>`;
-  h += '<div class="gr-sems">' + sm.semesters.map(x => `<button class="chip${x.n === sem.n ? " on" : ""}" data-sem="${x.n}">${x.n} семестр<small>${x.stats.passed}/${x.stats.total}</small></button>`).join("") + "</div>";
-  h += '<div class="gr-wrap"><table class="gr"><thead><tr><th class="n">#</th><th>Предмет</th><th>Вид контроля</th><th>Оценка</th><th class="n">ЗЕТ</th><th class="n">Дата</th></tr></thead><tbody>'
-     + sem.rows.map(r => `<tr class="${r.gk === "none" ? "gr-none" : ""}"><td class="n i">${r.n == null ? "" : r.n}</td><td class="s">${esc(r.subject)}</td><td class="m">${esc(r.control)}</td>`
-       + `<td><span class="gb ${GR_BADGE[r.gk] || "gb0"}">${esc(r.grade || "—")}</span></td><td class="n m" data-l="ЗЕТ">${r.zet == null ? "" : grNum(r.zet)}</td><td class="n m">${esc(r.date)}</td></tr>`).join("")
-     + "</tbody></table></div>";
+  const old = $("#gvSems"), keep = old ? old.scrollLeft : 0, pct = st.total ? Math.round(st.passed * 100 / st.total) : 0;
+  const dist = [["5", st.n5], ["4", st.n4], ["3", st.n3], ["2", st.n2]].filter(x => x[1]).map(x => `<span class="gv-dc" title="Оценок «${x[0]}»: ${x[1]}"><b class="gb${x[0]}">${x[0]}</b>×${x[1]}</span>`).join("");
+  let h = '<div class="gv-sum">';
+  h += progs.length > 1 ? `<select class="txt" id="grProg" aria-label="Программа">${progs.map((x, i) => `<option value="${i}"${i === grProg ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select>`
+                        : `<div class="gv-prog">${esc(p.name)}</div>`;
+  h += `<div class="gv-stats"><div><small>Средний балл</small><b>${st.avg == null ? "—" : grNum(st.avg)}</b></div>`
+     + `<div><small>Сдано</small><b>${st.passed}<i> из ${st.total}</i></b></div>`
+     + `<div><small>ЗЕТ</small><b>${grNum(st.zet_done)}<i> из ${grNum(st.zet_all)}</i></b></div></div>`
+     + `<div class="gv-meter" title="Сдано ${pct}%"><i style="width:${pct}%"></i></div>`
+     + `<div class="gv-dist">${dist}<span>${st.left ? "без оценки: " + st.left : "всё сдано"}${st.failed ? " · не сдано: " + st.failed : ""}</span></div></div>`;
+  h += '<div class="gv-sems" id="gvSems">' + sm.semesters.map(x => `<button class="gv-sem${x.n === sem.n ? " on" : ""}" data-sem="${x.n}" aria-pressed="${x.n === sem.n}"><b>${x.n} семестр</b><small>${x.stats.passed} из ${x.stats.total}</small><i style="width:${x.stats.total ? Math.round(x.stats.passed * 100 / x.stats.total) : 0}%"></i></button>`).join("") + "</div>";
+  h += `<div class="gv-flt"><div class="gv-seg" id="gvSeg"><button data-f="all">Все<small></small></button><button data-f="done">С оценкой<small></small></button><button data-f="wait">Ждут<small></small></button></div>`
+     + `<button class="icon-btn" id="gvQBtn" aria-label="Найти предмет" aria-pressed="${grQOpen || !!grQ}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg></button></div>`
+     + `<div class="gv-qrow${grQOpen || grQ ? "" : " hidden"}"><input class="txt" id="gvQ" type="search" placeholder="Найти предмет во всех семестрах" value="${esc(grQ)}" autocomplete="off"></div>`
+     + '<div id="gvList"></div>';
   $("#grBody").innerHTML = h;
+  const strip = $("#gvSems"); strip.scrollLeft = keep;
+  if (grScrollSem) { grScrollSem = false; const on = strip.querySelector(".on"); if (on) strip.scrollLeft = Math.max(0, on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2); }
+  renderGrList();
 }
-$("#grBody").addEventListener("click", e => { const b = e.target.closest("[data-sem]"); if (b) { grSem = +b.dataset.sem; renderGrades(); } });
+$("#grBody").addEventListener("click", e => {
+  const b = e.target.closest("[data-sem]"); if (b) { grSem = +b.dataset.sem; grQ = ""; grQOpen = false; grScrollSem = true; renderGrades(); return; }
+  const f = e.target.closest("[data-f]"); if (f) { grFilter = f.dataset.f; renderGrList(); return; }
+  if (e.target.closest("#gvQBtn")) {
+    grQOpen = !grQOpen; if (!grQOpen) { grQ = ""; $("#gvQ").value = ""; renderGrList(); }
+    $(".gv-qrow").classList.toggle("hidden", !grQOpen && !grQ); $("#gvQBtn").setAttribute("aria-pressed", String(grQOpen || !!grQ)); if (grQOpen) $("#gvQ").focus();
+  }
+});
+$("#grBody").addEventListener("input", e => { if (e.target.id === "gvQ") { grQ = e.target.value; renderGrList(); } });
 $("#grBody").addEventListener("change", e => { if (e.target.id === "grProg") { grProg = +e.target.value; grSem = null; renderGrades(); } });
 async function grRefresh(){
-  if (grBusy) return; grBusy = true; $("#grRefresh").disabled = $("#grPassGo").disabled = true; grMsg("Открываю личный кабинет…");
+  if (grBusy) return; grBusy = true; $("#grRefresh").disabled = $("#grPassGo").disabled = true; $("#grRefresh").textContent = "Обновляю…"; grMsg("Открываю личный кабинет…");
   const r = await api("/api/lk/refresh", {password: $("#grPass").value || "", username: $("#grUser").value.trim()}).catch(e => ({ok: false, error: String(e)}));
-  grBusy = false; $("#grRefresh").disabled = $("#grPassGo").disabled = false;
+  grBusy = false; $("#grRefresh").disabled = $("#grPassGo").disabled = false; $("#grRefresh").textContent = "Обновить";
   if (!r.ok) {
     grMsg(r.error || "Не получилось обновить", true);
     if (r.need_password && GR) { GR.need_password = true; renderGrades(); }
