@@ -65,6 +65,8 @@ HEARTBEAT_BUSY = 60
 # запросы почти не шлёт (таймеры в нём замедляют до раза в минуту или замораживают совсем), и программа закрывалась у живого окна.
 WINDOW_FIRST_WAIT = 60.0            # окно ещё ни разу не отозвалось (запуск без окна, браузер не открылся)
 WINDOW_BYE_GRACE = 15.0             # окно сообщило «закрываюсь» (/api/bye) и не вернулось: F5 и перезагрузка страницы успевают вернуться
+IOT_CONNECT_TIMEOUT = 8.0           # действие с iot.sevsu.ru из окна: сколько ждать соединения, секунд
+IOT_READ_TIMEOUT = 30.0              # …и ответа (сохранение выбора в час пик бывает медленным)
 WINDOW_SILENCE_LIMIT = 12 * 3600.0  # окно давно молчит и не прощалось (браузер убили, ПК завис): страховка, не обычный путь
 SLEEP_GAP = 45.0                    # между двумя проходами сторожа прошло больше — компьютер спал: окну нужно время очнуться
 ERROR_LOG = "errors.log"            # сбои внутри программы (без паролей и ключей): для разбора, когда «что-то перестало отвечать»
@@ -117,6 +119,26 @@ CAL_WATCH_EVERY = 300         # как часто (сек) проверять «
 # ════════════════════════════════════════════════════════════════════════════
 #  ОТЧЁТЧИК ДЛЯ GUI: журнал, текущий файл, список загрузок
 # ════════════════════════════════════════════════════════════════════════════
+class IotReporter:
+    """Отчётчик для iot.sevsu.ru: журнал общий, а состояние связи не трогаем. Иначе сбой сайта элективов
+    переключал бы индикатор «Moodle недоступен» в шапке, хотя Moodle тут ни при чём — это другой сайт."""
+
+    def __init__(self, rep):
+        self._rep = rep
+
+    def __getattr__(self, name):
+        return getattr(self._rep, name)
+
+    def net_status(self, status, detail=""):
+        pass
+
+    def state_hint(self, state):
+        pass
+
+    def recovered(self, waited_seconds):
+        pass
+
+
 class GuiReporter(mo.Reporter):
     def __init__(self, app):
         super().__init__()
@@ -321,6 +343,9 @@ class App:
         self.ov_lock = threading.Lock()       # «Старые версии программы»: поиск и удаление не мешают друг другу
         self.reader_lock = threading.Lock()     # читалка: по одному запросу к Moodle за раз
         self.electives_checked = 0.0
+        self.el_ctl = None             # Control идущего действия с iot.sevsu.ru («Отмена» его останавливает)
+        self.el_gen = 0                # растёт при каждой «Отмене»: действия, ждавшие очереди, не запускаются
+        self.el_busy = False
         self.upd_lock = threading.Lock()      # одна проверка обновлений за раз
         self.upd_install = {"state": "idle", "done": 0, "total": 0, "error": "", "version": ""}   # установка новой версии (только .exe)
         self.offline = {"reason": "", "since": "", "cached": ""}   # офлайн-режим: работаем с сохранённым
@@ -1565,12 +1590,21 @@ class App:
             pass
 
     # ── элективы: основной путь — программный интерфейс сайта (iotapi); снимок страницы через браузер — запасной ──
-    def _iot(self, password=None, username=None):
-        e = iotapi.Iot(Path(self.settings.get("out_dir") or mo.DEFAULT_OUT), mo.DATA_DIR, self.rep, mo.Control(),
+    def _iot(self, password=None, username=None, run=False):
+        """Клиент iot.sevsu.ru. run=True — для действия, которое сейчас выполнится: свой `Control` (его останавливает
+        «Отмена» в окне) и быстрый отказ вместо ожидания «оживания» сайта до 15 минут, иначе окно просто крутилось бы."""
+        ctl = mo.Control()
+        if run:
+            self.el_ctl = ctl
+        e = iotapi.Iot(Path(self.settings.get("out_dir") or mo.DEFAULT_OUT), mo.DATA_DIR, IotReporter(self.rep), ctl,
                        creds=self._el_creds(password, username), cookies=self._sso_cookies(),
                        use_system_proxy=bool(self.settings.get("use_system_proxy")),
                        page_delay=mo.parse_delay(self.settings.get("page_delay"), mo.PAGE_DELAY),
                        file_delay=mo.parse_delay(self.settings.get("file_delay"), mo.FILE_DELAY))
+        if run:
+            e.c.no_wait = True
+            e.c.net_retries = 1                 # один повтор при обрыве, потом «сайт не отвечает» (раньше — две паузы, 5 и 10 с)
+            e.c.timeout = (IOT_CONNECT_TIMEOUT, IOT_READ_TIMEOUT)
         tok = getattr(self, "_iot_tok", None)            # ключ доступа живёт только в памяти, пока он действует
         if tok and tok[1] > time.monotonic() and not password:
             e.token, e.token_until = tok
@@ -1607,20 +1641,44 @@ class App:
         d["browser"] = bool(mo.find_browser()) if not d["android"] else False
         return d
 
-    def _iot_fail(self, ex, what="Элективы"):
+    def _iot_fail(self, ex, what="Элективы", sent=False):
+        """sent — запрос на запись уже мог дойти до сайта (тогда «не ответил» не значит «не сохранилось»)."""
+        if isinstance(ex, mo.Stopped):
+            return {"ok": False, "cancelled": True, "sent": sent, "error": "Отменено"}
         need = isinstance(ex, iotapi.IotNeedLogin)
+        if isinstance(ex, (mo.NetworkDown, mo.RetriesExhausted)) or isinstance(ex, mo.requests.RequestException):
+            msg = "Сайт элективов (iot.sevsu.ru) сейчас не отвечает. " + (
+                "Запрос мог дойти до сайта: когда он заработает, нажмите «Обновить» и проверьте, что получилось."
+                if sent else "Ничего не изменилось — попробуйте позже.")
+            self.rep.log(f"{what}: {msg}", "warn")
+            return {"ok": False, "error": msg, "offline": True, "sent": sent, "need_password": False,
+                    "debug": str(mo.DATA_DIR / "iot_debug.txt")}
         msg = str(ex) if isinstance(ex, iotapi.IotError) else mo.describe_error(ex)
         self.rep.log(f"{what}: {msg}", "warn")
         return {"ok": False, "error": msg, "need_password": need or "вход не удался" in msg,
                 "debug": str(mo.DATA_DIR / "iot_debug.txt")}
 
+    def electives_cancel(self):
+        """«Отмена» в окне: останавливает идущее действие с сайтом элективов (между запросами) и то, что ждёт своей очереди."""
+        self.el_gen += 1
+        ctl, busy = self.el_ctl, self.el_busy
+        if ctl:
+            ctl.stop()
+        return {"ok": True, "was_busy": bool(busy)}
+
     def electives_refresh(self, password=None, username=None):
+        gen = self.el_gen
         with self.el_lock:
-            e = self._iot(password, username)
+            if self.el_gen != gen:
+                return self._iot_fail(mo.Stopped())
+            e = self._iot(password, username, run=True)
+            self.el_busy = True
             try:
                 st = e.refresh()
             except Exception as ex:
                 return self._iot_fail(ex)
+            finally:
+                self.el_busy, self.el_ctl = False, None
             self._iot_done(e)
             self.electives_checked = time.monotonic()
             if st.get("changes"):
@@ -1628,12 +1686,18 @@ class App:
             return {"ok": True, "state": self.electives_state(), "changes": st.get("changes", [])}
 
     def _iot_action(self, fn_name, args, password=None, what="Элективы", username=None):
+        gen = self.el_gen
         with self.el_lock:
-            e = self._iot(password, username)
+            if self.el_gen != gen:                  # пока ждали очереди, нажали «Отмена» — на сайт ничего не отправляем
+                return self._iot_fail(mo.Stopped())
+            e = self._iot(password, username, run=True)
+            self.el_busy = True
             try:
                 res = getattr(e, fn_name)(*args)
             except Exception as ex:
-                return self._iot_fail(ex, what)
+                return self._iot_fail(ex, what, sent=e.sending)
+            finally:
+                self.el_busy, self.el_ctl = False, None
             self._iot_done(e)
             self.electives_checked = time.monotonic()
             return {"ok": True, "message": res.get("message", ""), "state": self.electives_state()}
@@ -3461,6 +3525,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.electives_refresh(b.get("password") or None, b.get("username") or None))
         if p == "/api/reader":
             return self._send(200, APP.reader_page(b.get("url", ""), bool(b.get("live"))))
+        if p == "/api/electives/cancel":
+            return self._send(200, APP.electives_cancel())
         if p == "/api/electives/choose":
             return self._send(200, APP.electives_choose(b.get("block"), b.get("primary") or [], b.get("backup") or [],
                                                         b.get("password") or None, b.get("username") or None))

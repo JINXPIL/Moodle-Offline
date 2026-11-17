@@ -467,7 +467,7 @@ body[data-v-calendar-left="0"] #calList .cl{display:none}
 .updnotes{white-space:pre-wrap;word-break:break-word;font:12px/1.45 var(--font-body,inherit);margin:6px 0 0;max-height:180px;overflow:auto}
 .toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:60}
 .toast{background:var(--surface-solid);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;box-shadow:var(--shadow);padding:12px 14px;max-width:420px;animation:tin .2s}
-.toast.bad{border-left-color:var(--bad)}.toast.ok{border-left-color:var(--ok)}
+.toast.warn{border-left-color:var(--warn)}.toast.bad{border-left-color:var(--bad)}.toast.ok{border-left-color:var(--ok)}
 @keyframes tin{from{transform:translateY(8px);opacity:0}}
 @media (max-width:980px){.cv-body{grid-template-columns:1fr}.toc{display:none}.layout{grid-template-columns:1fr}.side{padding:0 18px 24px}.dock-body{grid-template-columns:1fr}.now{display:none}}
 textarea.txt{border-radius:10px;border:1px solid var(--line);background:var(--raised);color:inherit;padding:8px 10px;width:100%;outline:none;font:inherit;min-height:64px;resize:vertical}
@@ -752,6 +752,7 @@ body.android .no-android{display:none!important}
 @media (max-width:520px){.brand{font-size:0;gap:0}}
 /* ── 1.25.0: правой панели в «Курсах» нет — кнопки скачивания в строке над карточками ── */
 #coursesView .layout{grid-template-columns:minmax(0,1fr)}
+#gradesView .layout{grid-template-columns:minmax(0,1fr)}           /* боковой колонки у «Успеваемости» нет — без этого справа оставалось пустое место в 340 px */
 .dlbar{display:contents}   /* на ПК кнопки — обычные элементы строки .toolbar (ей же задаёт промежутки) */
 @media (min-width:701px){#coursesView .search{min-width:150px}}   /* строка со всеми кнопками помещается в окно 1280 px; поиск сжимается первым */
 /* ── 1.24.0: настройки по шестерёнке, читаемые шапки и карточки ── */
@@ -924,6 +925,10 @@ body[data-v-electives-full="0"] #electivesView .el-row.full:not(.on){display:non
 #electivesView .el-bs small{display:block;font-size:12px;color:var(--muted)}
 #electivesView .el-bar .btn{flex:none;max-width:48%;white-space:normal;line-height:1.2}
 #electivesView .el-site{margin-top:10px}
+.el-busy{position:fixed;left:0;right:0;top:var(--top-h,56px);z-index:47;display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--surface-solid);border-bottom:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));box-shadow:0 6px 18px rgba(0,0,0,.2)}
+.el-busy.hidden{display:none}
+.el-busy-t{flex:1 1 auto;min-width:0;font-size:13.5px;line-height:1.3;overflow-wrap:anywhere}
+.el-busy .btn{flex:none}
 #electivesView .el-evh{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:18px 0 8px}
 #electivesView .el-evh .esec{margin:0}
 #electivesView .el-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,24rem),1fr));gap:12px;align-items:start}
@@ -1150,6 +1155,7 @@ body[data-v-electives-full="0"] #electivesView .el-row.full:not(.on){display:non
     </section>
     <!-- Элективы -->
     <section class="view hidden" id="electivesView">
+      <div class="el-busy hidden" id="elBusy" role="status" aria-live="polite"><span class="spin"></span><span class="el-busy-t" id="elBusyT"></span><button class="btn" id="elBusyX" type="button">Отмена</button></div>
       <div class="layout">
         <div class="content">
           <div class="el-top"><div><h2 id="elTitle">Элективы</h2><div class="hint" id="elInfo"></div></div>
@@ -1735,12 +1741,13 @@ async function androidOpen(b){
   toast((b.reveal ? "Файл лежит здесь: " : "Папки открывает приложение «Файлы». Путь: ") + full);
   return {ok: true};
 }
-async function api(path, body) {
+async function api(path, body, signal) {
   if (ANDROID && path === "/api/open") return androidOpen(body || {});
-  return apiRaw(path, body);
+  return apiRaw(path, body, signal);
 }
-async function apiRaw(path, body) {
+async function apiRaw(path, body, signal) {
   const opt = {headers: {"X-Token": T}};
+  if (signal) opt.signal = signal;
   if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
   const r = await fetch(path, opt);
   if (r.status === 403) throw new Error("forbidden");
@@ -4209,8 +4216,8 @@ function elRow(b, o, st, roles, ro, on){                   // плитка ва�
   const x = (o.url || o.desc) ? `<div class="el-x">${o.url ? `<a href="#" data-url="${esc(o.url)}">подробнее</a>` : ""}${o.desc ? `<div class="el-d">${esc(o.desc)}</div>` : ""}</div>` : "";
   const head = `<b class="el-n">${esc(o.name)}</b><span class="el-m">${elPlaces(o)}${tags}</span>`;
   if (!ro && roles.length === 1)                            // одна роль — вся плитка нажимается, галочка в углу
-    return `<div class="${cls}"><button type="button" class="el-pick ${role ? "on" : ""}" data-elpick="${b.id}:${o.id}" aria-pressed="${role ? "true" : "false"}" ${st.review ? "disabled" : ""}>${head}</button><i class="el-ck" aria-hidden="true">✓</i>${x}</div>`;
-  const sel = ro ? "" : `<select class="txt el-sel ${role ? "on" : ""}" data-blk="${b.id}" data-opt="${o.id}" aria-label="Роль для «${esc(o.name)}»" ${st.review ? "disabled" : ""}><option value="">Не выбрано</option>${roles.map(r => `<option value="${r.k}" ${role && role.k === r.k ? "selected" : ""}>${r.label}</option>`).join("")}</select>`;
+    return `<div class="${cls}"><button type="button" class="el-pick ${role ? "on" : ""}" data-eb="${esc(b.id)}" data-elpick="${esc(o.id)}" aria-pressed="${role ? "true" : "false"}" ${st.review ? "disabled" : ""}>${head}</button><i class="el-ck" aria-hidden="true">✓</i>${x}</div>`;
+  const sel = ro ? "" : `<select class="txt el-sel ${role ? "on" : ""}" data-blk="${esc(b.id)}" data-opt="${esc(o.id)}" aria-label="Роль для «${esc(o.name)}»" ${st.review ? "disabled" : ""}><option value="">Не выбрано</option>${roles.map(r => `<option value="${r.k}" ${role && role.k === r.k ? "selected" : ""}>${r.label}</option>`).join("")}</select>`;
   return `<div class="${cls}"><div class="el-t">${head}</div>${x}${sel}</div>`;
 }
 function elVisible(b, st){
@@ -4225,7 +4232,7 @@ function elListHtml(b, st){
 function elFilterHtml(b, st){                              // поиск и фильтр — только когда вариантов много
   const opts = b.options || [], roles = elRoles(b); if (opts.length < 6) return "";
   const n = {all: opts.length, free: opts.filter(o => o.left !== 0).length, mine: opts.filter(o => elHas(st, roles, o)).length};
-  const seg = [["all", "Все"], ["free", "Свободные"], ["mine", "Выбрано"]].map(([k, t]) => `<button type="button" data-elf="${b.id}:${k}" class="${st.f === k ? "on" : ""}">${t}<small>${n[k]}</small></button>`).join("");
+  const seg = [["all", "Все"], ["free", "Свободные"], ["mine", "Выбрано"]].map(([k, t]) => `<button type="button" data-eb="${esc(b.id)}" data-elf="${k}" class="${st.f === k ? "on" : ""}">${t}<small>${n[k]}</small></button>`).join("");
   return `<div class="el-flt"><div class="el-seg">${seg}</div><input class="txt el-q" type="search" placeholder="Найти вариант…" value="${esc(st.q || "")}" data-elq="${b.id}" autocomplete="off"></div>`;
 }
 function elSame(b, st, roles){                             // то, что выбрано в окне, совпадает с сохранённым на сайте
@@ -4331,11 +4338,34 @@ function renderElectives(){
       : `<button class="btn ${mine ? "danger" : "primary"}" data-act="${a.id}" ${a.disabled ? "disabled" : ""}>${esc(a.disabled && !mine ? (a.label || "Недоступно") : a.label)}</button>`;
     return `<div class="ecard ${mine ? "mine" : ""}"><div class="ctx">${esc(a.context || "(без описания)")}</div><div class="row2">${btn}${mine ? '<span class="mmeta">вы записаны</span>' : ""}</div></div>`; }).join("");
 }
+let elRun = null;                                          // идущее действие с сайтом: {ctl, write, t0, cancelled, tick, kill}
+function elBusyText(){
+  if (!elRun) return;
+  const n = Math.round((Date.now() - elRun.t0) / 1000);
+  $("#elBusyT").textContent = elRun.cancelled ? "Отменяю…" : n < 8 ? "Связываюсь с сайтом элективов…" : `Сайт отвечает долго (${n} с). Можно подождать или отменить.`;
+}
+function elBusyEnd(){ if (!elRun) return; clearInterval(elRun.tick); clearTimeout(elRun.kill); elRun = null; $("#elBusy").classList.add("hidden"); setBarVars(); }
+$("#elBusyX").onclick = () => {
+  if (!elRun || elRun.cancelled) return;
+  elRun.cancelled = true; elBusyText();
+  apiRaw("/api/electives/cancel", {}).catch(() => {});      // сервер останавливает действие между запросами и отвечает «отменено»
+  const run = elRun; run.kill = setTimeout(() => run.ctl.abort(), 3000);       // не дождались ответа сервера (идёт запрос к сайту) — перестаём ждать сами
+};
 async function elCall(path, body, busy){
+  if (elRun) { toast("Предыдущее действие с сайтом ещё идёт — дождитесь или нажмите «Отмена».", "warn"); return null; }
+  const write = /\/(choose|register|retract)$/.test(path), run = elRun = {ctl: new AbortController(), write, t0: Date.now(), cancelled: false};
   if (busy) { busy.disabled = true; busy.dataset.t = busy.textContent; busy.innerHTML = '<span class="spin" style="display:inline-block;vertical-align:-3px"></span> Работаю…'; }
-  const r = await api(path, {...body, password: $("#elPass").value || "", username: $("#elUser").value.trim()}).catch(e => ({ok: false, error: String(e)}));
+  elBusyText(); $("#elBusy").classList.remove("hidden"); setBarVars(); run.tick = setInterval(elBusyText, 1000);
+  let r;
+  try { r = await api(path, {...body, password: $("#elPass").value || "", username: $("#elUser").value.trim()}, run.ctl.signal); }
+  catch (e) { r = run.cancelled ? {ok: false, cancelled: true, sent: write, unsure: true} : {ok: false, error: String(e)}; }
+  elBusyEnd();
   if (busy) { busy.disabled = false; busy.textContent = busy.dataset.t; }
-  if (!r.ok) { toast("Элективы: " + r.error, "bad"); if (r.need_password) { EL = {...(EL || {}), need_password: true}; renderElectives(); } return null; }
+  if (!r.ok) {
+    if (r.cancelled) toast(!write ? "Отменено." : r.sent ? "Отменено, но запрос на сайт уже уходил" + (r.unsure ? " и мог выполниться" : "") + ": нажмите «Обновить» и проверьте, что получилось." : "Отменено — на сайт ничего не отправлено.", r.sent ? "warn" : "ok", {ms: r.sent ? 12000 : 6000});
+    else { toast("Элективы: " + r.error, "bad", {ms: r.sent ? 14000 : 9000}); if (r.need_password) { EL = {...(EL || {}), need_password: true}; renderElectives(); } }
+    return null;
+  }
   if (r.state) EL = r.state; return r;
 }
 async function elRefresh(){
@@ -4349,14 +4379,17 @@ $("#elSnapGo").onclick = async () => { const r = await elCall("/api/electives/sn
 const elSave = () => api("/api/electives/refresh", {settings_only: true, electives_watch: $("#elWatch").checked, electives_watch_hours: +$("#elHours").value, electives_url: $("#elUrl").value.trim()});
 $("#elWatch").onchange = elSave; $("#elHours").onchange = elSave; $("#elUrl").onchange = elSave;
 const elById = k => ((EL && EL.api && EL.api.blocks) || []).find(b => String(b.id) === String(k));
-function elSetRole(st, oid, role){                          // вариант получает роль; прежний обладатель этой роли её теряет
+// id варианта — такой, каким его отдал сайт. В число (`+id`) его превращать НЕЛЬЗЯ: у строкового id получается NaN —
+// вариант не подсвечивался, а в сводке было «Основной: NaN».
+const elOid = (b, oid) => { const o = ((b && b.options) || []).find(x => String(x.id) === String(oid)); return o ? o.id : oid; };
+function elSetRole(b, st, oid, role){                       // вариант получает роль; прежний обладатель этой роли её теряет
   for (const k of Object.keys(st.pick)) if (String(st.pick[k]) === String(oid)) delete st.pick[k];
-  if (role) st.pick[role] = +oid;
+  if (role) st.pick[role] = elOid(b, oid);
 }
 $("#electivesView").addEventListener("change", e => {
   const sel = e.target.closest("select[data-blk]"); if (!sel) return;
-  const st = ELP[sel.dataset.blk]; if (!st) return;
-  elSetRole(st, sel.dataset.opt, sel.value);
+  const st = ELP[sel.dataset.blk], b = elById(sel.dataset.blk); if (!st || !b) return;
+  elSetRole(b, st, sel.dataset.opt, sel.value);
   renderElectives();
 });
 $("#electivesView").addEventListener("input", e => {         // поиск по вариантам: перерисовываем только список, чтобы не терять ввод
@@ -4370,8 +4403,8 @@ $("#electivesView").addEventListener("click", async e => {
   const u = e.target.closest("a[data-url]"); if (u) { e.preventDefault(); return; }      // открывает общий обработчик [data-url]
   const blocks = ((EL && EL.api && EL.api.blocks) || []), bid = k => blocks.find(b => String(b.id) === String(k));
   let t = e.target.closest("[data-elpick]");
-  if (t) { const [k, o] = t.dataset.elpick.split(":"), st = ELP[k]; if (!st) return; elSetRole(st, o, st.pick.p0 != null && String(st.pick.p0) === o ? "" : "p0"); renderElectives(); return; }
-  t = e.target.closest("[data-elf]"); if (t) { const [k, f] = t.dataset.elf.split(":"); if (ELP[k]) { ELP[k].f = f; renderElectives(); } return; }
+  if (t) { const o = t.dataset.elpick, k = t.dataset.eb, st = ELP[k], b = bid(k); if (!st || !b) return; elSetRole(b, st, o, st.pick.p0 != null && String(st.pick.p0) === o ? "" : "p0"); renderElectives(); return; }
+  t = e.target.closest("[data-elf]"); if (t) { const k = t.dataset.eb; if (ELP[k]) { ELP[k].f = t.dataset.elf; renderElectives(); } return; }
   t = e.target.closest("[data-evf]"); if (t) { ELV.evf = t.dataset.evf; ELV.evAll = false; renderElectives(); return; }
   t = e.target.closest("[data-evall]"); if (t) { ELV.evAll = true; renderElectives(); return; }
   t = e.target.closest("[data-elgo]"); if (t) { const x = document.getElementById(t.dataset.elgo); if (x) x.scrollIntoView({behavior: "smooth", block: "start"}); return; }
@@ -4390,7 +4423,9 @@ $("#electivesView").addEventListener("click", async e => {
     const on = t.dataset.eregOn != null, id = on ? t.dataset.eregOn : t.dataset.eregOff, key = (on ? "on" : "off") + id;
     if (elArmed !== key) { elArmed = key; renderElectives(); setTimeout(() => { if (elArmed === key) { elArmed = ""; renderElectives(); } }, 5000); return; }
     elArmed = "";
-    const r = await elCall(on ? "/api/electives/register" : "/api/electives/retract", on ? {event: +id} : {reg: +id}, t); if (!r) return;
+    const evs = (EL && EL.api && EL.api.events) || [];
+    const ev = on ? evs.find(x => String(x.id) === id) : evs.find(x => String(x.reg_id) === id);        // id как у сайта (не `+id`: у строкового получится NaN)
+    const r = await elCall(on ? "/api/electives/register" : "/api/electives/retract", on ? {event: ev ? ev.id : id} : {reg: ev ? ev.reg_id : id}, t); if (!r) return;
     renderElectives(); toast(r.message || "Готово", "ok"); return;
   }
   t = e.target.closest("[data-act]");

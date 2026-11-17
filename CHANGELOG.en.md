@@ -15,6 +15,18 @@ Moodle Offline is built for students of Sevastopol State University (SevSU) and 
 
 ---
 
+## 1.32.1 — 2026-11-18
+
+**Fixed**
+- “Элективы” (sports electives): when you picked a different option, its tile got no outline, no tick appeared, and the summary before saving read “Основной: NaN”. The site's option numbers are strings, not numbers, and the program mangled them on selection. Now the pick shows at once, the summary names the options, and exactly what the site gave is what is sent back. The same fix covers signing up for a class and withdrawing from one.
+- “Элективы”: when the site did not answer, “Сохранить на сайте” (save on the site) and signing up for a class could hang for a very long time with no cancel button — the program waited for the site to come back. Now a site that does not answer is recognised within ten to forty seconds, a strip “Связываюсь с сайтом…” (contacting the site) with a “Отмена” (cancel) button shows under the header, and after a few seconds it honestly says the site is slow. After a cancel or a failure the program says nothing was sent to the site; if the request might have got through, it says so — press “Обновить” and check your choice on the site.
+- A failure of the electives site no longer turns the header indicator to “Moodle недоступен” (Moodle unavailable): it is a different site (iot.sevsu.ru) and has nothing to do with Moodle.
+- “Успеваемость” (grades) on a wide screen: an empty strip the width of a side column — which this tab does not have — was left to the right of the list. The list now fills the whole window.
+
+**What was verified and what was not.** Cancelling and the quick failure for an unreachable site were tested automatically with a stand-in client and against a closed port (an unreachable site fails in under twenty seconds, “Отмена” breaks the wait within seconds), and the window in Chromium on made-up data with string option numbers: choosing, the summary, saving, signing up, withdrawing, a 390 px phone and a 1920/1280/1000 px computer. The real iot.sevsu.ru, a real phone (Android WebView) and Windows/Edge were not tested.
+
+---
+
 ## 1.32.0 — 2026-11-18
 
 **New**

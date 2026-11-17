@@ -286,6 +286,7 @@ class Iot:
         self.creds = creds
         self.cookies_out = None
         self.diag: list = []
+        self.sending = False        # True — запрос на запись (выбор, запись на занятие) уже мог уйти на сайт
         self.token = None
         self.token_until = 0.0
         p = urlparse(SITE)
@@ -600,29 +601,38 @@ class Iot:
         self.rep.log("Элективы: сохраняю выбор «" + mo.short(block["name"], 60) + "»: "
                      + "; ".join(f"{k} — {names.get(str(x), x)}" for k, x in
                                  [("основной", p) for p in primary] + [(f"резерв {i}", b) for i, b in enumerate(backup, 1)]))
+        self.sending = True
         try:
             res, _ = self.api("POST", "/choices", body=body)
         except IotHttpError as e:
+            self.sending = False        # сайт ответил — значит, запрос дошёл, и исход известен
             raise IotError(f"сайт не принял выбор: {e}") from e
+        self.sending = False
         state = self._refresh()
         return {"ok": True, "message": "Выбор сохранён на сайте", "state": state, "choice": res}
 
     def register(self, event_id) -> dict:
         self.diag = []
         self.login()
+        self.sending = True
         try:
             self.api("POST", "/calendar-event-registrations", body={"calendarEventId": event_id, "autoRegister": True})
         except IotHttpError as e:
+            self.sending = False
             raise IotError(f"сайт не принял запись: {e}") from e
+        self.sending = False
         return {"ok": True, "message": "Вы записаны на занятие", "state": self._refresh()}
 
     def retract(self, registration_id) -> dict:
         self.diag = []
         self.login()
+        self.sending = True
         try:
             self.api("DELETE", f"/calendar-event-registrations/{quote(str(registration_id), safe='')}")
         except IotHttpError as e:
+            self.sending = False
             raise IotError(f"сайт не отменил запись: {e}") from e
+        self.sending = False
         return {"ok": True, "message": "Запись на занятие отменена", "state": self._refresh()}
 
 

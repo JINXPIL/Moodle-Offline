@@ -87,6 +87,12 @@ check("26. скобки в <style> сбалансированы", css.count("{")
 check("27. блок «Успеваемости» стоит после большого @media телефона (иначе правила действовали бы только на нём)",
       not stack_at(css, css.index("#gradesView .gv-top{")), str(stack_at(css, css.index("#gradesView .gv-top{"))))
 
+# --- общая сетка `.layout` рассчитана на боковую колонку (1fr 340px); у вкладки без `<aside>` справа остаётся пустое место
+views = re.findall(r'<section class="view[^"]*" id="(\w+)">\s*<div class="layout">(.*?)(?=<section class="view|</main>)', html, flags=re.S)
+no_side = [v for v, body in views if "<aside" not in body]
+check("28. у каждой вкладки без боковой колонки (`<aside>`) сетка в одну колонку — иначе справа пустые 340 px (на ПК 1920 так и было у «Успеваемости»)",
+      "gradesView" in no_side and all(re.search(r"#%s \.layout\{grid-template-columns:minmax\(0,1fr\)\}" % v, css) for v in no_side), no_side)
+
 if FAILS:
     print("\nПровалено:", len(FAILS)); sys.exit(1)
 print("\nВсё в порядке")

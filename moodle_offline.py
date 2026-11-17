@@ -89,7 +89,7 @@ except ImportError:
 #  НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════════════
 APP_NAME = "Moodle Offline"
-VERSION = "1.32.0"
+VERSION = "1.32.1"
 DEFAULT_URL = "https://do.sevsu.ru"
 
 FROZEN = getattr(sys, "frozen", False)
@@ -1105,6 +1105,7 @@ class MoodleClient:
         self.file_delay = file_delay
         self.wait_minutes = wait_minutes
         self.no_wait = False          # True — при падении сервера не ждать, а сразу сообщить (вход при запуске)
+        self.net_retries = 2          # сколько раз повторить запрос при обрыве соединения, прежде чем проверить, жив ли сайт
         self.control = control or Control()
         self.rep = reporter or Reporter()
         self.debug_dir = debug_dir
@@ -1257,7 +1258,7 @@ class MoodleClient:
             except NET_ERRORS as e:
                 self._last_req = time.monotonic()
                 attempt += 1
-                if attempt <= 2:
+                if attempt <= self.net_retries:
                     self._backoff(attempt, describe_error(e))
                     continue
                 status, _ = self.probe()
