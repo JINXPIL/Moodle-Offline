@@ -15,6 +15,17 @@ Moodle Offline is built for students of Sevastopol State University (SevSU) and 
 
 ---
 
+## 1.30.0 — 2026-11-17
+
+**New**
+- “Старые версии программы” (old program versions): the settings window has a new panel that finds earlier downloaded files of the program itself — `.exe`, `.apk`, archives, checksum files and update leftovers (`.old`, `.new`, unfinished downloads) — in Downloads, on the desktop, in Documents and next to the program; on a phone, in shared storage (this needs “all files” access, and the program explains how to give it). A list with checkboxes on both computer and phone: “Выбрать все” (select all), “Снять все” (clear all) and “Удалить выбранные” (delete selected; it asks first, and files are deleted for good, not moved to a bin). Old versions and leftovers are ticked for you; files newer than your version, identical ones, and ones the program could not judge are left unticked. The version comes from the file name, and from the file itself for `.apk`; for an `.exe` without a number in its name the program does not guess and leaves the decision to you. The program that is running right now is never shown or touched. After start-up it tells you once if it found something old.
+- Notices in the window can be dismissed without waiting: a cross on the right, a swipe sideways (on a phone or tablet), and “Закрыть все” (close all) when there are several. While the pointer or a finger is on a notice it does not disappear by itself; no more than five are stacked on screen.
+
+**Security**
+- Only files that a fresh search of the usual folders just showed can be deleted; a foreign path slipped into a request is refused. Folders and symbolic links are never deleted (regular files only), and the search needs no internet.
+
+---
+
 ## 1.29.1 — 2026-11-16
 
 **Fixed**

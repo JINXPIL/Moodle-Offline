@@ -841,6 +841,35 @@ body.android .no-android{display:none!important}
   #gradesView table.gr td.i{display:none}
   #gradesView table.gr td[data-l]:not(:empty)::after{content:" " attr(data-l)}
 }
+/* ── 1.30.0: старые версии программы и уведомления, которые можно закрыть ──
+   Блок стоит после большого @media (max-width:700px), поэтому действует везде; телефонные поправки — в своём @media ниже. */
+.toast{display:flex;align-items:flex-start;gap:8px;touch-action:pan-y;transition:transform .17s,opacity .17s}
+.toast .tx{flex:1;min-width:0}
+.toast .tclose{flex:none;width:28px;height:28px;margin:-5px -7px -5px 2px;border:0;border-radius:8px;background:transparent;color:inherit;opacity:.55;font:400 20px/1 var(--font,inherit);cursor:pointer}
+.toast .tclose:hover,.toast .tclose:focus-visible{opacity:1;background:var(--line)}
+.toast.out{opacity:0;transform:translateX(40px)}
+.toasts .tall{order:-1;align-self:flex-end;height:28px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface-solid);color:var(--muted);font:inherit;font-size:12.5px;cursor:pointer;box-shadow:var(--shadow)}
+.toasts .tall:hover{color:inherit}
+.olvlist{display:flex;flex-direction:column;gap:6px;max-height:min(46vh,420px);overflow:auto;margin-top:8px}
+.olvrow{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:10px;cursor:pointer}
+.olvrow input{width:18px;height:18px;margin:2px 0 0;accent-color:var(--accent);flex:none;cursor:pointer}
+.olvrow.sel{border-color:var(--accent)}
+.olvmain{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.olvmain .olvt{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.olvmain b{overflow-wrap:anywhere}
+.olvmain small{color:var(--muted);overflow-wrap:anywhere}
+.olvst{font-size:11.5px;line-height:1;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.olvst.old,.olvst.junk{color:var(--bad);border-color:currentColor}
+.olvst.newer{color:var(--ok);border-color:currentColor}
+.olvst.unknown{color:var(--warn);border-color:currentColor}
+#olvNeed{margin:8px 0}
+#olvBar{margin:10px 0 0}
+@media (max-width:700px){
+  .toast .tclose{width:36px;height:36px;margin:-8px -9px -8px 0;font-size:22px}
+  .toasts .tall{height:34px}
+  .olvlist{max-height:none;overflow:visible}
+  #olvBar .btn{height:36px}
+}
 </style>
 </head>
 <body>
@@ -1211,6 +1240,14 @@ body.android .no-android{display:none!important}
             <div class="updnew hidden" id="updNew"></div>
             <div class="row"><div class="lbl">Проверять само<small>раз в сутки спрашиваю только GitHub «какая версия последняя»; личные данные не отправляются</small></div><label class="sw-t"><input type="checkbox" id="updAuto"><span></span></label></div>
             <div class="row"><div class="lbl">Как часто</div><select class="txt" id="updEvery" style="width:auto"><option value="6">каждые 6 ч</option><option value="12">каждые 12 ч</option><option value="24">раз в сутки</option><option value="72">раз в 3 дня</option><option value="168">раз в неделю</option></select></div>
+          </div>
+          <div class="panel" id="oldPanel">
+            <h3>Старые версии программы</h3>
+            <div class="row" style="border-top:0;padding-top:0"><div class="lbl"><span id="olvInfo">Ищу…</span><small id="olvWhere"></small></div>
+              <button class="btn" id="olvScan">Найти снова</button></div>
+            <div class="hint hidden" id="olvNeed"></div>
+            <div class="ntbar hidden" id="olvBar"></div>
+            <div class="olvlist" id="olvList"></div>
           </div>
           <div class="panel" id="resetPanel">
             <h3>Сброс к настройкам по умолчанию</h3>
@@ -1587,7 +1624,50 @@ const SYS_TEXT = sys => ({
             autostart: "Файл автозапуска лежит в ~/.config/autostart, права администратора не нужны."},
 }[sys] || {login: "Windows", sched: "планировщик Windows, каждый день", toast: "всплывающее уведомление Windows",
           autostart: "Файл автозапуска лежит в вашей папке автозагрузки, права администратора не нужны."});
-function toast(msg, kind=""){ const d=document.createElement("div"); d.className="toast "+kind; d.textContent=msg; $("#toasts").appendChild(d); setTimeout(()=>d.remove(), 6000); }
+/* Уведомления внизу окна: закрываются крестиком или смахиванием пальцем, не ждать, пока исчезнут сами. Пока на уведомление
+   наведён курсор или оно под пальцем, таймер стоит; когда их несколько — вверху «Закрыть все». */
+function toast(msg, kind="", opt={}){
+  const d = document.createElement("div"); d.className = "toast " + kind;
+  const t = document.createElement("span"); t.className = "tx"; t.textContent = msg; d.append(t);
+  if (opt.action) {
+    const a = document.createElement("button"); a.type = "button"; a.className = "tundo"; a.textContent = opt.action.label; t.append(a);
+    a.onclick = () => { d.querySelector(".tclose").click(); opt.action.fn(); };
+  }
+  toastMount(d, opt.ms || 6000);
+}
+function toastMount(d, ms){
+  const box = $("#toasts");
+  while (box.querySelectorAll(".toast:not(.out)").length >= 5) box.querySelector(".toast:not(.out)").querySelector(".tclose").click();   // стопкой — не больше пяти
+  let timer = 0, left = ms, since = 0, gone = false;
+  const bye = () => { if (gone) return; gone = true; clearTimeout(timer); d.classList.add("out"); toastAllUpd(); setTimeout(() => { d.remove(); toastAllUpd(); }, 180); };
+  const run = () => { if (gone) return; clearTimeout(timer); since = Date.now(); timer = setTimeout(bye, left); };
+  const hold = () => { if (gone) return; clearTimeout(timer); left = Math.max(2500, left - (Date.now() - since)); };
+  const x = document.createElement("button"); x.type = "button"; x.className = "tclose"; x.title = "Закрыть"; x.setAttribute("aria-label", "Закрыть"); x.textContent = "×";
+  x.onclick = e => { e.stopPropagation(); bye(); };
+  d.append(x);
+  d.addEventListener("pointerenter", hold); d.addEventListener("pointerleave", run);
+  let sx = null, dx = 0, pid = null;                      // смахнуть вбок (мышью не тянем: там есть крестик, а текст можно выделять)
+  d.addEventListener("pointerdown", e => { if (e.pointerType === "mouse" || e.target.closest("button")) return; sx = e.clientX; dx = 0; pid = e.pointerId; hold(); });
+  d.addEventListener("pointermove", e => {
+    if (sx === null || e.pointerId !== pid) return;
+    dx = e.clientX - sx;
+    if (Math.abs(dx) > 6) { try { d.setPointerCapture(pid); } catch (_) {} d.style.transition = "none"; d.style.transform = `translateX(${dx}px)`; d.style.opacity = String(Math.max(.25, 1 - Math.abs(dx) / 260)); }
+  });
+  const end = e => {
+    if (sx === null || e.pointerId !== pid) return;
+    const far = Math.abs(dx) > 70; sx = null; d.style.transition = "";
+    if (far) { d.style.transform = `translateX(${dx > 0 ? 360 : -360}px)`; d.style.opacity = "0"; bye(); }
+    else { d.style.transform = ""; d.style.opacity = ""; run(); }
+  };
+  d.addEventListener("pointerup", end); d.addEventListener("pointercancel", end);
+  box.appendChild(d); toastAllUpd(); run();
+}
+function toastAllUpd(){
+  const box = $("#toasts"), n = box.querySelectorAll(".toast:not(.out)").length; let b = $("#toastAll");
+  if (n < 2) { if (b) b.remove(); return; }
+  if (!b) { b = document.createElement("button"); b.type = "button"; b.id = "toastAll"; b.className = "tall"; b.onclick = () => box.querySelectorAll(".toast:not(.out) .tclose").forEach(c => c.click()); box.prepend(b); }
+  b.textContent = "Закрыть все (" + n + ")";
+}
 
 /* ── тема и акцент ── */
 const ACCENTS = ["#2f6fde","#7c4dff","#0f9d8a","#e8710a","#d63384","#5f6b7a"];
@@ -2486,10 +2566,7 @@ function ntToggle(id, on, range){
   NT.last = id; ntSyncSel();
 }
 function ntUndoToast(text, undo, ms = 9000){
-  const d = document.createElement("div"); d.className = "toast"; d.append(text);
-  const gone = setTimeout(() => d.remove(), ms);
-  if (undo) { const u = document.createElement("button"); u.className = "tundo"; u.textContent = "Вернуть"; d.append(u); u.onclick = async () => { clearTimeout(gone); d.remove(); await undo(); }; }
-  $("#toasts").appendChild(d);
+  toast(text, "", {ms, action: undo ? {label: "Вернуть", fn: undo} : null});
 }
 const ntAfter = () => { loadNotes(); if (CV) cvNotesRefresh(); };
 async function ntDelOne(id){
@@ -4113,7 +4190,93 @@ $("#updCheck").onclick = async () => {
 $("#updAuto").onchange = async () => renderUpd(await api("/api/update/settings", {auto: $("#updAuto").checked}));
 $("#updEvery").onchange = async () => renderUpd(await api("/api/update/settings", {every: +$("#updEvery").value}));
 /* «Настройки» — окно по шестерёнке в шапке (панели «Как сохранять», «Бережный режим», «Доступ для нейросетей», «Обновление программы») */
-function setOpen(){ $("#setModal").classList.remove("hidden"); }
+/* ── старые версии программы: найти скачанные раньше файлы, отметить галочками, удалить ── */
+const OLV = {st: null, items: [], sel: new Set(), confirm: false, busy: false, at: 0};
+const OLV_ST = {old: "Старая", junk: "Остаток", same: "Такая же", newer: "Новее вашей", unknown: "Не знаю"};
+const olvN = n => n + " " + (n % 10 === 1 && n % 100 !== 11 ? "файл" : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? "файла" : "файлов");
+const olvSize = ids => OLV.items.filter(x => ids.has(x.id)).reduce((a, x) => a + x.size, 0);
+function olvSet(j){
+  OLV.st = j; OLV.items = j.items || []; OLV.confirm = false; OLV.at = Date.now();
+  OLV.sel = new Set(OLV.items.filter(x => x.checked).map(x => x.id));     // сразу отмечено то, что точно старое или остаток обновления
+  olvRender();
+}
+async function olvLoad(force){
+  if (OLV.busy || (!force && Date.now() - OLV.at < 20000)) return;
+  OLV.busy = true; $("#olvInfo").textContent = "Ищу…";
+  try { olvSet(await api("/api/oldver")); } catch (e) { $("#olvInfo").textContent = "Не получилось найти"; } finally { OLV.busy = false; olvRender(); }
+}
+function olvRender(){
+  const j = OLV.st, info = $("#olvInfo"), where = $("#olvWhere"), need = $("#olvNeed"), bar = $("#olvBar"), list = $("#olvList");
+  if (!j) return;
+  $("#olvScan").disabled = OLV.busy;
+  const short = d => String(d).split(/[\\/]/).filter(Boolean).slice(-2).join("/");
+  where.textContent = (j.dirs && j.dirs.length) ? "Искал в: " + j.dirs.map(short).join(", ") : "";
+  where.title = (j.dirs || []).join("\n");
+  need.classList.toggle("hidden", !j.need_access);
+  if (j.need_access) {
+    need.innerHTML = j.can_ask
+      ? `Чтобы найти старые версии, нужен доступ ко всем файлам. <button class="btn" id="olvAsk" style="margin-left:8px">Дать доступ</button>`
+      : `Чтобы найти старые версии, откройте в Termux <code>termux-setup-storage</code> и разрешите доступ к памяти.`;
+    const a = $("#olvAsk"); if (a) a.onclick = () => api("/api/android/action", {name: "allfiles"});
+    info.textContent = "Нет доступа к памяти телефона"; bar.classList.add("hidden"); list.innerHTML = ""; return;
+  }
+  if (!OLV.items.length) { info.textContent = "Старых версий не найдено"; bar.classList.add("hidden"); list.innerHTML = ""; return; }
+  info.textContent = `Найдено: ${olvN(OLV.items.length)}, ${hsize(j.total)}` + (j.truncated ? " (показаны не все)" : "");
+  list.innerHTML = OLV.items.map(x => {
+    const on = OLV.sel.has(x.id), dt = new Date(x.mtime * 1000).toLocaleDateString("ru");
+    return `<label class="olvrow${on ? " sel" : ""}" data-id="${esc(x.id)}"><input type="checkbox" data-ck${on ? " checked" : ""}>
+      <div class="olvmain"><div class="olvt"><b>${esc(x.name)}</b><span class="olvst ${esc(x.status)}">${OLV_ST[x.status] || ""}</span></div>
+      <small>${esc(x.kind_text)}${x.version ? " · версия " + esc(x.version) : ""} · ${hsize(x.size)} · ${dt}</small>
+      <small>${esc(x.why)}</small><small title="${esc(x.path)}">${esc(short(x.dir))}</small></div></label>`;
+  }).join("");
+  list.querySelectorAll(".olvrow").forEach(r => r.querySelector("[data-ck]").onchange = e => {
+    e.target.checked ? OLV.sel.add(r.dataset.id) : OLV.sel.delete(r.dataset.id); OLV.confirm = false; olvRender();
+  });
+  olvBarRender();
+}
+function olvBarRender(){
+  const bar = $("#olvBar"), n = OLV.sel.size, m = OLV.items.length, size = olvSize(OLV.sel);
+  bar.classList.remove("hidden"); bar.classList.toggle("on", n > 0);
+  if (OLV.confirm && n) {
+    const odd = OLV.items.filter(x => OLV.sel.has(x.id) && !["old", "junk"].includes(x.status)).length;
+    bar.innerHTML = `<span class="ntq">Удалить ${esc(olvN(n))} (${hsize(size)})?</span>
+      <span class="ntsel">Вернуть их будет нельзя.${odd ? ` Среди них ${odd} не определены как старые — проверьте список.` : ""}</span><div class="spacer"></div>
+      <button class="btn" id="olvNo">Отмена</button><button class="btn danger" id="olvYes">Удалить</button>`;
+    $("#olvNo").onclick = () => { OLV.confirm = false; olvBarRender(); }; const y = $("#olvYes"); y.onclick = olvDelete; y.focus(); return;
+  }
+  bar.innerHTML = `<label><input type="checkbox" id="olvAll"> <span>Выбрать все</span></label>
+    <span class="ntsel">${n ? `Выбрано: ${n} из ${m} · ${hsize(size)}` : "Ничего не выбрано"}</span><div class="spacer"></div>
+    <button class="btn" id="olvNone" ${n ? "" : "disabled"}>Снять все</button>
+    <button class="btn danger" id="olvDel" ${n && !OLV.busy ? "" : "disabled"}>${n && n === m ? "Удалить все" : "Удалить выбранные"}${n ? ` (${n})` : ""}</button>`;
+  const all = $("#olvAll"); all.checked = n > 0 && n === m; all.indeterminate = n > 0 && n < m;
+  const sync = () => { OLV.confirm = false; olvRender(); };
+  all.onchange = () => { OLV.sel = new Set(all.checked ? OLV.items.map(x => x.id) : []); sync(); };
+  $("#olvNone").onclick = () => { OLV.sel.clear(); sync(); };
+  $("#olvDel").onclick = () => { OLV.confirm = true; olvBarRender(); };
+}
+async function olvDelete(){
+  const ids = [...OLV.sel]; OLV.confirm = false; OLV.busy = true; olvBarRender();
+  let j; try { j = await api("/api/oldver/delete", {ids}); } catch (e) { j = {ok: false, error: "Не получилось удалить"}; }
+  OLV.busy = false;
+  if (!j.ok) { toast(j.error || "Не получилось удалить", "bad"); olvBarRender(); return; }
+  if (j.state) olvSet(j.state);
+  if (j.deleted.length) toast(`Удалено: ${olvN(j.deleted.length)}, освобождено ${hsize(j.freed)}`, "ok");
+  if (j.failed.length) toast(`Не удалось удалить ${olvN(j.failed.length)}: ${j.failed[0].why}`, "bad", {ms: 10000});
+}
+function goOldPanel(){ setOpen(); setTimeout(() => $("#oldPanel").scrollIntoView({behavior: "smooth", block: "start"}), 80); }
+async function olvAuto(){                       // один раз после запуска: нашёл что-то старое — сказать (об одном и том же наборе — один раз)
+  let j; try { j = await api("/api/oldver"); } catch (e) { return; }
+  if (!j || !j.ok || j.need_access) return;
+  olvSet(j);
+  const old = (j.items || []).filter(x => x.checked); if (!old.length) return;
+  const sig = old.map(x => x.id).sort().join(",");
+  try { if (localStorage.getItem("mo_ov_seen") === sig) return; localStorage.setItem("mo_ov_seen", sig); } catch (e) {}
+  toast(`Нашёл старые версии программы: ${olvN(old.length)}, ${hsize(old.reduce((a, x) => a + x.size, 0))}.`, "", {ms: 12000, action: {label: "Посмотреть", fn: goOldPanel}});
+}
+$("#olvScan").onclick = () => olvLoad(true);
+setTimeout(olvAuto, 5000);
+
+function setOpen(){ $("#setModal").classList.remove("hidden"); olvLoad(false); }
 function setHide(){ $("#setModal").classList.add("hidden"); }
 $("#setBtn").onclick = setOpen; $("#setClose").onclick = setHide;
 $("#setModal").addEventListener("click", e => { if (e.target === e.currentTarget) setHide(); });
