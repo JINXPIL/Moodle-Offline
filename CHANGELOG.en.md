@@ -15,6 +15,20 @@ Moodle Offline is built for students of Sevastopol State University (SevSU) and 
 
 ---
 
+## 1.32.0 — 2026-11-18
+
+**New**
+- “Элективы” (sports electives) is shorter and easier on a phone: options are now tiles in two columns (three or four on a computer) with the name, a free-places bar and a tick; with a single main pick you just tap the tile. Before, every option was a wide dropdown about 200 pixels tall, one per row. On the test data the page is about a third shorter (8,700 → 5,800 pixels), and a block of fifteen options went from 2,170 to 1,560. When a block needs several roles (main picks and reserves), a list “Не выбрано / Основной 1 / Резерв 1…” stays at the bottom of the tile.
+- The “Обновить” (refresh) button is in the tab header instead of the bottom of the side column; sign-in, login and password, “Следить за изменениями” (watch for changes) and the page address moved into a collapsible “Вход и слежение” panel (collapsed on a phone, it opens by itself when a password is needed).
+- Section chips “Выбор / Занятия / Мои блоки” (choose / classes / my blocks) stick under the header and scroll to the section. A block with six or more options gets a filter “Все / Свободные / Выбрано” (all / with places / chosen) and a search by name. At the bottom of a block, a bar like “Выбрано 3 из 4, осталось: резерв 2” holds the save button: it stays in view while a long list scrolls and sits above the bottom tabs.
+- Upcoming classes are grouped by day (“Сегодня”, “Завтра”) with a filter “Можно записаться / Вы записаны” (can sign up / signed up); the first twelve show, the rest under “Показать все” (show all). The selection deadline shows how much time is left (“ещё 20 дней”, in red when under a week).
+- Past and closed blocks take one line with the result (“Вы распределены: …”); options and “Открыть на сайте” (open on the site) appear on tap. “Ваш выбор” (your choice) and “Вы распределены” (you are allocated) are two small cards. On a computer, class days run in two columns.
+- “Вид” (view settings) for electives gets two new items: whether to show options with no places left, and the description under an option.
+
+**What was verified and what was not.** The tab's new look was checked in Chromium on made-up data: screens of 412, 390, 360 and 320 pixels with touch, a large system font (zoom 1.4), light and dark themes, a 1280 px computer — choosing and un-choosing, several roles, filters and search, scrolling to sections, the bar above the bottom tabs, “Вид”, and opened blocks staying open when the window refreshes. Choosing, signing up for classes and logging in on the real iot.sevsu.ru are still verified only against a mock of the site; a real phone (Android WebView) and Windows with Edge were not tested.
+
+---
+
 ## 1.31.0 — 2026-11-18
 
 **New**
