@@ -1,4 +1,4 @@
-"""«Элективы» на телефоне и ПК (1.32.0): варианты — компактные строки с кнопкой «Выбрать» вместо
+"""«Элективы» на телефоне и ПК (1.32.0, дополнено в 1.32.1): варианты — компактные строки с кнопкой «Выбрать» вместо
 сплошного выпадающего списка на 200 px (теперь плитки в две колонки), «Обновить» в шапке вкладки, закладки разделов, поиск и фильтр у больших
 блоков, занятия по дням с фильтром, прошлые блоки — одной строкой, панель сохранения не уезжает под нижние вкладки.
 Поведение проверено в Chromium (стенд вне репозитория, вымышленный `iot.json`); здесь — то, что можно проверить текстом
@@ -71,7 +71,7 @@ check("15. прошлые и закрытые блоки — `details.el-mini` �
 check("16. логика выбора прежняя: роли `elRoles`, `elNeed`, перенос роли (`elSetRole`), запросы /api/electives/choose|register|retract",
       all(x in script for x in ("const elRoles = ", "function elNeed(", "function elSetRole(", "/api/electives/choose", "/api/electives/register", "/api/electives/retract")))
 check("17. выбор вариантов не лезет в чужие данные: роль снимается у прежнего обладателя и ставится новому",
-      re.search(r"function elSetRole\(st, oid, role\)\{[^}]*delete st\.pick\[k\][^}]*st\.pick\[role\] = \+oid", script, flags=re.S) is not None)
+      re.search(r"function elSetRole\(b, st, oid, role\)\{[^}]*delete st\.pick\[k\][^}]*st\.pick\[role\] = elOid\(b, oid\)", script, flags=re.S) is not None)
 
 # --- «Вид»
 m = re.search(r'electives: \{name: "Элективы", opts: \[(.*?)\]\},\n\};', script, flags=re.S)
@@ -89,6 +89,26 @@ check("20. новые классы вкладки — все с префиксо
 check("21. скобки CSS сбалансированы (новый блок стоит после закрытия большого @media телефона)", css.count("{") == css.count("}"), (css.count("{"), css.count("}")))
 check("22. у блоков списка нет обрезки названий (`line-clamp`, `ellipsis`) — названия вариантов переносятся целиком",
       not re.search(r"line-clamp|text-overflow:ellipsis", ecss))
+
+# --- id как у сайта (1.32.1): у настоящих вариантов id — строки; `+id` давало NaN, плитка не подсвечивалась, в сводке «Основной: NaN»
+check("23. id варианта и занятия нигде не превращается в число (`+oid`, `+id`, `Number(…id)`): у строкового id получается NaN",
+      not re.search(r"(?<![\w)\]\"'])\+(oid|id|o|k)\b(?!\s*[\d(])", ejs + script[script.index("const elById"):script.index("async function elRefresh(")])
+      and not re.search(r"Number\([^)]*\bid\b", ejs), re.findall(r".{20}\+(?:oid|id)\b.{10}", ejs + script[script.index("const elById"):script.index("async function elRefresh(")]))
+check("24. роль получает id ИЗ ДАННЫХ САЙТА (`elOid`), а не из текста атрибута; блок и вариант — в разных атрибутах (`data-eb` + `data-elpick`), а не «id:id»",
+      "const elOid = " in script and "st.pick[role] = elOid(b, oid)" in script and 'data-eb="${esc(b.id)}" data-elpick="${esc(o.id)}"' in ejs and 'split(":")' not in script[script.index("const elById"):script.index("async function elRefresh(")])
+check("25. запись на занятие и её отмена шлют id как у сайта (`ev.id` / `ev.reg_id`), а не `+id`",
+      "{event: ev ? ev.id : id}" in script and "{reg: ev ? ev.reg_id : id}" in script)
+
+# --- ожидание сайта и «Отмена» (1.32.1)
+bar = script[script.index("let elRun = null;"):script.index("async function elRefresh(")]
+check("26. при действии с сайтом — полоса `#elBusy` с кнопкой «Отмена» (`#elBusyX`), закреплённая под шапкой, а не только «Работаю…» на кнопке",
+      'id="elBusy"' in ev_html and 'id="elBusyX"' in ev_html and re.search(r"\.el-busy\{[^}]*position:fixed[^}]*top:var\(--top-h", css) is not None)
+check("27. «Отмена» просит сервер остановиться (`/api/electives/cancel`), а если ответа нет 3 с — перестаёт ждать сама (AbortController)",
+      "/api/electives/cancel" in bar and "AbortController" in bar and "setTimeout(() => run.ctl.abort(), 3000)" in bar and "signal" in script[script.index("async function api("):script.index("const fileUrl")])
+check("28. подпись честно меняется, когда сайт долго молчит; второе действие поверх первого не запускается",
+      "отвечает долго" in bar and "if (elRun)" in bar)
+check("29. после отмены записи — осторожный текст: «на сайт ничего не отправлено» только если сервер так сказал, иначе «мог выполниться»; ошибка «сайт не отвечает» показывается дольше обычной",
+      "ничего не отправлено" in bar and "мог выполниться" in bar and "r.unsure" in bar and "ms: r.sent ? 14000 : 9000" in bar)
 
 if FAILS:
     print("\nПровалено:", len(FAILS)); sys.exit(1)
