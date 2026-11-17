@@ -295,21 +295,10 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .eblock.can .est{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
 .eblock .ean{font-size:13px;color:var(--muted);margin:8px 0}
 .eblock .mychoice{margin:10px 0;padding:9px 12px;border-radius:10px;background:color-mix(in srgb,var(--ok) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--ok) 30%,transparent);font-size:13.5px;line-height:1.6}
-.eopt{display:grid;grid-template-columns:1fr minmax(120px,170px);gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
-.eopt:first-of-type{border-top:0}
-.eopt .en{line-height:1.35}.eopt .en small{display:block;color:var(--muted);font-size:12px}
-.eopt .en small.full{color:var(--warn)}
-.eopt select{height:34px}
-.eopt.on{background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:8px}
 .esum{margin:10px 0;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--accent) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
 .esum ol{margin:6px 0 8px;padding-left:20px;line-height:1.6}
 .eact{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
-.eev{display:grid;grid-template-columns:130px 1fr auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
-.eev:first-of-type{border-top:0}
-.eev .w{font-weight:600;font-size:13.5px}.eev small{display:block;color:var(--muted);font-size:12px;line-height:1.4}
-.eev.cancel{opacity:.6}
 .esec{margin:18px 0 8px;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-@media (max-width:700px){.eopt{grid-template-columns:1fr}.eev{grid-template-columns:1fr}.eev .eact{margin:0}}
 .rd-box{width:min(920px,96vw)}
 .rd-note{padding:8px 16px;font-size:12.5px;background:color-mix(in srgb,var(--warn) 14%,var(--surface-solid));border-bottom:1px solid var(--line)}
 .rd-body{flex:1;overflow:auto;padding:18px 22px}
@@ -878,6 +867,110 @@ body.android .no-android{display:none!important}
   #gradesView .gv-seg button{padding:8px 9px}
   #gradesView .gv-more .btn{flex:1 1 auto;justify-content:center}
 }
+/* ── Элективы (1.32.0): вместо больших полей — строки; закладки разделов; занятия по дням; панель сохранения не уезжает.
+   Классы только с префиксом el- (старые .eblock/.esec/.eact/.esum/.mychoice остаются). ── */
+#electivesView .el-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin:0 0 12px}
+#electivesView .el-top h2{margin:0;font:600 20px var(--font-display)}
+#electivesView .el-top .hint{margin:2px 0 0;overflow-wrap:anywhere}
+#electivesView .el-tb{display:flex;gap:8px;align-items:center;flex:none}
+#electivesView .el-nav{display:none}
+#electivesView [id^="elSec"]{scroll-margin-top:calc(var(--top-h,0px) + 58px)}
+#electivesView .el-mine{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:8px;margin:10px 0}
+#electivesView .el-mine .mychoice{margin:0;line-height:1.45}
+#electivesView .mychoice small{display:block;font-size:11.5px;color:var(--muted);margin-bottom:1px}
+#electivesView .el-due{font-weight:600}
+#electivesView .el-due.warn{color:var(--warn)}#electivesView .el-due.bad{color:var(--bad)}
+#electivesView .el-need{margin:8px 0 2px;font-size:13px;color:var(--muted);line-height:1.45}
+#electivesView .el-flt{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 8px}
+#electivesView .el-seg{display:inline-flex;min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-solid)}
+#electivesView .el-seg button{border:0;background:none;color:var(--muted);font:inherit;font-size:13px;padding:8px 10px;white-space:nowrap;cursor:pointer}
+#electivesView .el-seg button small{margin-left:3px;font-size:11.5px;opacity:.8}
+#electivesView .el-seg button.on{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font-weight:600}
+#electivesView .el-q{flex:1 1 11rem;min-width:0;height:36px}
+#electivesView .el-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,8.5em),1fr));gap:8px;margin:8px 0}
+@media (min-width:701px){#electivesView .el-list{grid-template-columns:repeat(auto-fill,minmax(min(100%,12.5em),1fr))}}
+#electivesView .el-empty{grid-column:1/-1;padding:14px 6px;text-align:center;color:var(--muted);font-size:13.5px}
+#electivesView .el-row.full:not(.on){opacity:.62}
+#electivesView .el-row{position:relative;display:flex;flex-direction:column;gap:6px;min-width:0;padding:calc(10px*var(--vd-electives,1)) 11px;border:1px solid var(--line);border-radius:12px;background:var(--surface-solid)}
+#electivesView .el-row.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,var(--surface-solid));box-shadow:inset 0 0 0 1px var(--accent)}
+#electivesView .el-t{min-width:0}
+#electivesView .el-pick{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;min-width:0;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+#electivesView .el-pick .el-n{padding-right:24px}
+#electivesView .el-pick:focus-visible{outline:2px solid var(--accent);outline-offset:6px;border-radius:8px}
+#electivesView .el-pick:disabled{cursor:default}
+#electivesView .el-row:has(.el-pick:disabled){opacity:.6}
+#electivesView .el-ck{position:absolute;top:calc(10px*var(--vd-electives,1));right:10px;width:20px;height:20px;border-radius:50%;border:2px solid var(--line);box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;color:transparent}
+#electivesView .el-row.on .el-ck{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+#electivesView select.el-sel{width:100%;height:38px;margin-top:auto;font-size:13px;padding:0 22px 0 10px;text-overflow:clip}
+#electivesView select.el-sel.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+#electivesView select.el-sel:disabled{opacity:.55;cursor:default}
+#electivesView .el-x{display:flex;flex-direction:column;gap:3px;font-size:12.5px}
+#electivesView .el-n{display:block;font-weight:600;font-size:14.5px;line-height:1.3;overflow-wrap:anywhere;hyphens:auto}
+#electivesView .el-m{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;margin-top:3px;font-size:12.5px;color:var(--muted)}
+#electivesView .el-pick .el-m{margin-top:0}
+#electivesView .el-pl{display:inline-flex;flex-direction:column;align-items:flex-start;gap:3px;max-width:100%}
+#electivesView .el-pl i{position:relative;display:block;width:72px;max-width:100%;height:5px;border-radius:99px;background:var(--line);overflow:hidden}
+#electivesView .el-pl i b{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:99px}
+#electivesView .el-pl.low i b{background:var(--warn)}
+#electivesView .el-pl.none{color:var(--warn)}
+#electivesView .el-tag{padding:1px 8px;border-radius:99px;font-size:11.5px;background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+#electivesView .el-d{font-size:12.5px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+body[data-v-electives-desc="0"] #electivesView .el-d{display:none}
+body[data-v-electives-full="0"] #electivesView .el-row.full:not(.on){display:none}
+#electivesView select.el-sel.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+#electivesView .el-bar{position:sticky;bottom:8px;z-index:4;display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 8px 8px 14px;border-radius:14px;background:var(--surface-solid);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));box-shadow:0 6px 22px rgba(0,0,0,.18)}
+#electivesView .el-bs{flex:1 1 auto;min-width:0;line-height:1.3;overflow-wrap:anywhere}
+#electivesView .el-bs b{display:block;font-size:13.5px}
+#electivesView .el-bs small{display:block;font-size:12px;color:var(--muted)}
+#electivesView .el-bar .btn{flex:none;max-width:48%;white-space:normal;line-height:1.2}
+#electivesView .el-site{margin-top:10px}
+#electivesView .el-evh{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:18px 0 8px}
+#electivesView .el-evh .esec{margin:0}
+#electivesView .el-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,24rem),1fr));gap:12px;align-items:start}
+#electivesView .el-day{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+#electivesView .el-day>h4{margin:0;padding:8px 14px;font-size:12.5px;font-weight:600;color:var(--muted);letter-spacing:.03em;background:var(--bg2)}
+#electivesView .el-day.today>h4{color:var(--accent)}
+#electivesView .el-ev{display:grid;grid-template-columns:3.2rem minmax(0,1fr);gap:0 12px;padding:calc(10px*var(--vd-electives,1)) 14px;border-top:1px solid var(--line);border-left:3px solid transparent}
+#electivesView .el-day>h4+.el-ev{border-top:0}
+#electivesView .el-ev.mine{border-left-color:var(--ok)}
+#electivesView .el-ev.cancel{opacity:.6}
+#electivesView .el-ev .t{grid-row:1/3;font-variant-numeric:tabular-nums;font-weight:700;font-size:13.5px;line-height:1.3}
+#electivesView .el-ev .t small{display:block;font-weight:500;font-size:12px;color:var(--muted)}
+#electivesView .el-ev .b{min-width:0;overflow-wrap:anywhere}
+#electivesView .el-ev .b b{font-size:14px;line-height:1.3}
+#electivesView .el-ev .b small{display:block;margin-top:2px;font-size:12px;line-height:1.4;color:var(--muted)}
+#electivesView .el-ev .a{grid-column:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:7px}
+#electivesView .el-ev .a:empty{display:none}
+#electivesView .el-ev .a .btn{min-height:34px;height:34px;padding:0 14px}
+#electivesView .el-chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;background:var(--bg2);color:var(--muted)}
+#electivesView .el-chip.ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+#electivesView .el-more-btn{display:block;width:100%;margin-top:10px}
+#electivesView .el-minis{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,26rem),1fr));gap:10px;align-items:start}
+#electivesView .el-mini{min-width:0;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+#electivesView .el-mini>summary{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;cursor:pointer;list-style:none;padding:calc(11px*var(--vd-electives,1)) 14px}
+#electivesView .el-mini>summary::-webkit-details-marker{display:none}
+#electivesView .el-mini>summary::after{content:"";flex:none;width:8px;height:8px;margin:6px 3px 0 0;border:solid var(--muted);border-width:0 2px 2px 0;transform:rotate(45deg);transition:transform .15s}
+#electivesView .el-mini[open]>summary::after{transform:rotate(-135deg);margin-top:10px}
+#electivesView .el-mini .m{flex:1 1 auto;min-width:0}
+#electivesView .el-mini .m b{display:block;font-size:14.5px;line-height:1.3}
+#electivesView .el-mini .m small{display:block;margin-top:2px;font-size:12.5px;color:var(--muted)}
+#electivesView .el-out{display:inline-block;margin-top:6px;padding:3px 10px;border-radius:10px;font-size:12.5px;font-weight:600;line-height:1.35;background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+#electivesView .el-mb{padding:0 14px 12px;border-top:1px solid var(--line)}
+#electivesView .el-mb>.el-mine:first-child{margin-top:12px}
+#electivesView .el-more{margin-top:0}
+#electivesView .el-more>summary{cursor:pointer;font-weight:600;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:28px}
+#electivesView .el-more>summary::-webkit-details-marker{display:none}
+#electivesView .el-more>summary::after{content:"";width:8px;height:8px;border:solid var(--muted);border-width:0 2px 2px 0;transform:rotate(45deg);margin:-3px 4px 0 0;transition:transform .15s}
+#electivesView .el-more[open]>summary::after{transform:rotate(-135deg);margin:3px 4px 0 0}
+@media (max-width:700px){
+  #electivesView .el-nav{display:flex;gap:6px;position:sticky;top:var(--top-h,0px);z-index:5;margin:0 -12px 8px;padding:6px 12px;overflow-x:auto;scrollbar-width:none;background:color-mix(in srgb,var(--bg) 94%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+  #electivesView .el-nav::-webkit-scrollbar{display:none}
+  #electivesView .el-nav button{flex:none;border:1px solid var(--line);background:var(--surface-solid);color:var(--text);font:inherit;font-size:13.5px;font-weight:600;padding:8px 14px;border-radius:99px;cursor:pointer}
+  #electivesView .el-nav button small{margin-left:5px;font-weight:500;color:var(--muted)}
+  #electivesView .el-bar{bottom:calc(var(--bnav-h,58px) + env(safe-area-inset-bottom,0px) + 8px)}
+  #electivesView .el-seg button{padding:8px 9px}
+  #electivesView .side{padding-top:6px}
+}
 /* ── 1.30.0: старые версии программы и уведомления, которые можно закрыть ──
    Блок стоит после большого @media (max-width:700px), поэтому действует везде; телефонные поправки — в своём @media ниже. */
 .toast{display:flex;align-items:flex-start;gap:8px;touch-action:pan-y;transition:transform .17s,opacity .17s}
@@ -1059,7 +1152,8 @@ body.android .no-android{display:none!important}
     <section class="view hidden" id="electivesView">
       <div class="layout">
         <div class="content">
-          <div class="toolbar"><h2 id="elTitle">Элективы</h2><span class="hint" id="elInfo" style="margin:0"></span><button class="icon-btn vwbtn" data-vw="electives" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
+          <div class="el-top"><div><h2 id="elTitle">Элективы</h2><div class="hint" id="elInfo"></div></div>
+            <div class="el-tb"><button class="btn primary" id="elRefresh" title="Обновить с сайта">Обновить</button><button class="icon-btn vwbtn" data-vw="electives" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div></div>
           <div id="elOffline" class="hint hidden" style="margin:0 0 10px"></div>
           <div id="elBody"></div>
           <details class="adv hidden" id="elOld" style="margin-top:18px"><summary>Запасной способ: снимок страницы через браузер</summary>
@@ -1068,9 +1162,8 @@ body.android .no-android{display:none!important}
             <div class="ecards" id="elCards" style="margin-top:10px"></div></details>
         </div>
         <aside class="side">
-          <div class="panel">
-            <h3>Элективы СевГУ</h3>
-            <button class="btn primary big" id="elRefresh">Обновить с сайта</button>
+          <details class="panel el-more" id="elPanel" open>
+            <summary>Вход и слежение</summary>
             <div id="elPassBox" class="hidden" style="margin-top:12px">
               <div class="field"><label>Логин учётной записи СевГУ</label><input class="txt" id="elUser" autocomplete="username"></div>
               <div class="field"><label>Пароль (как для Moodle)</label><input class="txt" type="password" id="elPass" autocomplete="current-password"></div>
@@ -1080,7 +1173,7 @@ body.android .no-android{display:none!important}
               <div class="times" style="width:100%"><span class="hint" style="margin:0">каждые</span><select id="elHours" class="txt" style="width:auto"><option>3</option><option selected>6</option><option>12</option><option>24</option></select><span class="hint" style="margin:0">ч</span></div></div>
             <details class="adv"><summary>Адрес страницы (для запасного способа)</summary><input class="txt" id="elUrl" style="margin-top:8px"></details>
             <p class="hint">Программа входит на сайт под вашей учётной записью и делает то же, что кнопки на сайте. Выбор сохраняется и запись делается только по вашему нажатию — «ловить» места автоматически она не будет. Работает и на телефоне: браузер не нужен.</p>
-          </div>
+          </details>
         </aside>
       </div>
     </section>
@@ -2171,7 +2264,10 @@ const VIEWDEF = {
     V_DENS,
     {h: "Показывать"},
     {k: "chips", t: "Счётчики сверху", b: 1}, {k: "sub", t: "Курс и подпись под названием", b: 1}, {k: "left", t: "Сколько осталось («через 5 ч»)", b: 1}]},
-  electives: {name: "Элективы", opts: [V_DENS]},
+  electives: {name: "Элективы", opts: [
+    V_DENS,
+    {h: "Показывать"},
+    {k: "full", t: "Варианты, где мест нет", b: 1}, {k: "desc", t: "Описание под вариантом", b: 1}]},
 };
 const V_TABS = [["courses", "Курсы"], ["search", "Поиск"], ["notes", "Заметки"], ["calendar", "Календарь"], ["schedule", "Расписание"], ["electives", "Элективы"], ["grades", "Успеваемость"], ["news", "Что нового"]];
 const VKEY = "mo_view";
@@ -4061,6 +4157,7 @@ $("#trImport").onclick = async () => { const f = $("#trFile").files[0], cats = t
 
 /* ── элективы: данные берём у сайта напрямую (вход единым аккаунтом), выбор «основной + резервы» и запись — по вашей кнопке ── */
 let EL = null, ELP = {}, elArmed = "";
+const ELV = {evf: "all", evAll: false, open: {}, panelInit: false, needPrev: false};     // фильтр занятий, «показать все», какие <details> раскрыты, первый показ панели
 const ELSITE = "https://iot.sevsu.ru";
 async function loadElectives(){ EL = await api("/api/electives"); renderElectives(); }
 const elRoles = b => [...Array(b.primary_count || 1).keys()].map(i => ({k: "p" + i, label: (b.primary_count || 1) > 1 ? `Основной ${i + 1}` : "Основной"}))
@@ -4068,7 +4165,7 @@ const elRoles = b => [...Array(b.primary_count || 1).keys()].map(i => ({k: "p" +
 function elInit(b){
   const pick = {}, c = b.choice || {};
   (c.primary || []).forEach((x, i) => pick["p" + i] = x.id); (c.backup || []).forEach((x, i) => pick["b" + i] = x.id);
-  return {pick, review: false};
+  return {pick, review: false, q: "", f: "all"};
 }
 function elNeed(b, st){
   const roles = elRoles(b), byid = Object.fromEntries((b.options || []).map(o => [String(o.id), o]));
@@ -4081,51 +4178,123 @@ function elChoiceLine(b, c){
   const parts = [...(c.primary || []).map(x => `<b>Основной:</b> ${esc(x.name || elName(b, x.id))}`), ...(c.backup || []).map((x, i) => `<b>Резерв ${i + 1}:</b> ${esc(x.name || elName(b, x.id))}`)];
   return parts.join("<br>");
 }
-function elBlock(b){
-  const st = ELP[b.id] || (ELP[b.id] = elInit(b)), roles = elRoles(b), can = b.can_choose && !b.needs_site;
-  const own = b.choice && (b.choice.primary || []).length ? `<div class="mychoice"><b>Ваш выбор сохранён на сайте</b><br>${elChoiceLine(b, b.choice)}</div>` : "";
-  const when = [b.closes ? `выбор до ${b.closes}` : "", b.final_at ? `итоги ${b.final_at}` : ""].filter(Boolean).join(" · ");
-  let body = "";
-  if (b.outcome && b.outcome.length) body += `<div class="mychoice"><b>Вы распределены:</b> ${b.outcome.map(o => esc(o.name || "вариант " + o.id)).join(", ")}</div>`;
-  body += own;
-  if (b.announcement) body += `<details class="adv"><summary>Объявление</summary><div class="ean">${esc(b.announcement)}</div></details>`;
-  if (can) {
-    body += `<div class="hint" style="margin:8px 0 4px">${b.primary_count > 1 ? `Основных вариантов: ${b.primary_count}` : "Один основной вариант"}${b.backup_count ? `, резервов по приоритету: ${b.backup_count} — если с основным не получится, возьмут первый резерв, затем второй.` : "."}</div>`;
-    body += (b.options || []).map(o => {
-      const role = roles.find(r => st.pick[r.k] != null && String(st.pick[r.k]) === String(o.id));
-      const sp = o.capacity != null ? (o.left === 0 ? `<small class="full">мест нет (${o.occupied} из ${o.capacity})</small>` : `<small>мест: ${o.left} из ${o.capacity}</small>`) : "";
-      const warn = o.filling === false ? `<small class="full">набор закрыт</small>` : o.requisites_ok === false ? `<small class="full">может не подойти по условиям</small>` : "";
-      const url = o.url ? ` <a href="#" data-url="${esc(o.url)}">подробнее</a>` : "";
-      return `<div class="eopt ${role ? "on" : ""}"><div class="en"><b>${esc(o.name)}</b>${url}${sp}${warn}${o.desc ? `<small>${esc(o.desc)}</small>` : ""}</div>
-        <select class="txt" data-blk="${b.id}" data-opt="${o.id}" ${st.review ? "disabled" : ""}><option value="">не выбирать</option>${roles.map(r => `<option value="${r.k}" ${role && role.k === r.k ? "selected" : ""}>${r.label}</option>`).join("")}</select></div>`; }).join("");
-    const need = elNeed(b, st);
-    if (st.review) {
-      const lines = roles.filter(r => st.pick[r.k] != null).map(r => `<li><b>${r.label}:</b> ${esc(elName(b, st.pick[r.k]))}</li>`).join("");
-      body += `<div class="esum"><b>Проверьте выбор</b><ol style="list-style:none;padding-left:0">${lines}</ol>
-        <div class="hint" style="margin:0 0 8px">Это сохранится на сайте вуза — так же, как если бы вы нажали «Сохранить» там.</div>
-        <div class="eact"><button class="btn primary" data-esave="${b.id}">Сохранить на сайте</button><button class="btn" data-eback="${b.id}">Изменить</button></div></div>`;
-    } else {
-      body += `<div class="eact"><button class="btn primary" data-ereview="${b.id}" ${need.length ? "disabled" : ""}>${b.choice && (b.choice.primary || []).length ? "Изменить выбор…" : "Проверить и сохранить…"}</button>
-        <span class="hint" style="margin:0">${need.length ? "Осталось выбрать: " + need.map(r => r.label.toLowerCase()).join(", ") : "Всё выбрано — осталось сохранить"}</span></div>`;
-    }
-  } else if (b.needs_site && b.can_choose) {
-    body += `<div class="hint">В этом блоке нужно выбирать подварианты — это можно сделать только на сайте.</div><div class="eact"><button class="btn primary" data-url="${ELSITE}/electives/${esc(b.slug)}">Открыть на сайте</button></div>`;
-  } else if ((b.options || []).length) {
-    body += `<details class="adv"><summary>Варианты (${b.options.length})</summary>${b.options.map(o => `<div class="eopt"><div class="en"><b>${esc(o.name)}</b>${o.capacity != null ? `<small>мест: ${o.occupied} занято из ${o.capacity}</small>` : ""}</div></div>`).join("")}</details>`;
-  }
-  const site = !can ? `<div class="eact"><button class="btn ghost" data-url="${ELSITE}/electives/${esc(b.slug)}">Открыть на сайте</button></div>` : `<div class="eact"><button class="btn ghost" data-url="${ELSITE}/electives/${esc(b.slug)}">На сайте</button></div>`;
-  return `<div class="eblock ${b.can_choose ? "can" : ""}"><div class="eh"><div><h3>${esc(b.name)}</h3><div class="mmeta">${[b.year ? b.year + (b.term ? "/" + b.term : "") : "", when].filter(Boolean).join(" · ")}</div></div><span class="est">${esc(b.status_text)}</span></div>${body}${site}</div>`;
+const elPl = (n, w) => { const a = Math.abs(n) % 100, r = a % 10; return a > 10 && a < 20 ? w[2] : r > 1 && r < 5 ? w[1] : r === 1 ? w[0] : w[2]; };
+function elDue(str){                                      // «08.12.2026 23:59» → «ещё 20 дней» (красным, когда осталось мало)
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?/.exec(str || ""); if (!m) return "";
+  const t = new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 23), +(m[5] || 59)).getTime() - Date.now();
+  if (!(t > 0)) return "";
+  const d = Math.floor(t / 864e5), h = Math.floor(t / 36e5);
+  return `<span class="el-due ${d <= 2 ? "bad" : d <= 7 ? "warn" : ""}">${d >= 1 ? `ещё ${d} ${elPl(d, ["день", "дня", "дней"])}` : h >= 1 ? `ещё ${h} ч` : "меньше часа"}</span>`;
 }
-function elEvents(s){
-  const ev = s.events || []; if (!ev.length) return "";
-  return `<div class="esec">Ближайшие занятия</div><div class="eblock">` + ev.map(e => {
-    let act = "";
-    if (e.cancelled) act = `<span class="mmeta">отменено${e.cancel_reason ? ": " + esc(e.cancel_reason) : ""}</span>`;
-    else if (e.reg_id && e.reg_status === "registered") act = `<div class="eact" style="margin:0"><span class="mmeta" style="color:var(--ok)">Вы записаны</span><button class="btn danger" data-ereg-off="${e.reg_id}">${elArmed === "off" + e.reg_id ? "Точно отписаться?" : "Отписаться"}</button></div>`;
-    else if (e.can_register) act = `<button class="btn primary" data-ereg-on="${e.id}">${elArmed === "on" + e.id ? "Точно записаться?" : "Записаться"}</button>`;
-    else act = `<span class="mmeta">${e.left === 0 ? "мест нет" : "запись недоступна"}</span>`;
-    const att = e.attendance_text ? ` · ${esc(e.attendance_text)}` : "";
-    return `<div class="eev ${e.cancelled ? "cancel" : ""}"><div class="w">${esc(e.when)}</div><div><b>${esc(e.name)}</b><small>${[e.where, (e.people || []).join(", "), e.left != null ? "мест: " + e.left : ""].filter(Boolean).map(esc).join(" · ")}${att}</small></div><div>${act}</div></div>`; }).join("") + `</div>`;
+function elHead(b){
+  const meta = [b.year ? b.year + (b.term ? "/" + b.term : "") : "", b.closes ? `выбор до ${esc(b.closes)}` : "", b.final_at ? `итоги ${esc(b.final_at)}` : "", b.can_choose ? elDue(b.closes) : ""].filter(Boolean).join(" · ");
+  return `<div class="eh"><div><h3>${esc(b.name)}</h3><div class="mmeta">${meta}</div></div><span class="est">${esc(b.status_text)}</span></div>`;
+}
+function elMine(b, noOut){                                 // «Вы распределены» и «Ваш выбор сохранён» — две небольшие карточки
+  const out = !noOut && b.outcome && b.outcome.length ? `<div class="mychoice"><small>Вы распределены</small><b>${b.outcome.map(o => esc(o.name || "вариант " + o.id)).join(", ")}</b></div>` : "";
+  const own = b.choice && (b.choice.primary || []).length ? `<div class="mychoice"><small>Ваш выбор сохранён на сайте</small>${elChoiceLine(b, b.choice)}</div>` : "";
+  return out || own ? `<div class="el-mine">${out}${own}</div>` : "";
+}
+function elAnn(b){ return b.announcement ? `<details class="adv" data-ek="a${b.id}" ${ELV.open["a" + b.id] ? "open" : ""}><summary>Объявление</summary><div class="ean">${esc(b.announcement)}</div></details>` : ""; }
+function elPlaces(o){
+  if (o.capacity == null) return "";
+  if (o.left === 0) return `<span class="el-pl none">мест нет</span>`;
+  const pct = o.capacity > 0 ? Math.min(100, Math.round((o.occupied || 0) * 100 / o.capacity)) : 0;
+  return `<span class="el-pl ${pct >= 90 ? "low" : ""}"><i><b style="width:${pct}%"></b></i>свободно ${o.left} из ${o.capacity}</span>`;
+}
+const elHas = (st, roles, o) => roles.find(r => st.pick[r.k] != null && String(st.pick[r.k]) === String(o.id));
+function elRow(b, o, st, roles, ro, on){                   // плитка варианта; ro — только просмотр (выбор закрыт), on — подсветить
+  const role = ro ? null : elHas(st, roles, o), cls = `el-row ${role || on ? "on" : ""} ${o.left === 0 ? "full" : ""}`;
+  const tags = (o.filling === false ? `<span class="el-tag">набор закрыт</span>` : "") + (o.requisites_ok === false ? `<span class="el-tag">может не подойти по условиям</span>` : "");
+  const x = (o.url || o.desc) ? `<div class="el-x">${o.url ? `<a href="#" data-url="${esc(o.url)}">подробнее</a>` : ""}${o.desc ? `<div class="el-d">${esc(o.desc)}</div>` : ""}</div>` : "";
+  const head = `<b class="el-n">${esc(o.name)}</b><span class="el-m">${elPlaces(o)}${tags}</span>`;
+  if (!ro && roles.length === 1)                            // одна роль — вся плитка нажимается, галочка в углу
+    return `<div class="${cls}"><button type="button" class="el-pick ${role ? "on" : ""}" data-elpick="${b.id}:${o.id}" aria-pressed="${role ? "true" : "false"}" ${st.review ? "disabled" : ""}>${head}</button><i class="el-ck" aria-hidden="true">✓</i>${x}</div>`;
+  const sel = ro ? "" : `<select class="txt el-sel ${role ? "on" : ""}" data-blk="${b.id}" data-opt="${o.id}" aria-label="Роль для «${esc(o.name)}»" ${st.review ? "disabled" : ""}><option value="">Не выбрано</option>${roles.map(r => `<option value="${r.k}" ${role && role.k === r.k ? "selected" : ""}>${r.label}</option>`).join("")}</select>`;
+  return `<div class="${cls}"><div class="el-t">${head}</div>${x}${sel}</div>`;
+}
+function elVisible(b, st){
+  const q = (st.q || "").trim().toLowerCase(), roles = elRoles(b);
+  return (b.options || []).filter(o => (st.f === "free" ? o.left !== 0 : st.f === "mine" ? !!elHas(st, roles, o) : true)
+    && (!q || (o.name || "").toLowerCase().includes(q) || (o.desc || "").toLowerCase().includes(q)));
+}
+function elListHtml(b, st){
+  const roles = elRoles(b), rows = elVisible(b, st);
+  return rows.length ? rows.map(o => elRow(b, o, st, roles)).join("") : `<div class="el-empty">${st.q || st.f !== "all" ? "Ничего не найдено — сбросьте поиск или фильтр" : "Вариантов нет"}</div>`;
+}
+function elFilterHtml(b, st){                              // поиск и фильтр — только когда вариантов много
+  const opts = b.options || [], roles = elRoles(b); if (opts.length < 6) return "";
+  const n = {all: opts.length, free: opts.filter(o => o.left !== 0).length, mine: opts.filter(o => elHas(st, roles, o)).length};
+  const seg = [["all", "Все"], ["free", "Свободные"], ["mine", "Выбрано"]].map(([k, t]) => `<button type="button" data-elf="${b.id}:${k}" class="${st.f === k ? "on" : ""}">${t}<small>${n[k]}</small></button>`).join("");
+  return `<div class="el-flt"><div class="el-seg">${seg}</div><input class="txt el-q" type="search" placeholder="Найти вариант…" value="${esc(st.q || "")}" data-elq="${b.id}" autocomplete="off"></div>`;
+}
+function elSame(b, st, roles){                             // то, что выбрано в окне, совпадает с сохранённым на сайте
+  const c = b.choice || {}, cur = k => roles.filter(r => r.k[0] === k && st.pick[r.k] != null).map(r => String(st.pick[r.k]));
+  return JSON.stringify(cur("p")) === JSON.stringify((c.primary || []).map(x => String(x.id))) && JSON.stringify(cur("b")) === JSON.stringify((c.backup || []).map(x => String(x.id)));
+}
+function elBarHtml(b, st, roles){                          // панель внизу блока: не уезжает при прокрутке длинного списка
+  const need = elNeed(b, st), n = roles.filter(r => st.pick[r.k] != null).length, saved = !!(b.choice && (b.choice.primary || []).length);
+  const label = saved ? "Изменить выбор…" : "Проверить и сохранить…";
+  if (need.length) return `<div class="el-bar"><div class="el-bs"><b>Выбрано ${n} из ${n + need.length}</b><small>осталось: ${need.map(r => r.label.toLowerCase()).join(", ")}</small></div><button class="btn primary" data-ereview="${b.id}" disabled>${label}</button></div>`;
+  if (saved && elSame(b, st, roles)) return `<div class="el-bar"><div class="el-bs"><b>Выбор сохранён на сайте</b><small>чтобы изменить — выберите другой вариант</small></div><button class="btn" disabled>Сохранено</button></div>`;
+  return `<div class="el-bar"><div class="el-bs"><b>Всё выбрано</b><small>осталось сохранить на сайте</small></div><button class="btn primary" data-ereview="${b.id}">${label}</button></div>`;
+}
+function elReviewHtml(b, st, roles){
+  const lines = roles.filter(r => st.pick[r.k] != null).map(r => `<li><b>${r.label}:</b> ${esc(elName(b, st.pick[r.k]))}</li>`).join("");
+  return `<div class="esum"><b>Проверьте выбор</b><ol style="list-style:none;padding-left:0">${lines}</ol>
+    <div class="hint" style="margin:0 0 8px">Это сохранится на сайте вуза — так же, как если бы вы нажали «Сохранить» там.</div>
+    <div class="eact"><button class="btn primary" data-esave="${b.id}">Сохранить на сайте</button><button class="btn" data-eback="${b.id}">Изменить</button></div></div>`;
+}
+function elCan(b){                                         // блок, где сейчас можно выбирать
+  const st = ELP[b.id] || (ELP[b.id] = elInit(b)), roles = elRoles(b);
+  let body = elMine(b) + elAnn(b);
+  if (b.needs_site) return `<div class="eblock can" id="elb${b.id}">${elHead(b)}${body}<div class="hint">В этом блоке нужно выбирать подварианты — это можно сделать только на сайте.</div><div class="eact"><button class="btn primary" data-url="${ELSITE}/electives/${esc(b.slug)}">Открыть на сайте</button></div></div>`;
+  const hint = (b.primary_count > 1 ? `Основных вариантов: ${b.primary_count}` : "Один основной вариант") + (b.backup_count ? `, резервов по приоритету: ${b.backup_count} — если с основным не получится, возьмут первый резерв, затем второй.` : ".");
+  body += `<div class="el-need">${hint}</div>` + elFilterHtml(b, st) + `<div class="el-list" data-elist="${b.id}">${elListHtml(b, st)}</div>` + (st.review ? elReviewHtml(b, st, roles) : elBarHtml(b, st, roles));
+  return `<div class="eblock can" id="elb${b.id}">${elHead(b)}${body}<div class="el-site"><button class="btn ghost" data-url="${ELSITE}/electives/${esc(b.slug)}">На сайте</button></div></div>`;
+}
+function elMini(b){                                        // прошлый или закрытый блок: одна строка, подробности — по нажатию
+  const meta = [b.year ? b.year + (b.term ? "/" + b.term : "") : "", b.closes ? `выбор до ${esc(b.closes)}` : "", b.final_at ? `итоги ${esc(b.final_at)}` : ""].filter(Boolean).join(" · ");
+  const outIds = (b.outcome || []).map(o => String(o.id));
+  const tail = b.outcome && b.outcome.length ? `<span class="el-out">${b.outcome.map(o => esc(o.name || "вариант " + o.id)).join(", ")}</span>` : `<span class="el-chip" style="margin-top:6px">${esc(b.status_text)}</span>`;
+  const opts = (b.options || []).length ? `<details class="adv" data-ek="o${b.id}" ${ELV.open["o" + b.id] ? "open" : ""}><summary>Варианты (${b.options.length})</summary><div class="el-list">${b.options.map(o => elRow(b, o, {pick: {}}, [], true, outIds.includes(String(o.id)))).join("")}</div></details>` : "";
+  const body = elMine(b, true) + elAnn(b) + opts + `<div class="el-site"><button class="btn ghost" data-url="${ELSITE}/electives/${esc(b.slug)}">Открыть на сайте</button></div>`;
+  return `<details class="el-mini" data-ek="m${b.id}" ${ELV.open["m" + b.id] ? "open" : ""}><summary><div class="m"><b>${esc(b.name)}</b><small>${meta}</small>${tail}</div></summary><div class="el-mb">${body}</div></details>`;
+}
+const elBlock = b => b.can_choose ? elCan(b) : elMini(b);
+const EL_DOW = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"], EL_MON = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+function elDay(e){                                         // к какому дню относится занятие и как его назвать
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(e.start || "");
+  if (!m) { const w = (e.when || "").split(" ")[0]; return {key: w || "?", label: w || "Без даты", today: false}; }
+  const d = new Date(+m[1], +m[2] - 1, +m[3]), t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const diff = Math.round((d - t0) / 864e5), base = `${d.getDate()} ${EL_MON[d.getMonth()]}, ${EL_DOW[d.getDay()]}`;
+  return {key: m[0], label: diff === 0 ? "Сегодня · " + base : diff === 1 ? "Завтра · " + base : base, today: diff === 0};
+}
+const elReg = e => !!(e.reg_id && e.reg_status === "registered" && !e.cancelled);     // у отменённого занятия, как и раньше, запись не показываем
+function elEvRow(e){
+  const reg = elReg(e), can = !e.cancelled && !reg && e.can_register, na = !e.cancelled && !reg && !can;
+  const tm = (e.when || "").replace(/^\S+\s*/, ""), tp = tm.split("–");
+  const time = tp.length === 2 ? `${esc(tp[0])}<small>${esc(tp[1])}</small>` : esc(tm);
+  let act = "";
+  if (reg) act = `<span class="el-chip ok">Вы записаны</span><button class="btn danger" data-ereg-off="${e.reg_id}">${elArmed === "off" + e.reg_id ? "Точно отписаться?" : "Отписаться"}</button>`;
+  else if (can) act = `<button class="btn primary" data-ereg-on="${e.id}">${elArmed === "on" + e.id ? "Точно записаться?" : "Записаться"}</button>`;
+  const stat = e.cancelled ? "отменено" + (e.cancel_reason ? ": " + e.cancel_reason : "") : na ? (e.left === 0 ? "мест нет" : "запись недоступна") : "";
+  const meta = [e.where, (e.people || []).join(", "), e.left > 0 && !e.cancelled ? "мест: " + e.left : "", e.attendance_text, stat].filter(Boolean).map(esc).join(" · ");
+  return `<div class="el-ev ${reg ? "mine" : ""} ${e.cancelled ? "cancel" : ""} ${na ? "na" : ""}"><div class="t">${time}</div><div class="b"><b>${esc(e.name)}</b><small>${meta}</small></div><div class="a">${act}</div></div>`;
+}
+function elEvents(s){                                      // ближайшие занятия по дням; первые 12, остальное — по кнопке
+  const all = s.events || []; if (!all.length) return "";
+  const isCan = e => !e.cancelled && !elReg(e) && e.can_register;
+  const n = {all: all.length, can: all.filter(isCan).length, mine: all.filter(elReg).length};
+  if (ELV.evf !== "all" && !n[ELV.evf]) ELV.evf = "all";
+  const list = ELV.evf === "can" ? all.filter(isCan) : ELV.evf === "mine" ? all.filter(elReg) : all;
+  const LIM = 12, cut = !ELV.evAll && list.length > LIM + 2, shown = cut ? list.slice(0, LIM) : list, days = [], idx = {};
+  shown.forEach(e => { const d = elDay(e); if (!(d.key in idx)) { idx[d.key] = days.length; days.push({...d, rows: []}); } days[idx[d.key]].rows.push(e); });
+  const seg = [["all", "Все"], ["can", "Можно записаться"], ["mine", "Вы записаны"]].filter(([k]) => k === "all" || n[k])
+    .map(([k, t]) => `<button type="button" data-evf="${k}" class="${ELV.evf === k ? "on" : ""}">${t}<small>${n[k]}</small></button>`).join("");
+  return `<div class="el-evh"><div class="esec" id="elSecEv">Ближайшие занятия</div>${n.can || n.mine ? `<div class="el-seg">${seg}</div>` : ""}</div>`
+    + `<div class="el-days">${days.map(d => `<div class="el-day ${d.today ? "today" : ""}"><h4>${esc(d.label)}</h4>${d.rows.map(elEvRow).join("")}</div>`).join("")}</div>`
+    + (cut ? `<button type="button" class="btn ghost el-more-btn" data-evall="1">Показать все (${list.length})</button>` : "");
 }
 function renderElectives(){
   const s = EL || {}, api_ = s.api || null;
@@ -4139,17 +4308,22 @@ function renderElectives(){
   $("#elSnapGo").classList.toggle("hidden", !!s.android || !s.browser);
   let h = "";
   if (!api_ || !(api_.blocks || []).length) {
-    h = `<div class="empty">${api_ ? "На сайте для вас нет блоков выбора." : "Нажмите «Обновить с сайта» — программа войдёт под вашей учётной записью и покажет, что выбрано и что можно выбрать."}</div>`;
+    h = `<div class="empty">${api_ ? "На сайте для вас нет блоков выбора." : "Нажмите «Обновить» — программа войдёт под вашей учётной записью и покажет, что выбрано и что можно выбрать."}</div>`;
   } else {
-    const bl = api_.blocks, can = bl.filter(b => b.can_choose), mine = bl.filter(b => !b.can_choose && (b.is_member || (b.outcome || []).length)), arch = bl.filter(b => !b.can_choose && !b.is_member && !(b.outcome || []).length);
+    const bl = api_.blocks, can = bl.filter(b => b.can_choose), mine = bl.filter(b => !b.can_choose && (b.is_member || (b.outcome || []).length)), arch = bl.filter(b => !b.can_choose && !b.is_member && !(b.outcome || []).length), nav = [];
     if ((api_.changes || []).length) h += `<div class="msgs">Новое с прошлого раза:<br>${api_.changes.map(esc).join("<br>")}</div>`;
-    if (can.length) h += `<div class="esec">Сейчас можно выбрать</div>` + can.map(elBlock).join("");
-    h += elEvents(api_);
-    if (mine.length) h += `<div class="esec">Ваши блоки</div>` + mine.map(elBlock).join("");
-    if (arch.length) h += `<details class="adv" style="margin-top:10px"><summary>Остальные блоки на сайте (${arch.length})</summary><div style="margin-top:8px">${arch.map(elBlock).join("")}</div></details>`;
+    if (can.length) { h += `<div class="esec" id="elSecCan">Сейчас можно выбрать</div>` + can.map(elBlock).join(""); nav.push(["elSecCan", "Выбор", can.length]); }
+    const evh = elEvents(api_); if (evh) { h += evh; nav.push(["elSecEv", "Занятия", (api_.events || []).length]); }
+    if (mine.length) { h += `<div class="esec" id="elSecMine">Ваши блоки (${mine.length})</div><div class="el-minis">${mine.map(elMini).join("")}</div>`; nav.push(["elSecMine", "Мои блоки", mine.length]); }
+    if (arch.length) h += `<details class="adv" data-ek="arch" ${ELV.open.arch ? "open" : ""} style="margin-top:10px"><summary>Остальные блоки на сайте (${arch.length})</summary><div class="el-minis" style="margin-top:8px">${arch.map(elMini).join("")}</div></details>`;
     if (!can.length) h = `<div class="hint" style="margin:0 0 8px">Сейчас ни в одном блоке выбор не открыт.</div>` + h;
+    if (nav.length > 1) h = `<div class="el-nav">${nav.map(x => `<button type="button" data-elgo="${x[0]}">${x[1]}<small>${x[2]}</small></button>`).join("")}</div>` + h;
   }
   $("#elBody").innerHTML = h;
+  const pn = $("#elPanel"), needLogin = !!s.need_password;
+  if (!ELV.panelInit) { ELV.panelInit = true; pn.open = !NARROW.matches || !api_ || needLogin; }
+  else if (needLogin && !ELV.needPrev) pn.open = true;
+  ELV.needPrev = needLogin;
   const sn = s.snapshot || {}, acts = sn.actions || [];
   $("#elCards").innerHTML = acts.map(a => {
     const mine = a.leave, btn = a.disabled && !mine ? `<button class="btn" disabled>${esc(a.label || "Недоступно")}</button>`
@@ -4174,18 +4348,35 @@ $("#elSite").onclick = () => openUrl(ELSITE + "/electives");
 $("#elSnapGo").onclick = async () => { const r = await elCall("/api/electives/snapshot", {}, $("#elSnapGo")); if (r) { renderElectives(); toast(r.new ? `Новых вариантов: ${r.new}` : "Снимок обновлён", "ok"); } };
 const elSave = () => api("/api/electives/refresh", {settings_only: true, electives_watch: $("#elWatch").checked, electives_watch_hours: +$("#elHours").value, electives_url: $("#elUrl").value.trim()});
 $("#elWatch").onchange = elSave; $("#elHours").onchange = elSave; $("#elUrl").onchange = elSave;
+const elById = k => ((EL && EL.api && EL.api.blocks) || []).find(b => String(b.id) === String(k));
+function elSetRole(st, oid, role){                          // вариант получает роль; прежний обладатель этой роли её теряет
+  for (const k of Object.keys(st.pick)) if (String(st.pick[k]) === String(oid)) delete st.pick[k];
+  if (role) st.pick[role] = +oid;
+}
 $("#electivesView").addEventListener("change", e => {
   const sel = e.target.closest("select[data-blk]"); if (!sel) return;
   const st = ELP[sel.dataset.blk]; if (!st) return;
-  for (const k of Object.keys(st.pick)) if (String(st.pick[k]) === sel.dataset.opt) delete st.pick[k];
-  if (sel.value) st.pick[sel.value] = +sel.dataset.opt;
+  elSetRole(st, sel.dataset.opt, sel.value);
   renderElectives();
 });
+$("#electivesView").addEventListener("input", e => {         // поиск по вариантам: перерисовываем только список, чтобы не терять ввод
+  const q = e.target.closest("input[data-elq]"); if (!q) return;
+  const b = elById(q.dataset.elq), st = ELP[q.dataset.elq], box = document.querySelector(`[data-elist="${q.dataset.elq}"]`);
+  if (!b || !st || !box) return;
+  st.q = q.value; box.innerHTML = elListHtml(b, st);
+});
+$("#elBody").addEventListener("toggle", e => { const d = e.target; if (d && d.dataset && d.dataset.ek) ELV.open[d.dataset.ek] = d.open; }, true);
 $("#electivesView").addEventListener("click", async e => {
   const u = e.target.closest("a[data-url]"); if (u) { e.preventDefault(); return; }      // открывает общий обработчик [data-url]
   const blocks = ((EL && EL.api && EL.api.blocks) || []), bid = k => blocks.find(b => String(b.id) === String(k));
-  let t = e.target.closest("[data-ereview]");
-  if (t) { const b = bid(t.dataset.ereview); if (b && !elNeed(b, ELP[b.id]).length) { ELP[b.id].review = true; renderElectives(); } return; }
+  let t = e.target.closest("[data-elpick]");
+  if (t) { const [k, o] = t.dataset.elpick.split(":"), st = ELP[k]; if (!st) return; elSetRole(st, o, st.pick.p0 != null && String(st.pick.p0) === o ? "" : "p0"); renderElectives(); return; }
+  t = e.target.closest("[data-elf]"); if (t) { const [k, f] = t.dataset.elf.split(":"); if (ELP[k]) { ELP[k].f = f; renderElectives(); } return; }
+  t = e.target.closest("[data-evf]"); if (t) { ELV.evf = t.dataset.evf; ELV.evAll = false; renderElectives(); return; }
+  t = e.target.closest("[data-evall]"); if (t) { ELV.evAll = true; renderElectives(); return; }
+  t = e.target.closest("[data-elgo]"); if (t) { const x = document.getElementById(t.dataset.elgo); if (x) x.scrollIntoView({behavior: "smooth", block: "start"}); return; }
+  t = e.target.closest("[data-ereview]");
+  if (t) { const b = bid(t.dataset.ereview); if (b && !elNeed(b, ELP[b.id]).length) { ELP[b.id].review = true; renderElectives(); const x = document.querySelector(`#elb${b.id} .esum`); if (x) x.scrollIntoView({block: "center", behavior: "smooth"}); } return; }
   t = e.target.closest("[data-eback]"); if (t) { ELP[t.dataset.eback].review = false; renderElectives(); return; }
   t = e.target.closest("[data-esave]");
   if (t) {
