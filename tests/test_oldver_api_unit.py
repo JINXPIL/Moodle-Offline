@@ -16,7 +16,7 @@ def check(n, c, x=""):
     print(("PASS " if c else "FAIL ") + n + (f"  [{x}]" if (x and not c) else ""))
     if not c: FAILS.append(n)
 
-import gui, android
+import gui, android, desktop
 import moodle_offline as mo
 from http.server import ThreadingHTTPServer
 
@@ -46,7 +46,7 @@ D = HOME / "Downloads"
 check("без ключа доступа — 403", call("/api/oldver", token="wrong")[0] == 403 and call("/api/oldver/delete", {"ids": []}, token="wrong")[0] == 403)
 st, j = call("/api/oldver")
 by = {x["name"]: x for x in j.get("items", [])}
-check("поиск: ответ целиком", st == 200 and j["ok"] and j["current"] == mo.VERSION and j["system"] == "linux" and j["need_access"] is False and j["dirs"] == [str(D)], str(j)[:300])
+check("поиск: ответ целиком", st == 200 and j["ok"] and j["current"] == mo.VERSION and j["system"] == desktop.system() and j["need_access"] is False and j["dirs"] == [str(D)], str(j)[:300])
 check("поиск: нашлись файлы программы, чужой документ — нет", set(by) == {"MoodleOffline-1.0.0.exe", "MoodleOffline-1.0.0.exe.sha256", "MoodleOffline.exe.crdownload",
                                                                          f"MoodleOffline-{mo.VERSION}.exe", "MoodleOffline-99.0.0.apk"}, sorted(by))
 check("поиск: оценки и отметки", by["MoodleOffline-1.0.0.exe"]["status"] == "old" and by["MoodleOffline-1.0.0.exe"]["checked"]
