@@ -1770,30 +1770,34 @@ main.go-1{animation:inR .18s ease-out}main.go--1{animation:inL .18s ease-out}
 .day h3 .muted{white-space:nowrap}
 .day.today{outline:2px solid var(--accent);outline-offset:-1px}.day.empty{opacity:.65}
 .day.one{max-width:760px}
-.day h3 .ws{display:none}
+.ws{display:none}
 /* колонки (настройка «Колонки»): число колонок у недели и списка; при 2–4 карточка дня и пара — компактные, как недельная сетка на сайте */
 html[data-cols="1"] .days{grid-template-columns:minmax(0,1fr)}
 html[data-cols="2"] .days{grid-template-columns:repeat(2,minmax(0,1fr))}
 html[data-cols="3"] .days{grid-template-columns:repeat(3,minmax(0,1fr))}
 html[data-cols="4"] .days{grid-template-columns:repeat(4,minmax(0,1fr))}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days{gap:8px}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .day h3{padding:7px 9px;gap:6px}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .day h3 .wl{display:none}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .day h3 .ws{display:inline}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les{grid-template-columns:minmax(0,1fr);gap:1px;padding:7px 8px 7px 11px}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les::before{top:7px;bottom:7px;width:3px}
-html[data-cols="2"]{--cf:1}html[data-cols="3"]{--cf:.92}html[data-cols="4"]{--cf:.84}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les{overflow-wrap:break-word;hyphens:auto}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .t{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 3px}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .t b{display:inline;font-size:calc(.88rem * var(--cf))}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .t span{font-size:calc(.8rem * var(--cf))}
+html[data-cols="2"]{--cf:1;--cg:8px;--cm:10px;--lp:7px 8px 7px 11px}
+html[data-cols="3"]{--cf:.92;--cg:6px;--cm:8px;--lp:6px 6px 6px 10px}
+html[data-cols="4"]{--cf:.84;--cg:5px;--cm:6px;--lp:6px 5px 6px 9px}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days{gap:var(--cg)}
+html:not(.wide):is([data-cols="2"],[data-cols="3"],[data-cols="4"]) .days{margin-inline:calc(var(--cm) - 12px)}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .day h3{padding:7px 9px;gap:6px;font-size:calc(.9rem * var(--cf))}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .wl{display:none}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .ws{display:inline}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les{grid-template-columns:minmax(0,1fr);gap:0;padding:var(--lp);overflow-wrap:break-word;hyphens:auto;hyphenate-limit-chars:6 3 2}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les::before{top:6px;bottom:6px;width:3px}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .t{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 3px;margin-bottom:1px}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .t b{display:inline;font-size:calc(.84rem * var(--cf))}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .t span{font-size:calc(.76rem * var(--cf))}
 :where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .t span::before{content:"– "}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .s{font-size:calc(.9rem * var(--cf));overflow-wrap:break-word}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .m{font-size:calc(.78rem * var(--cf));margin-top:2px;overflow-wrap:break-word}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .s{font-size:calc(.88rem * var(--cf));line-height:1.22;overflow-wrap:break-word}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .m{font-size:calc(.76rem * var(--cf));line-height:1.25;margin-top:1px;overflow-wrap:break-word}
 :where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .ad{display:none}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .tg{margin-top:3px;gap:4px}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days :is(.tag,.sg,.st,.live){font-size:calc(.7rem * var(--cf));padding:0 5px}
-:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .day h3{font-size:calc(.9rem * var(--cf))}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .tg{margin-top:3px;gap:3px}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days :is(.tag,.sg,.st,.live){font-size:calc(.7rem * var(--cf));line-height:1.35;padding:0 5px}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days :is(.tag,.sg){white-space:nowrap}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .st{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:where(html[data-cols="3"],html[data-cols="4"]) .days .st{display:none}
 :where(html[data-cols="3"],html[data-cols="4"]) .days .day h3{flex-direction:column;align-items:flex-start;gap:0}
 :where(html[data-cols="3"],html[data-cols="4"]) .days .day h3 .muted{font-size:.78rem}
 :where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .day h3 .ws{white-space:nowrap}
@@ -1912,6 +1916,16 @@ const h = new URLSearchParams(location.hash.slice(1));
 if (h.get("theme")) root.dataset.theme = h.get("theme");
 if (h.get("accent")) root.style.setProperty("--accent", h.get("accent"));
 const KIND = {lecture:"Лекция", practice:"Практика", lab:"Лаб.", exam:"Зачёт/экзамен", other:"Другое"};
+/* короткие подписи для узких колонок: «Практика (ПЗ)» → «Практика», «Лабораторная (ЛЗ)» → «Лаб.», «Маслова Мария Александровна» → «Маслова М.А.» */
+const TYPE_SHORT = {"лабораторная": "Лаб.", "лабораторная работа": "Лаб.", "консультация": "Консульт.", "зачёт/экзамен": "Зач./экз.", "дифференцированный зачёт": "Диф. зачёт", "диф. зачёт": "Диф. зачёт"};
+const shortType = t => { const b = String(t).replace(/\s*\([^)]*\)/g, "").trim() || String(t), k = b.toLowerCase(); return TYPE_SHORT[k] || (b.length > 10 ? b.slice(0, 8) + "." : b); };
+const shortName = s => String(s).split(/\s*[,;]\s*/).map(p => {
+  const w = p.trim().split(/\s+/);
+  if (w.length < 2 || /\./.test(w[1])) return p.trim();
+  const ini = w.slice(1).filter(x => /^[A-Za-zА-Яа-яЁё]/.test(x)).map(x => x[0].toUpperCase() + ".").join("");
+  return ini ? w[0] + " " + ini : p.trim();
+}).join(", ");
+const pair = (full, short) => `<span class="wl">${esc(full)}</span><span class="ws">${esc(short)}</span>`;
 const WD = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"], WDS = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 const MN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
 const MNS = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
@@ -1976,8 +1990,8 @@ function lessonHTML(l){
   return `<div class="les k-${l.kind || "other"}${past && !live ? " past" : ""}${live ? " on" : ""}${mark}">
     <div class="t"><b>${esc(l.start)}</b>${l.end ? `<span class="te">${esc(l.end)}</span>` : ""}</div>
     <div><div class="s">${esc(l.subject)}</div>
-      <div class="tg">${live ? '<span class="live">идёт сейчас</span>' : ""}<span class="tag">${esc(l.type || KIND[l.kind] || KIND.other)}</span>${l.stream ? `<span class="st">${esc(l.stream)}</span>` : ""}${l.subgroup ? `<span class="sg">подгр. ${esc(l.subgroup)}</span>` : ""}</div>
-      ${place ? `<div class="m rm">${place}</div>` : ""}${l.teacher ? `<div class="m tc">${esc(l.teacher)}</div>` : ""}${l.note ? `<div class="m nt">${esc(l.note)}</div>` : ""}</div></div>`;
+      <div class="tg">${live ? '<span class="live">идёт сейчас</span>' : ""}<span class="tag">${pair(l.type || KIND[l.kind] || KIND.other, shortType(l.type || KIND[l.kind] || KIND.other))}</span>${l.stream ? `<span class="st">${esc(l.stream)}</span>` : ""}${l.subgroup ? `<span class="sg">подгр. ${esc(l.subgroup)}</span>` : ""}</div>
+      ${place ? `<div class="m rm">${place}</div>` : ""}${l.teacher ? `<div class="m tc">${pair(l.teacher, shortName(l.teacher))}</div>` : ""}${l.note ? `<div class="m nt">${esc(l.note)}</div>` : ""}</div></div>`;
 }
 function dayCard(d, opts = {}){
   const id = iso(d), ls = on(id), head = opts.head === false ? "" :

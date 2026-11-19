@@ -15,6 +15,16 @@ Moodle Offline is built for students of Sevastopol State University (SevSU) and 
 
 ---
 
+## 1.34.1 — 2026-11-20
+
+**Fixed**
+- “Расписание” (Schedule), columns: on a phone, lessons in 3–4 columns were too tall and narrow (a report from the author with screenshots). Because of long subject names, a full three-word teacher name and the type and stream badges, a lesson card in four columns came out one and a half times taller than in two, and words were torn in half. Now in narrow columns: the teacher is shown as “Surname I.P.”, the lesson type is short on one line (“Практика (ПЗ)” → “Практика”, “Лабораторная (ЛЗ)” → “Лаб.”), the stream badge is hidden in 3–4 columns (the subgroup stays), and there is less padding around the page, between columns and inside a lesson; the time “08:30 – 10:00” stays on one line. On made-up data of similar length a lesson card in four columns became 40 % shorter (217 → 130 pixels) and the whole week one third shorter; in 3 columns the six study days fit exactly as 3 + 3.
+- The full type name and teacher name are still there: in “Авто” (Auto) and “1” modes, in the “День” (Day) and “Месяц” (Month) views, and in “Печать / PDF” (Print / PDF) without chosen columns they are shown in full.
+
+**What was verified and what was not.** `tests/test_schedule_cols_unit.py` (27 checks, including parsing of the short type and teacher forms through `node`). In Chromium on a made-up timetable with long names (390 pixels, dark theme, text size 100 % and 80 %, 2/3/4 columns): nothing sticks out of a card or past the edge, and the full wording remains in the modes without columns and in the Day and Month views. **Not verified:** a real Android WebView (there syllable wrapping uses the system dictionaries), a live touch screen, Windows/Edge. Four columns on a 390-pixel screen remain tight at text size 100 % — 80 % suits them better (three columns read fine even at 100 %).
+
+---
+
 ## 1.34.0 — 2026-11-19
 
 **New**
