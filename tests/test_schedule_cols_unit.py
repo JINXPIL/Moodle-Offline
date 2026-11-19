@@ -28,13 +28,22 @@ check("5. «авто» не трогает прежнюю сетку (прави
 check("6. компактный вид только у 2–4 колонок и только внутри .days (день и месяц не меняются)",
       ':where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les{' in css and re.search(r'^[^:\n]*data-cols="[234]"\]?\) \.les\{', css, re.M) is None)
 check("7. компактные правила через :where (плотность «Свободно/Плотно» их перебивает — специфичность 0)",
-      all(l.startswith(":where(") or l.startswith("html[data-cols") for l in css.splitlines() if "data-cols" in l))
-check("8. в заголовке дня два варианта: полный (.wl) и короткий (.ws: «Пн, 16 ноя»), показывается один",
-      script.count('class="wl"') >= 2 and script.count('class="ws"') >= 2 and ".day h3 .ws{display:none}" in css and ".days .day h3 .wl{display:none}" in css)
+      all(l.startswith(":where(") or l.startswith("html[data-cols") or l.startswith("html:not(.wide):is(") for l in css.splitlines() if "data-cols" in l))
+check("7а. вне :where — только переменные (html[data-cols=N]{--…}), сетка .days и поля страницы (margin-inline)",
+      all(re.match(r'html\[data-cols="\d"\]( \.days)?\{(--|grid-template-columns:)', l) or l.startswith("html:not(.wide):is(") or l.startswith(":where(")
+          for l in css.splitlines() if "data-cols" in l))
+check("8. полное (.wl) и короткое (.ws) написание: заголовок дня («Пн, 16 ноя»), тип занятия и преподаватель; показывается одно",
+      script.count('class="wl"') >= 3 and script.count('class="ws"') >= 3 and "\n.ws{display:none}" in css
+      and ':where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .wl{display:none}' in css
+      and ':where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .ws{display:inline}' in css)
 check("9. адрес корпуса — отдельный .ad, в узких колонках скрыт (аудитория остаётся)", 'class="ad"' in script and ".days .les .ad{display:none}" in css)
 check("10. время в компактной паре — «08:30 – 10:00» в одну строку", ".days .les .t{display:flex" in css and 'content:"– "' in css)
 check("11. в 3–4 колонках дата и «N пар» — друг под другом (иначе заголовок ломается посередине)",
       ':where(html[data-cols="3"],html[data-cols="4"]) .days .day h3{flex-direction:column' in css)
+check("11а. поток (.st) в 3–4 колонках скрыт, подгруппа и тип остаются; плашки не переносятся по слогам",
+      ':where(html[data-cols="3"],html[data-cols="4"]) .days .st{display:none}' in css and ".days :is(.tag,.sg){white-space:nowrap}" in css.replace(":where(html[data-cols=\"2\"],html[data-cols=\"3\"],html[data-cols=\"4\"]) ", ""))
+check("11б. узкий экран: поля у страницы и зазор меньше в 3–4 колонках (--cm, --cg), отступ пары — --lp",
+      all(f'html[data-cols="{n}"]{{--cf:' in css and "--cm:" in css and "--lp:" in css for n in (2, 3, 4)) and "margin-inline:calc(var(--cm) - 12px)" in css and "html:not(.wide):is(" in css)
 check("12. кегль зависит от числа колонок (--cf), а не фиксирован", all(f'html[data-cols="{n}"]{{--cf:' in css for n in (2, 3, 4)))
 check("13. кнопки «Авто / 1 / 2 / 3 / 4» — в окошке «Аа» и в листе фильтров (одни и те же, переключаются вместе)",
       'id="csheet"' in V and "colseg" in script and 'class="seg colseg"' in script and "colsUi()" in script)
@@ -59,8 +68,21 @@ if node:
     r = subprocess.run([node, str(tmp / "probe.js")], capture_output=True, text=True)
     got = json.loads(r.stdout.strip() or "[]")
     check("20. goodCols: авто и 1–4 как есть (и числом), всё прочее — «авто»", got == ["auto", "1", "2", "4", "auto", "auto", "auto", "auto", "auto"], got)
+    fn2 = re.search(r"const TYPE_SHORT = .*?const shortName = .*?\}\)\.join\(\", \"\);", script, re.S).group(0)
+    probe2 = fn2 + """
+console.log(JSON.stringify([
+ shortType("Практика (ПЗ)"), shortType("Лабораторная (ЛЗ)"), shortType("Лекция"), shortType("Консультация"), shortType("Зачёт/экзамен"), shortType("Контрольная работа письменная"), shortType("(ПЗ)"),
+ shortName("Маслова Мария Александровна"), shortName("Иванов И. И."), shortName("Иванов И.И."), shortName("Орлов"), shortName("Белов Иван Петрович, Громова Анна Сергеевна"),
+ shortName("Ким Чен Ын"), shortName("Иванов Иван"), shortName("Иванов (дистанционно)"), shortName("")]));"""
+    (tmp / "probe2.js").write_text(probe2, encoding="utf-8")
+    r = subprocess.run([node, str(tmp / "probe2.js")], capture_output=True, text=True)
+    got = json.loads(r.stdout.strip() or "[]")
+    want = ["Практика", "Лаб.", "Лекция", "Консульт.", "Зач./экз.", "Контроль.", "(ПЗ)",
+            "Маслова М.А.", "Иванов И. И.", "Иванов И.И.", "Орлов", "Белов И.П., Громова А.С.",
+            "Ким Ч.Ы.", "Иванов И.", "Иванов (дистанционно)", ""]
+    check("21. shortType/shortName: «Практика (ПЗ)» → «Практика», «Лабораторная (ЛЗ)» → «Лаб.», ФИО → «Фамилия И.О.», готовые инициалы и одно слово не трогаются", got == want, got)
     shutil.rmtree(tmp, ignore_errors=True)
 else:
-    print("SKIP 19–20 (нет node)")
+    print("SKIP 19–21 (нет node)")
 
 print("\nALL PASS" if not FAILS else f"\nFAILED: {FAILS}"); sys.exit(1 if FAILS else 0)
