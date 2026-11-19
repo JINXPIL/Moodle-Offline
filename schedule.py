@@ -1670,15 +1670,18 @@ VIEWER_HTML = r"""<!DOCTYPE html>
 :root[data-theme=dark]{--bg:#17191d;--card:#22252b;--line:rgba(255,255,255,.08);--text:#e9ebef;--muted:#a3abb8;--faint:#7d8594;color-scheme:dark}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
-html{font-size:calc(14px * var(--sc));-webkit-text-size-adjust:100%}
-html,body{max-width:100%;overflow-x:clip}
+html{font-size:14px;-webkit-text-size-adjust:100%;touch-action:pan-x pan-y}   /* pan-x pan-y: браузер не увеличивает страницу щипком — щипок меняет масштаб расписания (ниже) */
+/* масштаб — только у содержимого: верхняя панель остаётся прежней и не отнимает место у списка (раньше вместе с текстом росла и она) */
+main,footer{zoom:var(--sc)}
+@supports not (zoom:1){html{font-size:calc(14px * var(--sc))}}
+html,body{max-width:100%;overflow-x:clip;overflow-anchor:none}
 body{margin:0;font:1rem/1.45 "Segoe UI Variable Text","Segoe UI",system-ui,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
 button,input,select{font:inherit;color:inherit}
 button{-webkit-appearance:none;appearance:none}
 .muted{color:var(--muted);font-size:.9rem}
 /* верхняя панель: на телефоне прилипает к верху окна и занимает мало места */
-.bar{position:sticky;top:0;z-index:6;background:var(--bg);border-bottom:1px solid var(--line);padding:8px 12px 6px}
-.r{display:flex;align-items:center;gap:8px;min-width:0}.r+.r{margin-top:6px}
+.bar{position:sticky;top:0;z-index:6;background:var(--bg);border-bottom:1px solid var(--line);padding:6px 8px 5px}
+.r{display:flex;align-items:center;gap:4px;min-width:0}.r+.r{margin-top:6px}
 h1{display:none;font-size:1.3rem;margin:0;white-space:nowrap}
 h1 .other{font-size:.7em;font-weight:500;color:var(--muted)}
 .seg{display:flex;flex:1;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:3px;gap:2px}
@@ -1688,12 +1691,32 @@ h1 .other{font-size:.7em;font-weight:500;color:var(--muted)}
 .ib:active,.btn:active{transform:scale(.97)}
 .fdot{position:absolute;top:7px;right:7px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--card)}
 .ib[aria-expanded=true]{border-color:var(--accent);color:var(--accent)}
-.ttl{flex:1;min-width:0;text-align:center;line-height:1.2;overflow:hidden}
-.ttl b{display:block;font-size:1.08rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ttl{flex:1;min-width:0;height:40px;padding:0 4px;border:0;border-radius:10px;background:transparent;color:var(--text);text-align:center;line-height:1.2;overflow:hidden;cursor:pointer}
+.ttl:disabled{color:var(--text);cursor:default}
+.ttl:not(:disabled):active,.ttl[aria-expanded=true]{background:var(--card)}
+.ttl b{display:flex;align-items:center;justify-content:center;gap:5px;font-size:1.08rem}
+.ttl b span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ttl:not(:disabled) b::after{content:"";flex:none;border:4px solid transparent;border-top-color:var(--muted);border-bottom-width:0}
 .ttl small{display:block;color:var(--muted);font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .btn{height:44px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);cursor:pointer;white-space:nowrap;font-weight:600}
 .btn:hover,.ib:hover{border-color:var(--accent)}
 .btn.sm{height:36px;padding:0 12px;font-weight:500}
+.ib.on,.btn.at{color:var(--accent)}.btn.at{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+/* значок «Сегодня»: календарик с числом; на широком экране вместо него слово */
+.tw-ic{display:grid;place-items:center;width:22px;height:21px;border:2px solid currentColor;border-top-width:5px;border-radius:5px;font-size:.72rem;line-height:1;font-weight:800}
+.aa{font-weight:800;font-size:1.02rem;line-height:1;letter-spacing:-.02em}.aa small{font-size:.74em;font-weight:800}
+/* всплывающие окошки под верхней строкой: выбор вида (нажатие на дату) и размер текста */
+.pop{position:absolute;top:50px;z-index:8;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.3);padding:6px}
+#vmenu{left:8px;min-width:190px}
+#vmenu button{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;min-height:44px;padding:0 12px;border:0;background:transparent;border-radius:9px;text-align:left;font-weight:600;cursor:pointer}
+#vmenu button.on{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+#vmenu button.on::after{content:"✓"}
+#zpop{right:8px;width:min(310px,calc(100% - 16px));padding:8px 12px 12px}
+.zc{display:flex;align-items:center;gap:6px}.zc .ib{width:40px;height:40px}.zc .ib:first-child .aa{font-size:.82rem}.zc .ib:last-child .aa{font-size:1.3rem}
+.zr{flex:1;min-width:0;height:36px;margin:0;accent-color:var(--accent)}
+.zl{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px}.zv{font-weight:700;font-variant-numeric:tabular-nums}
+#zsheet{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;max-width:380px}#zsheet .zc{flex:1 1 210px}#zsheet .zl{flex:none;margin:0;gap:10px}
+html.wide #zsheet{max-width:none}html.wide #zsheet .zc{flex:0 0 220px}html.wide .zc .ib{width:34px;height:34px}
 /* полоска недели (режим «День») */
 .strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;margin-top:6px}
 .sd{display:flex;flex-direction:column;align-items:center;gap:1px;min-height:56px;padding:4px 0 5px;border-radius:12px;border:1px solid transparent;background:transparent;color:var(--text);cursor:pointer}
@@ -1712,14 +1735,21 @@ html:not(.wide) .fpanel.open{display:block;position:fixed;left:0;right:0;bottom:
   background:var(--bg);border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding:0 14px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -12px 40px rgba(0,0,0,.35)}
 html:not(.wide) .fpanel.open .fhead{display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;background:var(--bg);padding:12px 0 6px;font-size:1.05rem}
 html:not(.wide) .fpanel.open .fg:first-of-type{margin-top:4px}
-/* верхняя строка (вид и фильтры) при прокрутке уезжает, дата и полоска недели остаются — под список остаётся больше места */
-html:not(.wide) .bar{top:-52px}
+/* узкий экран (телефон): панель — одна неподвижная строка «‹ дата ▾ › · сегодня · Аа · фильтры»; вид (день/неделя/месяц/список) выбирается нажатием на дату.
+   Раньше верхняя строка уезжала при прокрутке и возвращалась в самом верху — панель «прыгала» (теперь она всегда одной высоты) */
+html:not(.wide) .r1{display:none}html:not(.wide) .r2{margin-top:0}
+html:not(.wide) .bar .ib{width:38px;height:40px}html:not(.wide) #prev,html:not(.wide) #next{width:34px}
+html:not(.wide) #tw{width:38px;height:40px;padding:0;display:grid;place-items:center}
+html:not(.wide) .tw-tx{display:none}
+html:not(.wide) .fdot{top:6px;right:6px}
+html:not(.wide) .strip{gap:2px;margin-top:5px}
+html:not(.wide) .sd{min-height:50px;padding:3px 0 4px}
+html:not(.wide) main{padding-top:8px}
 .fg{margin-top:10px}.fg>label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:4px}
 .fg .seg{flex:none;width:100%}
 input[type=search]{height:44px;width:100%;border-radius:12px;border:1px solid var(--line);background:var(--card);padding:0 12px;min-width:0}
 .chips{display:flex;gap:6px;flex-wrap:wrap}.chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 12px;cursor:pointer;font-size:.9rem;display:flex;align-items:center;gap:6px}
 .chip i{width:9px;height:9px;border-radius:50%;display:inline-block}.chip.off{opacity:.45}
-.size button:nth-child(1){font-size:.8rem}.size button:nth-child(3){font-size:1.12rem}.size button:nth-child(4){font-size:1.3rem}
 details.streams{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:.92rem;margin-top:10px}
 html.wide details.streams{margin-top:0}
 details.streams summary{cursor:pointer;color:var(--muted);min-height:28px;display:flex;align-items:center}
@@ -1759,6 +1789,7 @@ html.hf-stream .les .st,html.hf-stream .les .sg{display:none}html.hf-note .les .
 .st{font-size:.8rem;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);border-radius:6px;padding:0 7px;font-weight:700}
 .live{font-size:.8rem;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:0 7px}
 .dayh{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin:14px 2px 8px;font-size:1.02rem}.dayh b{font-size:1.08rem}
+.dayh:first-child{margin-top:2px}
 .none{padding:18px 14px;color:var(--muted);text-align:center}.none .btn{margin-top:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .wide-btn{width:100%;margin-bottom:10px}
 /* месяц */
@@ -1781,6 +1812,7 @@ footer{color:var(--faint);font-size:.85rem;text-align:center;padding:6px 16px 26
 footer a{color:var(--faint)}
 /* широкий экран (компьютер, планшет): фильтры всегда на виду, панель не прилипает */
 html.wide .bar{position:static;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding:14px 16px 8px}
+html.wide .r{gap:8px}html.wide .tw-ic,html.wide #zbtn,html.wide .pop,html.wide .only-n{display:none}
 html.wide .bar .r+.r{margin-top:0}
 html.wide h1{display:block}
 html.wide .r1{flex:0 1 auto}html.wide .r1 .seg{flex:none}
@@ -1791,31 +1823,31 @@ html.wide .fpanel{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-end
 html.wide .fg{margin-top:0}html.wide .fg .seg{width:auto}html.wide .seg button{flex:none;padding:0 14px}
 html.wide input[type=search]{width:260px;height:38px}
 html.wide main{padding:14px 16px 40px}
-/* телефон боком: низкий экран — панель в две строки, полоска недели тонкая */
+/* телефон боком: низкий экран — строка и полоска недели рядом, а не друг под другом */
 @media (max-height:520px){
-  .bar{display:flex;flex-wrap:wrap;gap:6px 10px;padding:6px 12px}.bar .r+.r{margin-top:0}
-  .r1{flex:1 1 380px}.r2{flex:1 1 380px}.ib,.btn{height:40px}.ib{width:40px}.seg button{min-height:32px}
-  .strip{flex:1 1 100%;margin-top:0}
-  .sd{flex-direction:row;justify-content:center;align-items:center;gap:6px;min-height:38px;padding:2px 0}
+  .bar{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:5px 10px}.bar .r+.r{margin-top:0}
+  .r2{flex:1 1 360px}.strip{flex:1 1 300px;margin-top:0!important}
+  .seg button{min-height:32px}
+  .sd{flex-direction:row;justify-content:center;align-items:center;gap:6px;min-height:36px!important;padding:2px 0!important}
   .sd .dt{display:none}.sd .n{font-size:1.05rem}
-  .fpanel{max-height:46vh}
-  html:not(.wide) .bar{top:0}
+  .fpanel{max-height:46vh}.pop{top:48px}
 }
-/* низкое, но узкое окно (телефон стоймя с маленьким экраном или с плашками сверху): панель в несколько строк, верхняя строка тоже уезжает при прокрутке */
-@media (max-height:520px) and (max-width:759px){html:not(.wide) .bar{top:-46px}}
-@media print{.bar{position:static}.btn,.ib,.seg,.chips,input,.strip,.fpanel{display:none!important}.day{break-inside:avoid}}
+@media print{.bar{position:static}.btn,.ib,.seg,.chips,input,.strip,.fpanel,.pop{display:none!important}.day{break-inside:avoid}main,footer{zoom:1}}
 </style></head><body>
 <header class="bar" id="bar">
   <div class="r r1"><h1>Расписание __GROUP__<span id="other" class="other" hidden> · чужое</span></h1>
     <div class="seg" id="view"><button data-v="day">День</button><button data-v="week">Неделя</button><button data-v="month">Месяц</button><button data-v="list">Список</button></div>
-    <button class="ib" id="fbtn" aria-label="Фильтры и настройки" aria-expanded="false" title="Фильтры и настройки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2.2"/><circle cx="9" cy="12" r="2.2"/><circle cx="17" cy="18" r="2.2"/></svg><span class="fdot" id="fdot" hidden></span></button>
   </div>
   <div class="r r2">
     <button class="ib" id="prev" aria-label="Назад"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
-    <div class="ttl" id="ttl" aria-live="polite"></div>
+    <button class="ttl" id="ttl" aria-haspopup="true" aria-expanded="false"></button>
     <button class="ib" id="next" aria-label="Вперёд"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
-    <button class="btn" id="tw">Сегодня</button>
+    <button class="btn" id="tw" aria-label="Сегодня" title="Сегодня"><span class="tw-ic"><b id="twn"></b></span><span class="tw-tx">Сегодня</span></button>
+    <button class="ib" id="zbtn" aria-label="Размер текста" aria-expanded="false" title="Размер текста"><span class="aa">A<small>A</small></span></button>
+    <button class="ib" id="fbtn" aria-label="Фильтры и настройки" aria-expanded="false" title="Фильтры и настройки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2.2"/><circle cx="9" cy="12" r="2.2"/><circle cx="17" cy="18" r="2.2"/></svg><span class="fdot" id="fdot" hidden></span></button>
   </div>
+  <div class="pop" id="vmenu" hidden><button data-v="day">День</button><button data-v="week">Неделя</button><button data-v="month">Месяц</button><button data-v="list">Список</button></div>
+  <div class="pop" id="zpop" hidden></div>
   <div class="strip" id="strip" hidden></div>
   <div class="fscrim" id="fscrim"></div>
   <div class="fpanel" id="fpanel">
@@ -1827,10 +1859,10 @@ html.wide main{padding:14px 16px 40px}
       <div id="slist"></div><small class="muted">Отметьте потоки, в которые вы записаны (как «Фильтр учебных групп» на сайте).</small></div></details>
     <div class="fg"><label>Поиск (показывает все подходящие пары списком)</label><input type="search" id="q" placeholder="Предмет, преподаватель, аудитория"></div>
     <div class="fg"><label>Типы занятий (нажмите, чтобы скрыть)</label><div class="chips" id="kinds"></div></div>
-    <div class="fg"><label>Размер текста</label><div class="seg size" id="size"><button data-z="0.9">А</button><button data-z="1">А</button><button data-z="1.15">А</button><button data-z="1.3">А</button></div></div>
+    <div class="fg"><label>Размер текста<span class="only-n"> · на телефоне ещё щипком двумя пальцами</span></label><div class="zbox" id="zsheet"></div></div>
     <div class="fg"><label>Плотность</label><div class="seg" id="dens"><button data-d="roomy">Свободно</button><button data-d="std">Обычно</button><button data-d="dense">Плотно</button></div></div>
     <div class="fg"><label>Что показывать в паре (нажмите, чтобы скрыть)</label><div class="chips" id="lfields"></div></div>
-    <div class="fg"><button class="btn sm" onclick="print()">Печать / PDF</button></div>
+    <div class="fg" style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn sm" onclick="print()">Печать / PDF</button><button class="btn sm" id="appset" hidden>Источники и обновление…</button></div>
   </div>
 </header>
 <main id="main"></main>
@@ -1866,7 +1898,10 @@ const VIEWS = ["day", "week", "month", "list"];
 const WIDE = matchMedia("(min-width:720px) and (min-height:520px)");
 let view = VIEWS.includes(h.get("view")) ? h.get("view") : (VIEWS.includes(LS.get("rs_view", "")) ? LS.get("rs_view", "") : "");
 let sub = LS.get("rs_sub", ""), q = "", showPast = false, printing = false;
-let scale = parseFloat(LS.get("rs_scale", "1")); if (![0.9, 1, 1.15, 1.3].includes(scale)) scale = 1;
+/* масштаб — любое число от 0,8 до 1,8 (раньше четыре готовых значения); старые 0,9 / 1 / 1,15 / 1,3 подходят */
+const SC_MIN = 0.8, SC_MAX = 1.8;
+const goodScale = v => { const z = parseFloat(v); return isFinite(z) ? Math.min(SC_MAX, Math.max(SC_MIN, Math.round(z * 100) / 100)) : 1; };
+let scale = goodScale(LS.get("rs_scale", "1"));
 root.style.setProperty("--sc", scale);
 /* «Вид»: плотность, цвет меток и какие поля показывать в паре. Те же ключи localStorage, что у приложения (там — окно «Вид»), так что выбор общий */
 const LF = [["end", "Время окончания"], ["type", "Тип занятия"], ["room", "Аудитория"], ["teacher", "Преподаватель"], ["stream", "Поток и подгруппа"], ["note", "Примечания"], ["color", "Цвет меток"]];
@@ -1896,7 +1931,7 @@ const streamOk = l => !l.stream || smode !== "hide" || mine.has(l.stream) || (wh
 const ok = l => srcOk(l) && streamOk(l) && (!sub || !l.subgroup || l.subgroup === sub) && !kinds.has(l.kind || "other") &&
   (!q || [l.subject, l.teacher, l.room, l.type, l.address, l.stream].join(" ").toLowerCase().includes(q));
 const on = d => (byDate.get(d) || []).filter(ok);
-const filtersActive = () => !!(sub || kinds.size || q || (streamList.length && smode !== "off") || scale !== 1);
+const filtersActive = () => !!(sub || kinds.size || q || (streamList.length && smode !== "off"));
 
 /* ---- разметка пары ---- */
 let nowT = "";
@@ -1931,7 +1966,8 @@ function nowBanner(onlyNext){
 /* ---- виды ---- */
 function renderDay(){
   const id = iso(cur), ls = on(id);
-  const head = `<div class="dayh"><b>${WD[(cur.getDay() + 6) % 7]}, ${cur.getDate()} ${MN[cur.getMonth()]}</b><span class="muted">${ls.length ? ls.length + " " + plural(ls.length) + " · " + esc(ls[0].start) + "–" + esc(ls[ls.length - 1].end || ls[ls.length - 1].start) : ""}</span></div>`;
+  /* дата уже в шапке — здесь только сколько пар и во сколько начало и конец (без пар строки нет) */
+  const head = ls.length ? `<div class="dayh"><span class="muted">${ls.length} ${plural(ls.length)} · ${esc(ls[0].start)}–${esc(ls[ls.length - 1].end || ls[ls.length - 1].start)}</span></div>` : "";
   return (id === iso(today) ? nowBanner(true) : "") + head + dayCard(cur, {head: false, one: true, none: noneBlock(id)});
 }
 function renderWeek(){
@@ -1970,10 +2006,10 @@ function renderList(){
 
 /* ---- верхняя панель ---- */
 function titleOf(){
-  const v = eff();
-  if (v === "day") return [`${cur.getDate()} ${MN[cur.getMonth()]}`, WD[(cur.getDay() + 6) % 7].toLowerCase() + (iso(cur) === iso(today) ? " · сегодня" : "")];
+  const v = eff(), tiny = !WIDE.matches && innerWidth < 345;     // на самом узком экране (320 px) названия короче, чтобы дата помещалась целиком
+  if (v === "day") return [`${cur.getDate()} ${MN[cur.getMonth()]}`, (tiny ? WDS[(cur.getDay() + 6) % 7] : WD[(cur.getDay() + 6) % 7]).toLowerCase() + (iso(cur) === iso(today) ? " · сегодня" : "")];
   if (v === "week") { const a = mondayOf(cur), b = add(a, 6);
-    return [a.getMonth() === b.getMonth() ? `${a.getDate()} — ${b.getDate()} ${MN[b.getMonth()]}` : `${a.getDate()} ${MNS[a.getMonth()]} — ${b.getDate()} ${MNS[b.getMonth()]}`, `неделя · ${b.getFullYear()}`]; }
+    return [a.getMonth() === b.getMonth() ? `${a.getDate()} — ${b.getDate()} ${(tiny ? MNS : MN)[b.getMonth()]}` : `${a.getDate()} ${MNS[a.getMonth()]} — ${b.getDate()} ${MNS[b.getMonth()]}`, `неделя · ${b.getFullYear()}`]; }
   if (v === "month") return [MN1[cur.getMonth()], String(cur.getFullYear())];
   const n = L.filter(ok).length; return ["Все пары", `${n} ${plural(n)}`];
 }
@@ -1988,8 +2024,10 @@ function stripHTML(){
 }
 function renderBar(){
   const v = eff(), [a, b] = titleOf();
-  $("ttl").innerHTML = `<b>${esc(a)}</b><small>${esc(b)}</small>`;
-  document.querySelectorAll("#view button").forEach(x => x.classList.toggle("on", x.dataset.v === v));
+  $("ttl").innerHTML = `<b><span>${esc(a)}</span></b><small>${esc(b)}</small>`;
+  document.querySelectorAll("#view button,#vmenu button").forEach(x => x.classList.toggle("on", x.dataset.v === v));
+  $("twn").textContent = today.getDate();
+  const t0 = iso(today); $("tw").classList.toggle("at", v === "day" ? iso(cur) === t0 : v === "week" ? iso(mondayOf(cur)) === iso(mondayOf(today)) : v === "month" ? (cur.getFullYear() === today.getFullYear() && cur.getMonth() === today.getMonth()) : false);
   $("prev").hidden = $("next").hidden = v === "list";
   const st = $("strip"); st.hidden = v !== "day"; if (v === "day") st.innerHTML = stripHTML();
   $("fdot").hidden = !filtersActive();
@@ -2025,25 +2063,68 @@ $("prev").onclick = () => step(-1); $("next").onclick = () => step(1);
 $("tw").onclick = () => { cur = new Date(today); if (L.length) { const f = parse(L[0].date), la = parse(L[L.length - 1].date); if (cur < f) cur = f; else if (cur > la) cur = la; }
   scrollTo(0, 0); render(); };
 const fToggle = on => { const o = on === undefined ? !$("fpanel").classList.contains("open") : on; $("fpanel").classList.toggle("open", o); $("fscrim").classList.toggle("open", o); $("fbtn").setAttribute("aria-expanded", o); };
-$("fbtn").onclick = () => fToggle(); $("fscrim").onclick = $("fclose").onclick = () => fToggle(false);
+$("fbtn").onclick = () => { popClose(); fToggle(); }; $("fscrim").onclick = $("fclose").onclick = () => fToggle(false);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("fpanel").classList.contains("open")) fToggle(false); });
 const segs = (id, attr, val, cb) => { const el = $(id); el.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset[attr] === val));
   el.onclick = e => { const b = e.target.closest("button"); if (!b) return; el.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); cb(b.dataset[attr]); }; };
-$("view").onclick = e => { const b = e.target.closest("button"); if (!b) return; view = b.dataset.v; LS.set("rs_view", view); q = ""; $("q").value = ""; scrollTo(0, 0); render(); };
+const setView = v => { view = v; LS.set("rs_view", view); q = ""; $("q").value = ""; scrollTo(0, 0); render(); };
+$("view").onclick = e => { const b = e.target.closest("button"); if (b) setView(b.dataset.v); };
+/* всплывающие окошки: вид (нажатие на дату) и размер текста; закрываются нажатием мимо, Esc и открытием листа настроек */
+const popClose = () => { ["vmenu", "zpop"].forEach(id => $(id).hidden = true); $("ttl").setAttribute("aria-expanded", "false"); $("zbtn").setAttribute("aria-expanded", "false"); };
+const popOpen = (id, btn) => { const was = !$(id).hidden; popClose(); fToggle(false); if (was) return; $(id).hidden = false; $(btn).setAttribute("aria-expanded", "true"); };
+$("ttl").onclick = () => { if (!WIDE.matches) popOpen("vmenu", "ttl"); };
+$("zbtn").onclick = () => popOpen("zpop", "zbtn");
+$("vmenu").onclick = e => { const b = e.target.closest("button"); if (!b) return; popClose(); setView(b.dataset.v); };
+document.addEventListener("pointerdown", e => { if (!e.target.closest(".pop,#ttl,#zbtn")) popClose(); }, true);
+document.addEventListener("keydown", e => { if (e.key === "Escape") popClose(); });
 segs("sub", "s", sub, s => { sub = s; LS.set("rs_sub", s); render(); });
 segs("who", "w", who, w => { who = w; LS.set("rs_who", w); render(); });
 segs("smode", "m", smode, m => { smode = m; LS.set("rs_smode", m); render(); });
-segs("size", "z", String(scale), z => { scale = parseFloat(z); LS.set("rs_scale", String(scale)); root.style.setProperty("--sc", scale); render(); });
+/* ---- размер текста: ползунок, «А−/А+» и щипок двумя пальцами; меняется только CSS-переменная, список не перестраивается ---- */
+const ZOOM_HTML = `<div class="zc"><button class="ib" data-zs="-1" aria-label="Мельче"><span class="aa">A</span></button><input type="range" class="zr" min="${SC_MIN * 100}" max="${SC_MAX * 100}" step="1" aria-label="Размер текста"><button class="ib" data-zs="1" aria-label="Крупнее"><span class="aa">A</span></button></div>` +
+  `<div class="zl"><span class="zv"></span><button class="btn sm" data-zs="0">Сбросить</button></div>`;
+$("zpop").innerHTML = ZOOM_HTML; $("zsheet").innerHTML = ZOOM_HTML;
+const zoomUi = () => {
+  document.querySelectorAll(".zr").forEach(r => r.value = Math.round(scale * 100));
+  document.querySelectorAll(".zv").forEach(v => v.textContent = Math.round(scale * 100) + " %");
+  $("zbtn").classList.toggle("on", scale !== 1);
+};
+const setScale = (z, save) => { const n = goodScale(z); if (n === scale) { zoomUi(); return; } scale = n; root.style.setProperty("--sc", scale); if (save) LS.set("rs_scale", String(scale)); zoomUi(); };
+document.addEventListener("input", e => { if (e.target.classList && e.target.classList.contains("zr")) setScale(e.target.value / 100, false); });
+document.addEventListener("change", e => { if (e.target.classList && e.target.classList.contains("zr")) LS.set("rs_scale", String(scale)); });
+document.addEventListener("click", e => { const b = e.target.closest("[data-zs]"); if (!b) return; const d = +b.dataset.zs;
+  setScale(d === 0 ? 1 : Math.round((scale + d * 0.1) * 20) / 20, true); LS.set("rs_scale", String(scale)); });
+let pz = null;      // щипок: пока два пальца на экране
+const tdist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+document.addEventListener("touchstart", e => {
+  if (e.touches.length !== 2 || e.target.closest(".pop,.fpanel")) { if (e.touches.length > 2) pz = null; return; }
+  const t = e.touches, my = (t[0].clientY + t[1].clientY) / 2, el = document.elementFromPoint((t[0].clientX + t[1].clientX) / 2, my);
+  const a = el && el.closest("main") ? (el.closest(".les,.cell,.day,.dayh,.now,.none,.legend") || el.closest("main > *")) : null;   // за что «держимся», чтобы то, что под пальцами, осталось на месте
+  pz = {d0: tdist(t), s0: scale, my, a, off: a ? my - a.getBoundingClientRect().top : 0, raf: 0, z: scale};
+}, {passive: true});
+/* обработчики пассивные: страница листается без задержки (отменять жест не нужно — браузерный масштаб выключен через touch-action). Если двумя пальцами ещё и сдвинули —
+   якорь ставится под текущую середину между пальцами, поэтому прокрутка и масштаб складываются, а не борются */
+document.addEventListener("touchmove", e => {
+  if (!pz || e.touches.length !== 2) return;
+  pz.z = goodScale(pz.s0 * tdist(e.touches) / pz.d0); pz.cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+  if (pz.raf) return;
+  pz.raf = requestAnimationFrame(() => { const p = pz; if (!p) return; p.raf = 0; setScale(p.z, false);
+    if (p.a && p.a.isConnected) { const want = (p.cy ?? p.my) - p.off * (scale / p.s0), d = p.a.getBoundingClientRect().top - want; if (Math.abs(d) >= 1) scrollBy(0, d); } });
+}, {passive: true});
+const pzEnd = e => { if (pz && e.touches.length < 2) { LS.set("rs_scale", String(scale)); pz = null; } };
+document.addEventListener("touchend", pzEnd, {passive: true}); document.addEventListener("touchcancel", pzEnd, {passive: true});
+$("appset").onclick = () => { try { parent.postMessage({moSched: "settings"}, location.origin); } catch (e) {} };
+if (parent !== window) $("appset").hidden = false;
 const lookUi = () => {
   segs("dens", "d", root.dataset.dens, d => { LS.set("rs_dens", d); applyLook(); render(); });
-  $("size").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.z === String(scale)));
+  zoomUi();
   $("lfields").innerHTML = LF.map(([f, t]) => `<span class="chip ${LS.get(lfKey(f), "1") === "0" ? "off" : ""}" data-f="${f}">${t}</span>`).join("");
 };
 $("lfields").onclick = e => { const c = e.target.closest(".chip"); if (!c) return; const k = lfKey(c.dataset.f), off = LS.get(k, "1") === "0";
   LS.set(k, off ? "1" : "0"); c.classList.toggle("off", !off); applyLook(); render(); };
 lookUi();
 /* приложение (окно «Вид») поменяло общие настройки — перечитываем: сообщением из окна-родителя и по событию storage */
-const rereadLook = () => { let z = parseFloat(LS.get("rs_scale", "1")); if (![0.9, 1, 1.15, 1.3].includes(z)) z = 1; scale = z; root.style.setProperty("--sc", scale); applyLook(); lookUi(); render(); };
+const rereadLook = () => { scale = goodScale(LS.get("rs_scale", "1")); root.style.setProperty("--sc", scale); applyLook(); lookUi(); render(); };
 addEventListener("storage", e => { if (e.key && e.key.startsWith("rs_")) rereadLook(); });
 addEventListener("message", e => { if (e.origin === location.origin && e.data && e.data.moView) rereadLook(); });
 $("q").oninput = e => { q = e.target.value.trim().toLowerCase(); render(); };
@@ -2067,7 +2148,8 @@ document.addEventListener("touchend", e => { if (!tOk) return; tOk = false; cons
 document.addEventListener("keydown", e => { if (e.target.closest("input,select,textarea") || e.altKey || e.ctrlKey || e.metaKey) return;
   if (e.key === "ArrowLeft") step(-1); else if (e.key === "ArrowRight") step(1); });
 /* экран повернули / окно изменили — перестраиваем; приложение вернулось на экран или прошла минута — обновляем «сейчас» */
-const sync = () => { root.classList.toggle("wide", WIDE.matches); };
+const sync = () => { root.classList.toggle("wide", WIDE.matches); $("ttl").disabled = WIDE.matches; popClose(); };
+addEventListener("resize", () => { if (L.length) renderBar(); });
 sync(); (WIDE.addEventListener ? WIDE.addEventListener("change", () => { sync(); render(); }) : WIDE.addListener(() => { sync(); render(); }));
 document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
 setInterval(() => { if (!document.hidden && new Date().toTimeString().slice(0, 5) !== nowT) render(); }, 30000);

@@ -260,7 +260,7 @@ details.adv summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-to
 .mres .rv{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 10px 2px 0}
 .mres button{height:24px;padding:0 8px;border-radius:7px;border:1px solid var(--line);background:var(--raised);cursor:pointer;font-size:12px}
 .mres button:hover{border-color:var(--accent);color:var(--accent)}
-.schedframe{width:100%;height:100%;flex:1;min-height:420px;border:0;border-radius:var(--r);background:var(--surface)}
+.schedframe{width:100%;height:100%;flex:1;min-height:420px;border:0;border-radius:var(--r);background:var(--surface);touch-action:pan-x pan-y}   /* щипок двумя пальцами меняет масштаб расписания, а не всей страницы */
 .schhead,.schback{display:none}
 .dlbtn,.topprog,#dockClose{display:none}
 .xl-list{margin-top:8px;border:1px solid var(--line);border-radius:10px;max-height:260px;overflow:auto}
@@ -737,13 +737,19 @@ body.android .no-android{display:none!important}
   #scheduleView .toolbar{display:none}
   body.sched-lock{overflow:hidden}
   body.sched-lock #app{min-height:0}
-  #scheduleView .content{padding:6px 0 0}
-  .schhead{display:flex;align-items:center;justify-content:space-between;gap:8px;height:40px;margin:0 12px 6px}
-  .schhead .schsel{height:40px;min-height:40px}
-  .schhead .btn{height:40px;flex:none}
-  #scheduleView .schedframe{width:100%;border-radius:0;
-    height:calc(100vh - var(--top-h,52px) - var(--above-h,0px) - var(--bnav-h) - env(safe-area-inset-bottom) - 52px);
-    height:calc(100dvh - var(--top-h,52px) - var(--above-h,0px) - var(--bnav-h) - env(safe-area-inset-bottom) - 52px);min-height:300px}
+  #scheduleView .content{padding:4px 0 0}
+  /* расписание занимает ровно оставшееся место: окно с парами растягивается (flex), а не считается «вычесть 52px» — полоса «показано расписание другой группы» и пустое состояние больше не вылезают за экран */
+  body.sched-lock #scheduleView .content{box-sizing:border-box;
+    height:calc(100vh - var(--top-h,52px) - var(--above-h,0px) - var(--bnav-h) - env(safe-area-inset-bottom));
+    height:calc(100dvh - var(--top-h,52px) - var(--above-h,0px) - var(--bnav-h) - env(safe-area-inset-bottom))}
+  .schhead{display:flex;align-items:center;justify-content:space-between;gap:8px;height:36px;margin:0 8px 4px;flex:none}
+  .schhead .schsel{height:36px;min-height:36px}
+  .schhead .btn{height:36px;flex:none}
+  #scheduleView.nohead .schhead{display:none}      /* расписание одно — строка выбора не нужна; настройки и «Вид» открываются из листа «Фильтры и настройки» внутри расписания */
+  #scheduleView .schedframe{width:100%;border-radius:0;flex:1 1 0;height:auto;min-height:160px}
+  #scheduleView .schnote{margin:0 8px 4px;flex:none}
+  body.sched-lock .banner{margin:4px 8px 0;padding:3px 4px 3px 10px}
+  body.sched-lock .banner .btn{min-height:30px;height:30px}
   #scheduleView #schEmpty{margin:0 12px}
   #scheduleView .side{display:none;position:fixed;inset:0;z-index:48;overflow:auto;background:var(--bg);padding:0 12px calc(24px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
   #scheduleView.side-open .side{display:block}
@@ -2245,7 +2251,7 @@ const VIEWDEF = {
     {h: "Кнопки"},
     {k: "bprev", t: "Просмотр", b: 1}, {k: "bext", t: "Открыть", b: 1}, {k: "brev", t: "В папке", b: 1}, {k: "bai", t: "ИИ", b: 1}, {k: "brd", t: "Открыть здесь", b: 1}, {k: "bsite", t: "На сайте", b: 1}, {k: "bnote", t: "Заметка", b: 1}]},
   schedule: {name: "Расписание", opts: [
-    {k: "scale", t: "Размер текста", ls: "rs_scale", v: [["0.9", "Мелкий"], ["1", "Обычный"], ["1.15", "Крупный"], ["1.3", "Очень крупный"]], d: "1"},
+    {k: "scale", t: "Размер текста", ls: "rs_scale", fr: [0.8, 1.8], v: [["0.8", "Очень мелкий"], ["0.9", "Мелкий"], ["1", "Обычный"], ["1.15", "Крупный"], ["1.3", "Очень крупный"], ["1.5", "Огромный"], ["1.8", "Максимальный"]], d: "1"},   // fr: можно и любое число между ними (щипок в расписании, ползунок «Аа»)
     {k: "dens", t: "Плотность", ls: "rs_dens", v: V_DENS.v, d: "std"},
     {k: "color", t: "Цветные метки занятий", ls: "rs_color", b: 1},
     {h: "Показывать в паре"},
@@ -2288,6 +2294,7 @@ function vRaw(sec, o){
 function vGet(sec, k){                                   // значение пункта: строка (выбор) или 0/1 (переключатель); неизвестное → по умолчанию
   const o = vOpt(sec, k), r = vRaw(sec, o);
   if (o.b) return r === null ? (o.d === 0 ? 0 : 1) : (String(r) === "0" ? 0 : 1);
+  if (o.fr && r !== null) { const z = parseFloat(r); if (isFinite(z)) return String(Math.min(o.fr[1], Math.max(o.fr[0], Math.round(z * 100) / 100))); }   // «своё» число: показываем как есть, а не сбрасываем на «Обычный»
   return r !== null && o.v.some(x => x[0] === String(r)) ? String(r) : (o.d !== undefined ? o.d : o.v[0][0]);
 }
 function vApply(sec){
@@ -2358,7 +2365,7 @@ function vwRender(){
       if (o.h) { h += `</div><div class="vh">${esc(o.h)}</div><div class="vgrp">`; continue; }
       const cur = vGet(VW.sec, o.k), n = o.n ? `<small>${esc(o.n)}</small>` : "";
       h += o.b ? `<label class="vrow"><span class="vl">${esc(o.t)}${n}</span><span class="sw-t"><input type="checkbox" data-bool="${o.k}" ${cur ? "checked" : ""}><span></span></span></label>`
-               : `<div class="vrow" data-pick="${o.k}"><span class="vl">${esc(o.t)}${n}</span><button class="vsel" data-sel="${o.k}" aria-haspopup="listbox"><span>${esc((o.v.find(x => x[0] === cur) || o.v[0])[1])}</span>${V_CHEV}</button></div>`;
+               : `<div class="vrow" data-pick="${o.k}"><span class="vl">${esc(o.t)}${n}</span><button class="vsel" data-sel="${o.k}" aria-haspopup="listbox"><span>${esc((o.v.find(x => x[0] === cur) || (o.fr ? [0, Math.round(parseFloat(cur) * 100) + " %"] : o.v[0]))[1])}</span>${V_CHEV}</button></div>`;
     }
     body.innerHTML = h + "</div>";
     foot.innerHTML = `<button class="btn ghost" id="vwReset">Сбросить</button><button class="btn" id="vwTabs">Вкладки…</button>`;
@@ -2417,6 +2424,11 @@ function closeDock(){ $("#dock").classList.add("collapsed"); dlAck = dlKey(S && 
 $("#dlBtn").onclick = () => dockOpen() ? closeDock() : openDock();
 $("#dockClose").onclick = closeDock;
 /* лист настроек расписания (телефон): «Настройки» открывает, «← К расписанию» закрывает */
+/* просмотрщик расписания (рамка) просит открыть настройки программы — его строка «Расписание · настройки» при одном расписании скрыта */
+addEventListener("message", e => {
+  const f = $("#schFrame");
+  if (e.origin === location.origin && f && e.source === f.contentWindow && e.data && e.data.moSched === "settings") { if (NARROW.matches) schSide(true); else schGoTo("#schBook"); }
+});
 const schSide = open => { $("#scheduleView").classList.toggle("side-open", !!open); if (open) $("#scheduleView .side").scrollTop = 0; };
 $("#schToSettings").onclick = () => schSide(true);
 $("#schToView").onclick = () => schSide(false);
@@ -3991,6 +4003,7 @@ function schBookRender(){
   const ps = schProfs(), ru = d => d ? d.split("-").reverse().join(".") : "";
   const opts = ps.map(p => `<option value="${esc(p.id)}" ${p.id === SCH_VIEW ? "selected" : ""}>${esc(schLabel(p))}</option>`).join("") + '<option value="__add">＋ Добавить другую группу…</option>';
   ["#schSelD", "#schSelM"].forEach(id => { $(id).innerHTML = opts; });
+  $("#scheduleView").classList.toggle("nohead", ps.length <= 1);
   const keep = new Set($$("#schBookList [data-share]").filter(i => i.checked).map(i => i.dataset.share));
   $("#schBookList").innerHTML = ps.map(p => `<div class="bk-row ${p.id === SCH_VIEW ? "cur" : ""}">
     <label class="bk-pick" title="Отметьте, чтобы поделиться"><input type="checkbox" data-share="${esc(p.id)}" ${keep.has(p.id) ? "checked" : ""} ${p.saved ? "" : "disabled"}></label>

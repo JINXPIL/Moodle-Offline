@@ -15,6 +15,18 @@ Moodle Offline is built for students of Sevastopol State University (SevSU) and 
 
 ---
 
+## 1.33.0 — 2026-11-19
+
+**New**
+- “Расписание” (Schedule) on a phone: the top bar is now a single row — “‹ date ▾ › · Today · Aa · filters”. The view (Day / Week / Month / List) is chosen by tapping the date. Before, the top row slid away while scrolling and came back only at the very top of the list, so the bar “jumped”; now it is always the same height and stays put. “Today” is a small calendar icon with the date number (highlighted when you are already on today's day or week).
+- Text size is now continuous: pinch the schedule with two fingers, or use the slider under the “Aa” button (80 % to 180 %, with “A−/A+” and a reset button). Before, there were four preset steps hidden in the filter sheet, and the top bar grew together with the text. Now only the lessons scale, the bar stays the same, and whatever is under your fingers stays in place while pinching. The “Вид” (View) window shows the current size as a percentage (for example “123 %”).
+- More room for lessons: when there is only one schedule, the row for choosing the group is hidden (settings open from the “Источники и обновление…” button in the “Фильтры и настройки” sheet inside the schedule), the banners on this tab are thinner, and the lesson window takes exactly the space left above the bottom tabs. Before, its height was computed as “screen minus 52 pixels”, so the “showing another group's schedule” strip could spill past the edge of the screen.
+- “День” (Day) view: the date is no longer repeated under the bar (it is already in the header) — a short line like “4 пары · 08:30–15:20” remains. On the narrowest screens (320 pixels) the titles are shorter (“чт · сегодня”, “16 — 22 ноя”) so they fit. Phone in landscape: the row and the week strip sit side by side.
+
+**What was verified and what was not.** Automatically — `tests/test_schedule_bar_unit.py` (page text, allowed size values, parsing the viewer script). In Chromium on a made-up timetable: 390, 360 and 320 pixel screens with touch, phone in landscape, dark theme, desktop 1280; the bar keeps its height while scrolling in every view; the view menu, the slider, “A−/A+”, reset, closing by tapping outside; a pinch (two fingers, emulated touch) changes the size, does not zoom the app page and keeps the same element under the fingers; the app's settings sheet opens from the viewer; with several schedules the picker row comes back. **Not verified:** a real Android WebView and a live touch screen (two-finger scrolling there may jitter slightly), Windows/Edge.
+
+---
+
 ## 1.32.1 — 2026-11-18
 
 **Fixed**
