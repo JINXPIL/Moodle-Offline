@@ -1716,7 +1716,9 @@ h1 .other{font-size:.7em;font-weight:500;color:var(--muted)}
 .zr{flex:1;min-width:0;height:36px;margin:0;accent-color:var(--accent)}
 .zl{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px}.zv{font-weight:700;font-variant-numeric:tabular-nums}
 #zsheet{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;max-width:380px}#zsheet .zc{flex:1 1 210px}#zsheet .zl{flex:none;margin:0;gap:10px}
-html.wide #zsheet{max-width:none}html.wide #zsheet .zc{flex:0 0 220px}html.wide .zc .ib{width:34px;height:34px}
+html.wide #zsheet{max-width:none}
+.cl{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}.cl>span{display:block;font-size:.88rem;color:var(--muted);margin-bottom:6px}
+.colseg{display:flex}.colseg button{flex:1 1 0;min-width:0;padding:0 6px}html.wide #zsheet .zc{flex:0 0 220px}html.wide .zc .ib{width:34px;height:34px}
 /* полоска недели (режим «День») */
 .strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;margin-top:6px}
 .sd{display:flex;flex-direction:column;align-items:center;gap:1px;min-height:56px;padding:4px 0 5px;border-radius:12px;border:1px solid transparent;background:transparent;color:var(--text);cursor:pointer}
@@ -1768,6 +1770,33 @@ main.go-1{animation:inR .18s ease-out}main.go--1{animation:inL .18s ease-out}
 .day h3 .muted{white-space:nowrap}
 .day.today{outline:2px solid var(--accent);outline-offset:-1px}.day.empty{opacity:.65}
 .day.one{max-width:760px}
+.day h3 .ws{display:none}
+/* колонки (настройка «Колонки»): число колонок у недели и списка; при 2–4 карточка дня и пара — компактные, как недельная сетка на сайте */
+html[data-cols="1"] .days{grid-template-columns:minmax(0,1fr)}
+html[data-cols="2"] .days{grid-template-columns:repeat(2,minmax(0,1fr))}
+html[data-cols="3"] .days{grid-template-columns:repeat(3,minmax(0,1fr))}
+html[data-cols="4"] .days{grid-template-columns:repeat(4,minmax(0,1fr))}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days{gap:8px}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .day h3{padding:7px 9px;gap:6px}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .day h3 .wl{display:none}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .day h3 .ws{display:inline}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les{grid-template-columns:minmax(0,1fr);gap:1px;padding:7px 8px 7px 11px}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les::before{top:7px;bottom:7px;width:3px}
+html[data-cols="2"]{--cf:1}html[data-cols="3"]{--cf:.92}html[data-cols="4"]{--cf:.84}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les{overflow-wrap:break-word;hyphens:auto}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .t{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 3px}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .t b{display:inline;font-size:calc(.88rem * var(--cf))}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .t span{font-size:calc(.8rem * var(--cf))}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .t span::before{content:"– "}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .s{font-size:calc(.9rem * var(--cf));overflow-wrap:break-word}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .m{font-size:calc(.78rem * var(--cf));margin-top:2px;overflow-wrap:break-word}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .ad{display:none}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .les .tg{margin-top:3px;gap:4px}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days :is(.tag,.sg,.st,.live){font-size:calc(.7rem * var(--cf));padding:0 5px}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .day h3{font-size:calc(.9rem * var(--cf))}
+:where(html[data-cols="3"],html[data-cols="4"]) .days .day h3{flex-direction:column;align-items:flex-start;gap:0}
+:where(html[data-cols="3"],html[data-cols="4"]) .days .day h3 .muted{font-size:.78rem}
+:where(html[data-cols="2"],html[data-cols="3"],html[data-cols="4"]) .days .day h3 .ws{white-space:nowrap}
 .les{display:grid;grid-template-columns:3.4rem minmax(0,1fr);gap:10px;padding:11px 12px 11px 14px;border-top:1px solid var(--line);position:relative}
 .les:first-of-type{border-top:0}
 .les::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:4px;border-radius:0 4px 4px 0;background:var(--kc,var(--other))}
@@ -1843,7 +1872,7 @@ html.wide main{padding:14px 16px 40px}
     <button class="ttl" id="ttl" aria-haspopup="true" aria-expanded="false"></button>
     <button class="ib" id="next" aria-label="Вперёд"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
     <button class="btn" id="tw" aria-label="Сегодня" title="Сегодня"><span class="tw-ic"><b id="twn"></b></span><span class="tw-tx">Сегодня</span></button>
-    <button class="ib" id="zbtn" aria-label="Размер текста" aria-expanded="false" title="Размер текста"><span class="aa">A<small>A</small></span></button>
+    <button class="ib" id="zbtn" aria-label="Размер текста и колонки" aria-expanded="false" title="Размер текста и колонки"><span class="aa">A<small>A</small></span></button>
     <button class="ib" id="fbtn" aria-label="Фильтры и настройки" aria-expanded="false" title="Фильтры и настройки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2.2"/><circle cx="9" cy="12" r="2.2"/><circle cx="17" cy="18" r="2.2"/></svg><span class="fdot" id="fdot" hidden></span></button>
   </div>
   <div class="pop" id="vmenu" hidden><button data-v="day">День</button><button data-v="week">Неделя</button><button data-v="month">Месяц</button><button data-v="list">Список</button></div>
@@ -1860,6 +1889,7 @@ html.wide main{padding:14px 16px 40px}
     <div class="fg"><label>Поиск (показывает все подходящие пары списком)</label><input type="search" id="q" placeholder="Предмет, преподаватель, аудитория"></div>
     <div class="fg"><label>Типы занятий (нажмите, чтобы скрыть)</label><div class="chips" id="kinds"></div></div>
     <div class="fg"><label>Размер текста<span class="only-n"> · на телефоне ещё щипком двумя пальцами</span></label><div class="zbox" id="zsheet"></div></div>
+    <div class="fg"><label>Колонки в неделе и в списке</label><div class="seg colseg" id="csheet"></div></div>
     <div class="fg"><label>Плотность</label><div class="seg" id="dens"><button data-d="roomy">Свободно</button><button data-d="std">Обычно</button><button data-d="dense">Плотно</button></div></div>
     <div class="fg"><label>Что показывать в паре (нажмите, чтобы скрыть)</label><div class="chips" id="lfields"></div></div>
     <div class="fg" style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn sm" onclick="print()">Печать / PDF</button><button class="btn sm" id="appset" hidden>Источники и обновление…</button></div>
@@ -1874,7 +1904,7 @@ const $ = id => document.getElementById(id), root = document.documentElement;
 const D = JSON.parse($("data").textContent), L = D.lessons, M = D.meta;
 /* выбор подгруппы, потоков и т.п. запоминается отдельно для каждой группы (чужое расписание не должно получить ваши фильтры);
    вид и размер текста — общие. Старые сохранённые значения подхватывает только своё расписание. */
-const NS = "rs:" + String(M.group || "") + ":", OWN = M.own !== false, SHARED = ["rs_view", "rs_scale", "rs_dens", "rs_color", "rs_f_end", "rs_f_type", "rs_f_room", "rs_f_teacher", "rs_f_stream", "rs_f_note"];
+const NS = "rs:" + String(M.group || "") + ":", OWN = M.own !== false, SHARED = ["rs_view", "rs_scale", "rs_cols", "rs_dens", "rs_color", "rs_f_end", "rs_f_type", "rs_f_room", "rs_f_teacher", "rs_f_stream", "rs_f_note"];
 const LS = {get(k, d) { try { const sh = SHARED.includes(k); let v = localStorage.getItem(sh ? k : NS + k); if (v === null && OWN && !sh) v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
             set(k, v) { try { localStorage.setItem(SHARED.includes(k) ? k : NS + k, v); } catch (e) {} }};
 L.sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
@@ -1906,7 +1936,10 @@ root.style.setProperty("--sc", scale);
 /* «Вид»: плотность, цвет меток и какие поля показывать в паре. Те же ключи localStorage, что у приложения (там — окно «Вид»), так что выбор общий */
 const LF = [["end", "Время окончания"], ["type", "Тип занятия"], ["room", "Аудитория"], ["teacher", "Преподаватель"], ["stream", "Поток и подгруппа"], ["note", "Примечания"], ["color", "Цвет меток"]];
 const lfKey = f => f === "color" ? "rs_color" : "rs_f_" + f;
+/* колонки у недели и списка: «auto» — по ширине (как раньше), 1–4 — своё число; только CSS, список не перестраивается */
+const COLS = ["auto", "1", "2", "3", "4"], goodCols = v => COLS.includes(String(v)) ? String(v) : "auto";
 function applyLook(){
+  root.dataset.cols = goodCols(LS.get("rs_cols", "auto"));
   const d = LS.get("rs_dens", "std"); root.dataset.dens = ["roomy", "std", "dense"].includes(d) ? d : "std";
   LF.forEach(([f]) => root.classList.toggle(f === "color" ? "no-color" : "hf-" + f, LS.get(lfKey(f), "1") === "0"));
 }
@@ -1939,7 +1972,7 @@ function lessonHTML(l){
   const isToday = l.date === iso(today), past = parse(l.date) < today || (isToday && (l.end || l.start) <= nowT);
   const live = isToday && l.start <= nowT && (l.end || "23:59") > nowT;
   const mark = l.stream && smode === "mark" ? (mine.has(l.stream) ? " mine" : " dim") : "";
-  const place = [l.room && `<b>${esc(l.room)}</b>`, l.address && esc(l.address)].filter(Boolean).join(" · ");
+  const place = (l.room ? `<b>${esc(l.room)}</b>` : "") + (l.address ? `${l.room ? '<span class="ad"> · ' : '<span class="ad">'}${esc(l.address)}</span>` : "");
   return `<div class="les k-${l.kind || "other"}${past && !live ? " past" : ""}${live ? " on" : ""}${mark}">
     <div class="t"><b>${esc(l.start)}</b>${l.end ? `<span class="te">${esc(l.end)}</span>` : ""}</div>
     <div><div class="s">${esc(l.subject)}</div>
@@ -1948,7 +1981,7 @@ function lessonHTML(l){
 }
 function dayCard(d, opts = {}){
   const id = iso(d), ls = on(id), head = opts.head === false ? "" :
-    `<h3 data-open="${id}"><span>${WD[(d.getDay() + 6) % 7]}, ${d.getDate()} ${MN[d.getMonth()]}${opts.year ? " " + d.getFullYear() : ""}</span><span class="muted">${ls.length ? ls.length + " " + plural(ls.length) : "нет пар"}</span></h3>`;
+    `<h3 data-open="${id}"><span><span class="wl">${WD[(d.getDay() + 6) % 7]}, ${d.getDate()} ${MN[d.getMonth()]}${opts.year ? " " + d.getFullYear() : ""}</span><span class="ws">${WDS[(d.getDay() + 6) % 7]}, ${d.getDate()} ${MNS[d.getMonth()]}${opts.year ? " " + d.getFullYear() : ""}</span></span><span class="muted">${ls.length ? ls.length + " " + plural(ls.length) : "нет пар"}</span></h3>`;
   return `<div class="day${id === iso(today) ? " today" : ""}${ls.length ? "" : " empty"}${opts.one ? " one" : ""}">${head}${ls.length ? ls.map(lessonHTML).join("") : (opts.none || "")}</div>`;
 }
 function nextAfter(id){ return L.find(l => l.date > id && ok(l)); }
@@ -1998,7 +2031,7 @@ function renderList(){
   if (!q && pastDays) html += `<button class="btn sm wide-btn" data-act="past">${showPast ? "Скрыть прошедшие дни" : `Показать прошедшие дни (${pastDays})`}</button>`;
   if (!shown.length) return html + `<div class="empty-all">Предстоящих пар нет.</div>`;
   html += '<div class="days">'; let lastD = "", buf = "";
-  const flush = () => { if (lastD) html += `<div class="day${lastD === td ? " today" : ""}"><h3 data-open="${lastD}"><span>${WD[(parse(lastD).getDay() + 6) % 7]}, ${parse(lastD).getDate()} ${MN[parse(lastD).getMonth()]} ${parse(lastD).getFullYear()}</span></h3>${buf}</div>`; buf = ""; };
+  const flush = () => { if (lastD) html += `<div class="day${lastD === td ? " today" : ""}"><h3 data-open="${lastD}"><span><span class="wl">${WD[(parse(lastD).getDay() + 6) % 7]}, ${parse(lastD).getDate()} ${MN[parse(lastD).getMonth()]} ${parse(lastD).getFullYear()}</span><span class="ws">${WDS[(parse(lastD).getDay() + 6) % 7]}, ${parse(lastD).getDate()} ${MNS[parse(lastD).getMonth()]} ${parse(lastD).getFullYear() % 100}</span></span></h3>${buf}</div>`; buf = ""; };
   for (const l of shown) { if (l.date !== lastD) { flush(); lastD = l.date; } buf += lessonHTML(l); }
   flush();
   return html + "</div>";
@@ -2083,8 +2116,13 @@ segs("smode", "m", smode, m => { smode = m; LS.set("rs_smode", m); render(); });
 /* ---- размер текста: ползунок, «А−/А+» и щипок двумя пальцами; меняется только CSS-переменная, список не перестраивается ---- */
 const ZOOM_HTML = `<div class="zc"><button class="ib" data-zs="-1" aria-label="Мельче"><span class="aa">A</span></button><input type="range" class="zr" min="${SC_MIN * 100}" max="${SC_MAX * 100}" step="1" aria-label="Размер текста"><button class="ib" data-zs="1" aria-label="Крупнее"><span class="aa">A</span></button></div>` +
   `<div class="zl"><span class="zv"></span><button class="btn sm" data-zs="0">Сбросить</button></div>`;
-$("zpop").innerHTML = ZOOM_HTML; $("zsheet").innerHTML = ZOOM_HTML;
+const COLS_BTNS = COLS.map(c => `<button data-c="${c}">${c === "auto" ? "Авто" : c}</button>`).join("");
+$("zpop").innerHTML = ZOOM_HTML + `<div class="cl"><span>Колонки · неделя и список</span><div class="seg colseg">${COLS_BTNS}</div></div>`;
+$("zsheet").innerHTML = ZOOM_HTML; $("csheet").innerHTML = COLS_BTNS;
+const colsUi = () => document.querySelectorAll(".colseg button").forEach(b => b.classList.toggle("on", b.dataset.c === root.dataset.cols));
+document.addEventListener("click", e => { const b = e.target.closest(".colseg button"); if (!b) return; root.dataset.cols = goodCols(b.dataset.c); LS.set("rs_cols", root.dataset.cols); colsUi(); });
 const zoomUi = () => {
+  colsUi();
   document.querySelectorAll(".zr").forEach(r => r.value = Math.round(scale * 100));
   document.querySelectorAll(".zv").forEach(v => v.textContent = Math.round(scale * 100) + " %");
   $("zbtn").classList.toggle("on", scale !== 1);

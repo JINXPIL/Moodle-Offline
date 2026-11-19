@@ -15,6 +15,17 @@ Moodle Offline is built for students of Sevastopol State University (SevSU) and 
 
 ---
 
+## 1.34.0 — 2026-11-19
+
+**New**
+- “Расписание” (Schedule): a “Columns” setting — **Auto / 1 / 2 / 3 / 4** — like the week grid on schedule.sevsu.ru, where the day cards sit in two columns and the whole week is visible at once. It works in the “Неделя” (Week) and “Список” (List) views; you choose it with the buttons under the size slider on the “Aa” button (and in the “Фильтры и настройки” sheet), or in the “Вид” (View) window → “Расписание” → “Колонок в неделе и списке”. “Auto” is the old behaviour (by screen width).
+- With 2–4 columns the day card and the lessons become more compact: “Пн, 16 ноя” instead of “Понедельник, 16 ноября”, the time on one line “08:30 – 10:00”, and the lesson type, room and teacher in a smaller font; the building address is not shown in narrow columns (the room stays), and long names wrap by syllables. With 3–4 columns the date and “N пар” (N lessons) sit one under the other. If the text became too small or too tight, lower the text size (“Aa”) or take one column fewer; the “Плотность” (Density) setting still changes the padding as before.
+- Columns are remembered like the text size: on the device, as one value for all schedules, and not carried between devices.
+
+**What was verified and what was not.** Automatically — `tests/test_schedule_cols_unit.py` (page text, allowed values, `node --check`) and the shared-keys check in `tests/test_view_settings_unit.py`. In Chromium on a made-up timetable: 390, 360 and 320 pixel screens with touch and a 1280 desktop, Week and List views, all five values, text size 80 % and 100 %, both extreme densities — nothing sticks out of a card or past the screen edge and the page gets no horizontal scroll; a choice made in the “Вид” window reaches the schedule at once, and reset returns “Auto”. **Not verified:** a real Android WebView (there, syllable wrapping uses the system dictionaries), a live touch screen, Windows/Edge.
+
+---
+
 ## 1.33.0 — 2026-11-19
 
 **New**

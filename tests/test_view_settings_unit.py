@@ -72,12 +72,12 @@ check("15. окно «Вид» выше обычных окон (z-index 51)", b
 check("16. кнопка закрытия имеет id, оканчивающийся на Close (её ищет moBack)", 'id="vwClose"' in html)
 
 # --- расписание: общие ключи в просмотрщике
-SH = ["rs_view", "rs_scale", "rs_dens", "rs_color", "rs_f_end", "rs_f_type", "rs_f_room", "rs_f_teacher", "rs_f_stream", "rs_f_note"]
+SH = ["rs_view", "rs_scale", "rs_cols", "rs_dens", "rs_color", "rs_f_end", "rs_f_type", "rs_f_room", "rs_f_teacher", "rs_f_stream", "rs_f_note"]
 v = sc.VIEWER_HTML
 mm = re.search(r"SHARED = \[([^\]]*)\]", v)
 shared = re.findall(r'"(rs_\w+)"', mm.group(1)) if mm else []
 check("17. в просмотрщике общие ключи SHARED включают все настройки вида", all(k in shared for k in SH), str(shared))
-for k in ["rs_scale", "rs_dens", "rs_color", "rs_f_end", "rs_f_type", "rs_f_room", "rs_f_teacher", "rs_f_stream", "rs_f_note"]:
+for k in ["rs_scale", "rs_cols", "rs_dens", "rs_color", "rs_f_end", "rs_f_type", "rs_f_room", "rs_f_teacher", "rs_f_stream", "rs_f_note"]:
     check(f"18. ключ {k} из окна «Вид» совпадает с ключом просмотрщика", f'ls: "{k}"' in html and f'"{k}"' in v)
 check("19. просмотрщик слушает storage и сообщение moView, источник сообщения проверяется",
       'addEventListener("storage"' in v and 'addEventListener("message"' in v and "e.origin === location.origin" in v)
