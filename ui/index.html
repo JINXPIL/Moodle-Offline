@@ -1257,6 +1257,40 @@ body[data-v-grades-honors="0"] #gradesView .gv-hon{display:none}
   .sr .st{font-size:15px}
   #sqList .empty{padding:14px 4px}
 }
+/* выбор папки внутри программы (1.35.1): на телефоне нет системного окна, которое вернуло бы путь */
+.dir-box{width:min(560px,94vw);height:min(680px,90vh)}
+.dir-top{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px;flex:none}
+.dir-roots{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.dir-roots::-webkit-scrollbar{display:none}
+.dir-chip{flex:none;height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--raised);color:inherit;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+.dir-chip.on{background:color-mix(in srgb,var(--accent) 18%,var(--raised));border-color:var(--accent);font-weight:600}
+.dir-trail{display:flex;flex-wrap:wrap;align-items:center;gap:2px 4px;font-size:13px;color:var(--muted)}
+.dir-trail button{background:none;border:0;color:inherit;font:inherit;padding:4px 2px;cursor:pointer;border-radius:6px;overflow-wrap:anywhere;text-align:left}
+.dir-trail button:hover{color:var(--accent)}
+.dir-trail button:last-child{color:var(--text);font-weight:600;cursor:default}
+.dir-trail i{font-style:normal;opacity:.5}
+.dir-list{flex:1;min-height:0;overflow:auto}
+.dir-row{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:6px 14px;border:0;border-bottom:1px solid var(--line);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.dir-row:hover,.dir-row:focus-visible{background:color-mix(in srgb,var(--accent) 8%,transparent);outline:none}
+.dir-row svg{flex:none;color:var(--accent)}
+.dir-row span{flex:1;min-width:0;overflow-wrap:anywhere}
+.dir-row em{font-style:normal;opacity:.45;flex:none}
+.dir-row.up svg{color:var(--muted)}
+.dir-note{margin:12px 14px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--raised);font-size:14px;line-height:1.45}
+.dir-note .btn{margin:8px 8px 0 0}
+.dir-empty{padding:22px 16px;text-align:center;color:var(--muted);font-size:14px;line-height:1.45}
+.dir-foot{flex:none;padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;background:var(--surface-solid)}
+.dir-foot .hint{margin:0;overflow-wrap:anywhere}
+.dir-foot .hint.bad{color:var(--bad);font-weight:600}
+.dir-new{display:flex;gap:6px}
+.dir-new input{flex:1;min-width:0}
+.dir-btns{display:flex;gap:8px}
+.dir-btns .btn{flex:1;min-height:44px}
+@media (max-width:700px){
+  .dir-box{width:100vw;height:100dvh;max-width:none;border-radius:0;border:0}
+  .dir-row{min-height:56px}
+  .dir-btns{flex-direction:column-reverse}
+}
 </style>
 </head>
 <body>
@@ -1608,7 +1642,7 @@ body[data-v-grades-honors="0"] #gradesView .gv-hon{display:none}
               <p class="hint" id="tplErr" style="color:var(--bad)"></p>
             </div>
             <div class="field"><label>Папка для сохранения</label>
-              <div class="path"><input id="outDir"><button class="btn no-android" id="pickDir" title="Выбрать папку">…</button><button class="btn" id="openDir" title="Открыть папку с материалами"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button></div>
+              <div class="path"><input id="outDir"><button class="btn" id="pickDir" title="Выбрать папку">…</button><button class="btn" id="openDir" title="Открыть папку с материалами"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button></div>
               <p class="hint hidden only-android" id="andHint" style="margin-top:6px"></p>
             </div>
             <div class="row"><div class="lbl">PDF-копии страниц<small id="pdfNote">задания, тесты, страницы — ещё и в PDF</small></div><label class="sw-t"><input type="checkbox" data-s="pdf"><span></span></label></div>
@@ -1680,6 +1714,16 @@ body[data-v-grades-honors="0"] #gradesView .gv-hon{display:none}
   <div class="rd-note hidden" id="rdNote"></div>
   <div class="rd-body" id="rdScroll"><div class="rd" id="rdBody"></div></div>
   <div class="rd-foot" id="rdFoot">Здесь можно читать страницы, ходить по ссылкам и открывать файлы. Сдать работу, ответить на форуме или пройти тест — кнопкой «На сайте».</div>
+</div></div>
+<div class="modal hidden" id="dirModal"><div class="modal-box dir-box">
+  <header><b>Выбор папки</b><button class="btn" id="dirClose">Закрыть</button></header>
+  <div class="dir-top"><div class="dir-roots" id="dirRoots"></div><div class="dir-trail" id="dirTrail"></div></div>
+  <div class="dir-list" id="dirList"></div>
+  <div class="dir-foot">
+    <div class="dir-new hidden" id="dirNewRow"><input class="txt" id="dirNewName" placeholder="Название новой папки" maxlength="100" autocomplete="off" spellcheck="false"><button class="btn primary" id="dirNewOk">Создать</button><button class="btn" id="dirNewCancel">Отмена</button></div>
+    <p class="hint" id="dirMsg"></p>
+    <div class="dir-btns"><button class="btn" id="dirNewBtn">＋ Новая папка</button><button class="btn primary" id="dirUse">Выбрать эту папку</button></div>
+  </div>
 </div></div>
 <div class="modal hidden" id="rulesModal"><div class="modal-box rules-box">
   <header><b>Правила скачивания</b><button class="btn" id="rClose">Закрыть</button></header>
@@ -2256,7 +2300,68 @@ function loadSettings(st){
 $$(".mopt").forEach(m => m.onclick = () => { $$(".mopt").forEach(x => x.classList.toggle("on", x === m)); $("#tplBox").classList.toggle("hidden", +m.dataset.m !== 3); api("/api/settings", {mode: +m.dataset.m}); });
 $$("[data-s]").forEach(i => i.onchange = () => api("/api/settings", {[i.dataset.s]: i.checked}));
 $("#outDir").onchange = e => api("/api/settings", {out_dir: e.target.value.trim()}).then(loadCourses);
-$("#pickDir").onclick = async () => { const r = await api("/api/pick_folder", {}); if (r.ok) { $("#outDir").value = r.path; loadCourses(); } else if (r.error) toast(r.error, "bad"); };
+$("#pickDir").onclick = async () => {
+  if (ANDROID) return dirOpen();                      // на телефоне системного окна выбора папки нет — своё (folders.py)
+  const r = await api("/api/pick_folder", {}); if (r.ok) { $("#outDir").value = r.path; loadCourses(); } else if (r.error) toast(r.error, "bad");
+};
+// ── выбор папки внутри программы (телефон): список подпапок, «Наверх», «Новая папка», «Выбрать эту папку» ──
+const DIR = {path: "", cur: "", busy: false, seq: 0};
+const DIR_ICON = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const DIR_UP = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
+function dirOpen(){ $("#dirModal").classList.remove("hidden"); dirNewShow(false); $("#dirMsg").textContent = ""; dirLoad(""); }
+function dirShut(){ $("#dirModal").classList.add("hidden"); }
+function dirErr(text){ const m = $("#dirMsg"); m.textContent = text; m.classList.add("bad"); }   // ошибка — в самом окне: всплывающее сообщение легло бы на кнопки
+function dirNewShow(on){ $("#dirNewRow").classList.toggle("hidden", !on); $("#dirNewBtn").classList.toggle("hidden", on); if (on) { $("#dirNewName").value = ""; setTimeout(() => $("#dirNewName").focus(), 30); } }
+async function dirLoad(path){
+  const my = ++DIR.seq;
+  let r; try { r = await api("/api/folders", {path: path || ""}); } catch (e) { r = {ok: false, error: "Нет связи с программой."}; }
+  if (my !== DIR.seq) return;                         // нажали ещё раз, пока шёл прошлый запрос
+  const list = $("#dirList");
+  DIR.cur = r.current || ""; $("#dirMsg").classList.remove("bad");
+  $("#dirRoots").innerHTML = (r.roots || []).map(x => `<button class="dir-chip${r.path && (r.path === x.path || r.path.startsWith(x.path + "/")) && x.name === r.root ? " on" : ""}" data-dp="${esc(x.path)}">${esc(x.name)}</button>`).join("");
+  let note = "";
+  if (r.need_access) note = `<div class="dir-note">Папки общей памяти пока недоступны: приложению нужен доступ ко всем файлам. Разрешите его, вернитесь и нажмите «Проверить снова».<br><button class="btn primary" id="dirPerm">Разрешить доступ</button><button class="btn" id="dirRecheck">Проверить снова</button></div>`;
+  else if (r.kind === "termux" && (r.roots || []).length < 2) note = `<div class="dir-note">Общая память не открыта для Termux: выполните там <code>termux-setup-storage</code>, разрешите доступ и откройте это окно снова.</div>`;
+  if (!r.ok) { $("#dirTrail").innerHTML = ""; list.innerHTML = note + `<div class="dir-empty">${esc(r.error || "Не удалось открыть папку.")}</div>`; $("#dirUse").disabled = true; dirBind(); return; }
+  DIR.path = r.path;
+  $("#dirTrail").innerHTML = (r.trail || []).map((t, i, a) => i === a.length - 1 ? `<button disabled>${esc(t.name)}</button>` : `<button data-dp="${esc(t.path)}">${esc(t.name)}</button><i>›</i>`).join("");
+  const rows = [];
+  if (r.parent) rows.push(`<button class="dir-row up" data-dp="${esc(r.parent)}">${DIR_UP}<span>Наверх</span></button>`);
+  (r.dirs || []).forEach(d => rows.push(`<button class="dir-row" data-dp="${esc(d.path)}">${DIR_ICON}<span>${esc(d.name)}</span><em>›</em></button>`));
+  list.innerHTML = note + rows.join("") + (r.dirs && r.dirs.length ? "" : `<div class="dir-empty">Здесь нет вложенных папок.<br>Можно выбрать эту папку или создать новую.</div>`) + (r.truncated ? `<div class="dir-empty">Показаны первые ${r.dirs.length} папок.</div>` : "");
+  list.scrollTop = 0;
+  const on = $("#dirRoots .dir-chip.on"), rc = $("#dirRoots");
+  if (on) { const a = on.getBoundingClientRect(), c = rc.getBoundingClientRect(); if (a.right > c.right) rc.scrollLeft += a.right - c.right + 14; else if (a.left < c.left) rc.scrollLeft -= c.left - a.left + 14; }   // выбранный корень — в видимой части полосы
+  $("#dirUse").disabled = false;
+  $("#dirMsg").textContent = (r.can_write ? "" : "Похоже, сюда нельзя записывать. ") + "Сохранять в: " + r.path;
+  dirBind();
+}
+function dirBind(){
+  const pb = $("#dirPerm"); if (pb) pb.onclick = () => api("/api/android/action", {name: "allfiles"});
+  const rb = $("#dirRecheck"); if (rb) rb.onclick = () => dirLoad(DIR.path);
+}
+$("#dirModal").addEventListener("click", e => { const b = e.target.closest("[data-dp]"); if (b && !b.disabled) dirLoad(b.dataset.dp); });
+$("#dirClose").onclick = dirShut;
+$("#dirNewBtn").onclick = () => dirNewShow(true);
+$("#dirNewCancel").onclick = () => dirNewShow(false);
+$("#dirNewOk").onclick = async () => {
+  const name = $("#dirNewName").value.trim(); if (!name || DIR.busy) return;
+  DIR.busy = true;
+  try { const r = await api("/api/folders/new", {parent: DIR.path, name}); if (r.ok) { dirNewShow(false); await dirLoad(r.path); } else dirErr(r.error || "Не удалось создать папку."); }
+  finally { DIR.busy = false; }
+};
+$("#dirNewName").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("#dirNewOk").click(); } else if (e.key === "Escape") { e.stopPropagation(); dirNewShow(false); } });
+$("#dirUse").onclick = async () => {
+  if (DIR.busy || !DIR.path) return;
+  DIR.busy = true;
+  try {
+    const r = await api("/api/folders/use", {path: DIR.path});
+    if (!r.ok) { dirErr(r.error || "Не удалось выбрать папку."); return; }
+    const moved = DIR.cur && DIR.cur !== r.path;
+    $("#outDir").value = r.path; dirShut(); loadCourses();
+    toast("Папка сохранения: " + r.path + (moved ? ". Уже скачанное останется на старом месте." : ""), "ok");
+  } finally { DIR.busy = false; }
+};
 $("#openDir").onclick = () => api("/api/open", {path: ""});
 $("#quitBtn").onclick = async () => { if (!confirm("Остановить программу? Таймер и автообновление перестанут работать, пока вы не " + (IS_APK() ? "откроете приложение снова." : "запустите её снова в Termux."))) return;
   await api("/api/quit", {}); toast("Программа остановлена. Эту вкладку можно закрыть."); setTimeout(() => { document.body.innerHTML = '<p style="padding:24px;font:16px system-ui">Программа остановлена. ' + (IS_APK() ? 'Чтобы запустить снова, откройте приложение Moodle Offline.' : 'Чтобы запустить снова, откройте Termux и выполните <code>./run.sh</code>') + '</p>'; }, 800); };

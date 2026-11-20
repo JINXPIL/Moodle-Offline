@@ -241,7 +241,7 @@ Every section has a “Вид” button: a sheet of “item — choice” rows (
 | Linux | `~/.local/share/moodle-offline` (or `$XDG_DATA_HOME/moodle-offline`) |
 | Android | the app's own storage |
 
-Materials go to the folder you choose (default: “Материалы Moodle” next to the program or in Documents). A new version finds the previous version's data by itself and copies it (“Перенос из старой версии…”, console `--import-data`). Prefer a save folder **outside OneDrive**: OneDrive locks fresh files and can turn them into “cloud-only” ones that won't open offline.
+Materials go to the folder you choose (default: “Материалы Moodle” next to the program or in Documents). **On a phone the “…” button next to “Папка для сохранения” (1.35.1)** opens the program's own folder picker (Android has no system dialog that returns a plain path): quick places (phone storage, Documents, Downloads, memory card, app storage), a tappable path, a list of folders with “Наверх” (Up), “＋ Новая папка” (New folder) and “Выбрать эту папку” (Use this folder) — the program checks that the folder is writable. It lists folders only and cannot leave shared storage, memory cards and the app folder. Without “all files” access in the app it shows a hint with “Разрешить доступ”; on a computer “…” still opens the system dialog. A new version finds the previous version's data by itself and copies it (“Перенос из старой версии…”, console `--import-data`). Prefer a save folder **outside OneDrive**: OneDrive locks fresh files and can turn them into “cloud-only” ones that won't open offline.
 
 ---
 
