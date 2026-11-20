@@ -87,12 +87,18 @@ public class MainActivity extends Activity {
 
     /** Системный выбор файла для поля «Выберите файл» на странице (архив переноса данных). */
     boolean chooseFile(ValueCallback<Uri[]> cb) {
+        return chooseFile(cb, false);
+    }
+
+    // multiple — страница просит несколько файлов (<input type="file" multiple>, например «Файлы» у заметки)
+    boolean chooseFile(ValueCallback<Uri[]> cb, boolean multiple) {
         if (chooser != null) chooser.onReceiveValue(null);
         chooser = cb;
         try {
             Intent i = new Intent(Intent.ACTION_GET_CONTENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
             i.setType("*/*");   // архивы у разных «Файлов» называются по-разному — не сужаем
+            if (multiple) i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
             startActivityForResult(Intent.createChooser(i, "Выберите файл"), REQ_FILE);
         } catch (Throwable t) {
             chooser = null;

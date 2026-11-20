@@ -2253,6 +2253,28 @@ class App:
         except notes.NoteError as e:
             return {"ok": False, "error": str(e)}
 
+    def notes_attach(self, rfile, length, nid, name) -> dict:
+        """Прикрепить файл к заметке: тело запроса — сам файл (читается кусками, в память целиком не попадает)."""
+        try:
+            f = notes.add_attachment(self.notes_out(), str(nid or ""), str(name or ""), rfile.read, int(length or 0))
+            files = notes.list_attachments(self.notes_out(), str(nid or ""))
+        except notes.NoteError as e:
+            return {"ok": False, "error": str(e)}
+        except OSError as e:
+            return {"ok": False, "error": "не удалось записать файл: " + mo.describe_error(e)}
+        self.notes_changed()
+        return {"ok": True, "file": f, "files": files}
+
+    def notes_detach(self, b) -> dict:
+        try:
+            files = notes.delete_attachment(self.notes_out(), str(b.get("id") or ""), str(b.get("name") or ""))
+        except notes.NoteError as e:
+            return {"ok": False, "error": str(e)}
+        except OSError as e:
+            return {"ok": False, "error": "не удалось убрать файл: " + mo.describe_error(e)}
+        self.notes_changed()
+        return {"ok": True, "files": files}
+
     def notes_save(self, b) -> dict:
         try:
             try:
@@ -3355,6 +3377,8 @@ class Handler(BaseHTTPRequestHandler):
                                                        q.get("force") == "1"))
         if p == "/api/schedule/excel/upload":
             return self._send(200, APP.excel_upload(self.rfile, int(self.headers.get("Content-Length") or 0), q.get("name", "")))
+        if p == "/api/notes/attach":         # файл к заметке: тело — сам файл, номер заметки и имя — в адресе
+            return self._send(200, APP.notes_attach(self.rfile, int(self.headers.get("Content-Length") or 0), q.get("id", ""), q.get("name", "")))
         if p == "/api/lk/import":
             return self._send(200, APP.lk_import(self.rfile, int(self.headers.get("Content-Length") or 0)))
         if p == "/api/schedule/import":
@@ -3434,6 +3458,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.notes_restore(b))
         if p == "/api/notes/pin":
             return self._send(200, APP.notes_pin(b))
+        if p == "/api/notes/detach":
+            return self._send(200, APP.notes_detach(b))
         if p == "/api/notes/delete_many":
             return self._send(200, APP.notes_delete_many(b))
         if p == "/api/notes/restore_many":

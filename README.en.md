@@ -186,7 +186,7 @@ Deadlines of assignments and quizzes from the Moodle calendar plus your timetabl
 
 ### Заметки (Notes)  **(RU §3д)**
 
-A general notebook and per-class notes (a “Заметка” button on each item). Notes are ordinary `.md` files in `Заметки/`, editable with any editor; autosave, pinning, select-many and bulk delete with “Вернуть” (undo; trash keeps the last 50). They are indexed by search and travel with data transfer.
+A general notebook and per-class notes (a “Заметка” button on each item). Notes are ordinary `.md` files in `Заметки/`, editable with any editor; autosave, pinning, select-many and bulk delete with “Вернуть” (undo; trash keeps the last 50). They are indexed by search and travel with data transfer. **Files in notes (1.35.0)**: a “Файлы” block with a “＋ Файл” button (several files at once on a phone; drag-and-drop and Ctrl+V of a picture or file from the clipboard on a computer — it is attached to “Файлы”, not inserted into the text) — a photo of your notes, a PDF, a spreadsheet. Tap a file to open it; the cross removes it on the second tap. Limits: 50 MB per file, 200 MB and 30 files per note. Files live in `Заметки/Вложения/<note id>/`, go to the trash and come back together with the note, travel with data transfer and are read by search.
 
 ### Расписание (Schedule)  **(RU §4б)**
 
@@ -220,7 +220,7 @@ Teachers sometimes replace a lecture with a tiny “stub” PDF; Moodle then cha
 
 ### Вид (View), Настройки (Settings)  **(RU §4а-2 … §4а-5)**
 
-Every section has a “Вид” button: a sheet of “item — choice” rows (cards or list, sorting, density, picture, grouping, what to show…). Tabs can be reordered and hidden (“Курсы” cannot). Settings are behind the gear icon in the header. **Your interface settings now survive restarts and updates**, and “Сброс” (reset) offers “Сбросить вид” (reset view) and “Сбросить всё” (reset everything; login, folder, courses, group, AI settings and autostart are kept, and a copy of the old settings is saved).
+Every section has a “Вид” button: a sheet of “item — choice” rows (cards or list, sorting, density, picture, grouping, what to show…). Tabs can be reordered and hidden (“Курсы” cannot). **Phone layout of the Calendar, Search, “Что нового” and “Успеваемость” tabs (1.35.0)** **(RU §4а-6)**: calendar buttons at the top, filters under one button, the list grouped by day with a large “done” tick; a pinned search bar with recent queries; “Что нового” split by day with a thin “Moodle не отвечает” line and grouped new files; a per-semester grade chart in “Успеваемость”. All four have their own “Вид” items. Settings are behind the gear icon in the header. **Your interface settings now survive restarts and updates**, and “Сброс” (reset) offers “Сбросить вид” (reset view) and “Сбросить всё” (reset everything; login, folder, courses, group, AI settings and autostart are kept, and a copy of the old settings is saved).
 
 ---
 

@@ -15,6 +15,23 @@ Moodle Offline is built for students of Sevastopol State University (SevSU) and 
 
 ---
 
+## 1.35.0 — 2026-11-20
+
+**New**
+- **Files in notes.** The note window has a “Файлы” (Files) block: a “＋ Файл” button (several files at once on a phone), drag-and-drop into the window (on a computer), and pasting a picture from the clipboard. A photo of your notes, a PDF, a spreadsheet, an archive — all stored next to the note; tap a file to open it (pictures, PDFs and text open right over the note). The cross removes a file on the second tap (“Убрать?”). A note with files shows “📎 N” in the list. Limits: 50 MB per file, 200 MB and 30 files per note. Files go to the trash together with the note and come back with it, travel with “Перенос данных” (Data transfer) and are read by search.
+- **“Календарь” (Calendar) on a phone.** The buttons “Обновить / В календарь (.ics) / Офлайн / Настройки” are at the top instead of below the whole list. Filters are compact: “Всё / Сроки / Пары” (All / Deadlines / Classes) is always visible, the rest sits under a “Фильтры” (Filters) button (with a dot when something is set). The list is grouped by day with a heading that stays at the top while scrolling; the time is on the left, the full title in the middle, “через 5 ч” (in 5 h) as a coloured pill, and a large “done” tick on the right; the class in progress is highlighted. Tapping “просрочено”, “сегодня” or “завтра” in the summary scrolls to that place.
+- **“Поиск” (Search) on a phone.** The search bar stays at the top; file types are a scrollable row, course and order are two buttons side by side. After “Найти” the keyboard is dismissed, and it no longer pops up on its own when you open the tab. Under an empty bar there are “Недавние запросы” (recent queries). The file name in a result is tappable, and snippets default to three lines. The index state is a button next to the results.
+- **“Что нового” (What's new).** Events are split by day, cards are coloured by type, the “read” tick is in the card's corner, details are two lines (tap to expand). “Moodle не отвечает / снова работает” is a thin line. Three or more new files of one course in a day collapse into one group. “Прочитано всё” (Mark all read) and the settings are right in the header.
+- **“Успеваемость” (Academic record).** A chart of the average grade per semester (the bars are tappable), the average on each semester button, subject order (including “waiting for a grade first”), a compact summary. An optional hint about an honours diploma is off by default.
+- **“Вид” (View) is richer** — the calendar, search, “Что нового” and the new “Успеваемость” got their own items (pinned headings, snippet length, what to show in a row, how to show “Moodle не отвечает”, and so on).
+
+**Fixed**
+- Computer: in a window of about 1280 px with eight tabs the gear icon in the header ran off the edge — now only the logo remains instead of the words “Moodle Offline”. The drop-downs in the search row no longer stretch to full width each.
+
+**What was verified and what was not.** `tests/test_notes_attach_unit.py` (files in notes: names and paths, limits, a cut-off upload, the trash with files, transfer, window requests against a real local server); `test_view_settings_unit.py` and `test_settings_window_unit.py` were updated. The window was checked in Chromium on made-up data with realistic title lengths: phone 390, 360 and 320 px with touch and desktop 1280 px — calendar, search, feed, grades and a note with files, no console errors and no horizontal scrolling. **Not verified:** a real Android WebView (multi-file picking is enabled in the app but was never tried on a phone), a live touch screen, Windows/Edge, mouse drag-and-drop of files and pasting a picture from the clipboard.
+
+---
+
 ## 1.34.1 — 2026-11-20
 
 **Fixed**

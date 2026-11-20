@@ -28,8 +28,8 @@ for line in body.split("\n"):
             secs[cur]["opts"].append(k)
         if "V_DENS" in line.replace("const V_DENS", ""):
             secs[cur]["opts"].append("dens_std")
-WANT = ["courses", "course", "schedule", "notes", "search", "news", "calendar", "electives"]
-check("2. все восемь разделов описаны", sorted(secs) == sorted(WANT), str(sorted(secs)))
+WANT = ["courses", "course", "schedule", "notes", "search", "news", "calendar", "electives", "grades"]
+check("2. все девять разделов описаны", sorted(secs) == sorted(WANT), str(sorted(secs)))
 for s in WANT:
     check(f"3. {s}: есть пункты и название", bool(secs.get(s, {}).get("opts")) and bool(secs.get(s, {}).get("name")))
     ks = [k for k in secs.get(s, {}).get("opts", [])]
