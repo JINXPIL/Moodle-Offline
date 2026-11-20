@@ -110,7 +110,7 @@ final class Web {
             // «Выберите файл» (например, архив переноса данных): без этого WebView молча ничего не открывает
             @Override
             public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb, FileChooserParams p) {
-                if (a instanceof MainActivity) return ((MainActivity) a).chooseFile(cb);
+                if (a instanceof MainActivity) return ((MainActivity) a).chooseFile(cb, p != null && p.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
                 cb.onReceiveValue(null);
                 return true;
             }

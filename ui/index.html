@@ -430,8 +430,6 @@ body[data-v-search-acts="0"] #sqList .sr .na{display:none}
 
 /* Что нового */
 #nwList .nw{padding:calc(12px*var(--vd-news,1)) 14px;margin-bottom:calc(8px*var(--vd-news,1))}
-body[data-v-news-detail=two] #nwList .nd{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-body[data-v-news-detail=off] #nwList .nd{display:none}
 body[data-v-news-files="0"] #nwList .nf{display:none}
 body[data-v-news-acts="0"] #nwList .na{display:none}
 body[data-v-news-dim="0"] #nwList .nw.read{opacity:1}
@@ -519,6 +517,24 @@ input.txt:focus,select.txt:focus,textarea.txt:focus{border-color:var(--accent);b
 .ntc-p{font-size:13px;margin-top:4px;line-height:1.4;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .nt-box textarea.txt{flex:1;min-height:220px;resize:none;line-height:1.5}
 .nt-bind{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+/* файлы в заметке (1.35.0): под текстом — список «значок · имя · размер · убрать»; пока файл едет — полоска хода */
+.nt-att{flex:none;display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px solid var(--line)}
+.nt-att-h{display:flex;align-items:center;gap:8px}
+.nt-att-h b{font-size:13.5px}
+.nt-att-l{display:flex;flex-direction:column;gap:6px;max-height:34dvh;overflow:auto;overscroll-behavior:contain}
+.nt-att-l:empty{display:none}
+.nt-f{position:relative;display:flex;align-items:center;gap:10px;min-width:0;padding:5px 4px 5px 8px;border:1px solid var(--line);border-radius:10px;background:var(--surface-solid);overflow:hidden}
+.nt-f-i{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:8px;background:var(--bg2);color:var(--muted);font:700 10px/1 var(--font-display);text-transform:uppercase;letter-spacing:.02em}
+.nt-f-n{flex:1 1 auto;min-width:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;padding:2px 0}
+.nt-f-n b{display:block;font-weight:600;font-size:13.5px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nt-f-n small{display:block;font-size:12px;color:var(--muted)}
+.nt-f .icon-btn{flex:none}
+.nt-f .nt-f-x.ask{width:auto;padding:0 10px;font-size:12.5px;font-weight:600;color:var(--bad)}
+.nt-f.up .nt-f-n{cursor:default}
+.nt-f.up i.pg{position:absolute;left:0;bottom:0;height:3px;background:var(--accent);transition:width .15s}
+.nt-f.bad .nt-f-n small{color:var(--bad)}
+.nt-box.drag{outline:2px dashed var(--accent);outline-offset:-6px}
+.ntc-m .att{white-space:nowrap}
 .ai-stat{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px}
 .ai-stat .grow{flex:1;min-width:180px;overflow-wrap:anywhere}
 .ai-stat.warn{border-color:var(--accent)}
@@ -1011,6 +1027,236 @@ body[data-v-electives-full="0"] #electivesView .el-row.full:not(.on){display:non
   .olvlist{max-height:none;overflow:visible}
   #olvBar .btn{height:36px}
 }
+/* ── 1.35.0: календарь — повестка по дням (время слева, галочка справа), липкие заголовки, фильтры в сворачиваемом блоке ── */
+.cal-f{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.cal-f1,.cal-f2{display:contents}
+.cal-f .vwbtn{order:9;margin-left:auto}
+.cal-f .seg button{padding:6px 12px;white-space:nowrap}
+.cal-f select.txt{width:auto;max-width:260px}
+.cal-more-b{display:none;position:relative}
+.cal-dot{position:absolute;top:7px;right:7px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--surface-solid)}
+.cal-dot.hidden{display:none}
+.cal-done{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.cal-i,.cal-help,#calView .side .sh{display:none}
+button.cchip{font:inherit;font-size:13px;cursor:pointer;color:var(--muted)}
+button.cchip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#calList .ch2{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:14px 0 6px;padding:6px 2px;font:600 13px var(--font-display);color:var(--muted);scroll-margin-top:calc(var(--top-h,0px) + 4px)}
+#calList .ch2 b{font-size:14.5px;color:var(--text)}
+#calList .ch2.today b{color:var(--accent)}
+#calList .ch2.late b{color:#d93025}
+#calList .ch2 em{margin-left:auto;font-style:normal;font-weight:400;font-size:12px}
+body[data-v-calendar-sticky="1"] #calList .ch2{position:sticky;top:var(--top-h,0px);z-index:3;background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#calList .crow{display:grid;grid-template-columns:minmax(46px,auto) minmax(0,1fr) auto;gap:0 12px;align-items:start}
+#calList .crow .ctm{min-width:46px;display:flex;flex-direction:column;gap:1px;padding-top:0}
+#calList .crow .ctm b{font-size:14px;color:var(--text);font-weight:700}
+#calList .crow .ctm small{font-size:12px}
+#calList .crow .cbd{min-width:0}
+#calList .crow .cs{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px}
+#calList .crow .cs>span:first-child:not(.cl){font-weight:600}
+#calList .crow.lesson .cs .cr{color:var(--text);font-weight:600}
+#calList .crow .cl{margin:0;padding:1px 9px;border-radius:999px;background:var(--bg2);font-size:12px;white-space:nowrap}
+#calList .crow.late .cl{background:color-mix(in srgb,#d93025 14%,transparent)}
+#calList .crow.soon .cl{background:color-mix(in srgb,#e8710a 16%,transparent)}
+#calList .crow.ok .cl{background:color-mix(in srgb,#0f9d8a 14%,transparent)}
+#calList .crow .cnow{margin-left:8px;padding:1px 8px;border-radius:999px;background:var(--accent);color:#fff;font:600 11px var(--font-display);white-space:nowrap;vertical-align:1px}
+#calList .crow.live{background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
+.cck{display:grid;place-items:center;width:34px;height:34px;margin:-6px -6px -6px 0;cursor:pointer}
+.cck input{margin:0;width:20px;height:20px}
+.cck-sp{width:0}
+body[data-v-calendar-dcount="0"] #calList .ch2 .cdn{display:none}
+body[data-v-calendar-end="0"] #calList .ce{display:none}
+body[data-v-calendar-room="0"] #calList .cr,body[data-v-calendar-room="0"] #calList .ca{display:none}
+body[data-v-calendar-teacher="0"] #calList .cp{display:none}
+body[data-v-calendar-past="0"] #calList .crow.past{display:none}
+@media (min-width:701px){body[data-v-calendar-fopen="open"] .cal-more-b{display:none}}
+@media (max-width:700px){
+  #calView .layout{display:flex;flex-direction:column}
+  #calView .content{padding-top:8px}
+  #calView .side{order:-1;padding:10px 12px 0;overflow:visible}
+  #calView .side .panel{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:0;margin:0;border:0;background:none;box-shadow:none;backdrop-filter:none}
+  #calView .side h3,#calView .side .hint{display:none}
+  #calView .side .btn{margin:0!important;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:auto;min-height:54px;padding:6px 2px;font-size:11.5px;font-weight:600;line-height:1.15}
+  #calView .side .btn .cal-i{display:block}
+  #calView .side .btn .lg{display:none}
+  #calView .side .btn .sh{display:block}
+  body[data-v-calendar-bar="0"] #calView .side{display:none}
+  .cal-help{display:block;margin-top:16px}
+  .cchips{flex-wrap:nowrap;overflow-x:auto;margin:0 -12px 10px;padding:0 12px 2px;scrollbar-width:none}
+  .cchips::-webkit-scrollbar{display:none}
+  .cchip{flex:none}
+  .cal-f{display:block}
+  .cal-f1{display:flex;gap:8px;align-items:center}
+  .cal-f1 .seg{flex:1;min-width:0}
+  .cal-f1 .seg button{flex:1;min-width:0;padding:8px 2px;font-size:13px}
+  .cal-more-b{display:inline-flex;align-items:center;justify-content:center;flex:none;height:44px;padding:0 14px}
+  .cal-f1 .vwbtn{order:0;margin-left:0;flex:none}
+  .cal-f2{display:none;flex-direction:column;gap:8px;margin-top:8px}
+  .cal-f.open .cal-f2,body[data-v-calendar-fopen="open"] .cal-f2{display:flex}
+  body[data-v-calendar-fopen="open"] .cal-more-b{display:none}
+  .cal-f2 .seg button{flex:1;padding:8px 2px}
+  .cal-f2 select.txt{width:100%;max-width:none}
+  .cal-done{min-height:40px}
+  #calList .ch2{margin:12px -12px 6px;padding:8px 14px}
+  #calList .crow{padding-left:10px;padding-right:10px;gap:0 10px}
+  #calList .crow .ct{font-size:14.5px}
+}
+/* ── 1.35.0: поиск — строка с фильтрами не разваливается на телефоне, результаты читаются, недавние запросы, кнопка «Индекс» рядом ── */
+.sq-i,.sq-s{display:none}
+.sq-types{display:contents}
+.sqf .vwbtn{margin-left:auto}
+.sq-ir{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+.sq-ir .hint{margin:0;flex:1;min-width:0}
+#sqIdxB{display:none;flex:none;height:30px;min-height:0;font-size:12px;padding:0 11px}
+#sqIdxB.warn{color:var(--bad);border-color:currentColor}
+.sr .st{display:flex;align-items:flex-start;gap:8px;cursor:pointer}
+.sr .st .nk{margin-right:0;flex:none;margin-top:2px}
+.sr .st:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.sr .sname{min-width:0;overflow-wrap:anywhere}
+.sr .sx{margin-left:0}
+.sr .sp .stx{min-width:0}
+body[data-v-search-snip=two] #sqList .sp .stx,body[data-v-search-snip=three] #sqList .sp .stx{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+body[data-v-search-snip=two] #sqList .sp .stx{-webkit-line-clamp:2}
+body[data-v-search-snip=three] #sqList .sp .stx{-webkit-line-clamp:3}
+body[data-v-search-badge="0"] #sqList .sr .nk{display:none}
+body[data-v-search-size="0"] #sqList .sr .sx{display:none}
+body[data-v-search-dups="0"] #sqList .sr .sdup{display:none}
+body[data-v-search-recent="0"] #sqList .sq-recent{display:none}
+.sq-recent{margin:0 0 14px}
+.sq-rh{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:8px}
+.sq-rl{display:flex;flex-wrap:wrap;gap:6px}
+.sq-rl .chip{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:700px){
+  #searchView .content{padding-top:0}
+  #searchView .sqtop{margin:0 -12px 8px;padding:10px 12px 6px;background:var(--bg)}
+  body[data-v-search-pin="1"] #searchView .sqtop{position:sticky;top:var(--top-h,0px);z-index:5;box-shadow:0 1px 0 var(--line)}
+  .sqbox{gap:8px;margin-bottom:8px}
+  .sqbox .txt{min-width:0}
+  #sqGo{padding:0 14px}
+  #sqGo .sq-i{display:block}#sqGo .sq-t{display:none}
+  #sqAi{padding:0 12px}
+  #sqAi .sq-t{display:none}#sqAi .sq-s{display:inline;font-weight:700}
+  .sqf{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px}
+  .sq-types{order:-1;flex:1 1 100%;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -12px;padding:0 12px 2px}
+  .sq-types::-webkit-scrollbar{display:none}
+  .sq-types .chip{flex:none}
+  #sqCourse,#sqOrder{flex:1 1 0;min-width:0;width:auto;max-width:none}
+  .sqf .vwbtn{margin-left:0;flex:none}
+  #sqIdxB{display:inline-flex;align-items:center}
+  .sr .na{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:6px}
+  .sr .na .btn{min-width:0;height:36px;padding:0 6px}
+  .sr .sp{padding:7px 9px}
+}
+/* ── 1.35.0: «Что нового» — события по дням, цвет по типу, тонкие строки для «Moodle не отвечает», группы однотипного ── */
+.nw-head{margin-bottom:12px}
+.nw-h1{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.nw-h1 h2{margin:0}
+.nw-all{height:34px;gap:6px;padding:0 12px;font-size:13px}
+.nw-all:disabled{opacity:.45}
+.nw-gear{display:none}
+.nw-f{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.nw-f select.txt{width:auto;max-width:240px}
+.nw-f .seg button{padding:6px 14px;white-space:nowrap}
+#nwList .nw-day{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:14px 0 6px;padding:6px 2px;font:600 13px var(--font-display);color:var(--muted);scroll-margin-top:calc(var(--top-h,0px) + 4px)}
+#nwList .nw-day b{font-size:14.5px;color:var(--text)}
+#nwList .nw-day em{margin-left:auto;font-style:normal;font-weight:400;font-size:12px}
+body[data-v-news-days="off"] #nwList .nw-day{display:none}
+body[data-v-news-sticky="1"][data-v-news-days="on"] #nwList .nw-day{position:sticky;top:var(--top-h,0px);z-index:3;background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+body[data-v-news-days="on"] #nwList .nw time .d{display:none}
+#nwList .nw{display:block;border-left:3px solid var(--kc,var(--accent));cursor:default}
+#nwList .nw.unread{border-left-width:4px;background:color-mix(in srgb,var(--kc,var(--accent)) 8%,var(--surface))}
+body[data-v-news-tint="0"] #nwList .nw.unread{background:var(--surface)}
+#nwList .nw .nm{display:flex;align-items:center;gap:8px;min-width:0;margin:0 0 4px}
+#nwList .nw .nk{flex:none;margin:0;background:var(--kc,#8a93a3)}
+#nwList .nw .nc{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+#nwList .nw time{flex:none;font-size:12px;font-variant-numeric:tabular-nums}
+#nwList .nw .nt{font-size:14.5px}
+#nwList .nw.unread .nt{font-weight:700}
+#nwList .nw .nd{white-space:pre-line;color:color-mix(in srgb,var(--text) 86%,var(--muted))}
+body[data-v-news-detail=two] #nwList .nw:not(.open) .nd{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+body[data-v-news-detail=off] #nwList .nw:not(.open) .nd{display:none}
+#nwList .nw:not(.open) .nf{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+body[data-v-news-kind="0"] #nwList .nw .nk{display:none}
+body[data-v-news-course="0"] #nwList .nw .nc{display:none}
+body[data-v-news-time="0"] #nwList .nw time{display:none}
+.nw-rd{flex:none;display:grid;place-items:center;width:32px;height:32px;margin:-4px -6px -4px 0;border:0;border-radius:50%;background:transparent;color:var(--muted);cursor:pointer}
+.nw-rd:hover{background:var(--bg2);color:var(--ok)}
+#nwList .nw-st{display:flex;align-items:center;gap:8px;margin:0 0 4px;padding:3px 12px;font-size:12.5px;color:var(--muted)}
+#nwList .nw-st i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--kc)}
+#nwList .nw-st time{font-variant-numeric:tabular-nums}
+#nwList .nw-st.read{opacity:.7}
+#nwList .nw-st.down span{color:var(--bad);font-weight:600}
+#nwList .nw-g{padding:0}
+.nw-gh{display:flex;align-items:center;gap:10px;width:100%;padding:calc(10px*var(--vd-news,1)) 12px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:var(--r)}
+.nw-gh .nk{flex:none;margin:0;background:var(--kc)}
+.nw-gh .gt{flex:1;min-width:0;display:block;line-height:1.3}
+.nw-gh .gt b{font-size:15px}
+.nw-gh .gt small{display:block;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.nw-gh .chev{flex:none;color:var(--muted);transition:transform .15s}
+.nw-g.open .chev{transform:rotate(180deg)}
+.nw-gl{padding:0 8px 8px;border-top:1px solid var(--line)}
+.nw-gl .nw{margin-top:8px}
+.nw-gl .nw .nc,.nw-gl .nw .nk,.nw-gl .nw .nf{display:none}
+.nw-gl .nw .nm{margin-bottom:2px}
+.nw-gh{align-items:flex-start}
+.nw-ga{display:flex;justify-content:flex-end;margin-top:8px}
+@media (max-width:700px){
+  #newsView .layout{display:flex;flex-direction:column}
+  #newsView .side{display:none}
+  #newsView .content{padding-top:8px}
+  .nw-gear{display:grid;flex:none}
+  .nw-h1{flex-wrap:nowrap}
+  .nw-h1 h2{font-size:20px;white-space:nowrap}
+  #nwInfo{display:none}                         /* то же число есть на кнопке «Новые · N» */
+  .nw-h1 .spacer{display:block;flex:1 1 auto}
+  .nw-all span{display:none}.nw-all{width:40px;padding:0;justify-content:center}
+  .nw-f{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .nw-f .seg{grid-column:1/-1}
+  .nw-f .seg button{flex:1;min-width:0}
+  .nw-f select.txt{width:100%;max-width:none;min-width:0}
+  #nwList .nw-day{margin:12px -12px 6px;padding:8px 14px}
+  #nwList .nw .na .btn{height:34px}
+}
+/* ── 1.35.0: «Успеваемость» — график среднего балла по семестрам, средний балл на кнопках семестров, настройки вида ── */
+#gradesView .gv-tb{display:flex;align-items:center;gap:8px;flex:none}
+#gradesView .gv-list{gap:calc(8px*var(--vd-grades,1))}
+#gradesView .gv-row{padding:calc(9px*var(--vd-grades,1)) 10px calc(9px*var(--vd-grades,1)) 12px}
+body[data-v-grades-bar="0"] #gradesView .gv-row{border-left-width:1px}
+body[data-v-grades-sum=compact] #gradesView .gv-meter,body[data-v-grades-sum=compact] #gradesView .gv-dist,body[data-v-grades-sum=compact] #gradesView .gv-dynw{display:none}
+body[data-v-grades-sum=off] #gradesView .gv-sum{display:none}
+body[data-v-grades-dyn="0"] #gradesView .gv-dynw{display:none}
+body[data-v-grades-semavg="0"] #gradesView .gv-sa{display:none}
+body[data-v-grades-honors="0"] #gradesView .gv-hon{display:none}
+#gradesView .gv-dynw{margin:12px 0 0}
+#gradesView .gv-dynw>small{display:block;font-size:12px;color:var(--muted);margin:0 0 4px}
+#gradesView .gv-dyn{display:flex;align-items:flex-end;gap:4px;height:68px}
+#gradesView .gv-db{flex:1 1 0;min-width:0;max-width:56px;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-end;gap:2px;height:100%;padding:0;border:0;background:none;color:var(--muted);font:inherit;cursor:pointer}
+#gradesView .gv-db em{font-style:normal;font-size:11px;line-height:1;text-align:center;font-variant-numeric:tabular-nums;visibility:hidden}
+#gradesView .gv-db.on em{visibility:visible;color:var(--text);font-weight:700}
+#gradesView .gv-db span{flex:1 1 auto;display:flex;align-items:flex-end;min-height:0}
+#gradesView .gv-db i{display:block;width:100%;min-height:3px;border-radius:4px 4px 0 0;background:color-mix(in srgb,var(--accent) 38%,var(--surface-solid));transition:height .2s,background .15s}
+#gradesView .gv-db.none i{height:3px!important;border-radius:2px;background:var(--line)}
+#gradesView .gv-db.on i{background:var(--accent)}
+#gradesView .gv-db:hover i{background:color-mix(in srgb,var(--accent) 65%,var(--surface-solid))}
+#gradesView .gv-db b{font-size:11.5px;font-weight:600;text-align:center;line-height:1}
+#gradesView .gv-db.on b{color:var(--text)}
+#gradesView .gv-db:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+#gradesView .gv-sa{font-variant-numeric:tabular-nums}
+#gradesView .gv-hon{margin:12px 0 0;padding:9px 11px;border-radius:10px;background:var(--bg2);font-size:13px;line-height:1.4}
+#gradesView .gv-hon small{display:block;margin-top:3px;color:var(--muted);font-size:11.5px}
+@media (max-width:700px){
+  #gradesView .gv-sem{min-width:84px}
+  #gradesView .gv-top{align-items:center}
+}
+/* ── 1.35.0: ПК — селекты поиска в строку; шапка при 8 вкладках в окне ≤1400 px не выходит за край (раньше шестерёнку обрезало) ── */
+.sqf select.txt{width:auto;max-width:260px}
+@media (min-width:701px) and (max-width:1400px){
+  .brand{font-size:0;gap:0}
+}
+@media (max-width:700px){
+  .sqf select.txt{width:auto;max-width:none}
+  .sr .st{font-size:15px}
+  #sqList .empty{padding:14px 4px}
+}
 </style>
 </head>
 <body>
@@ -1194,7 +1440,7 @@ body[data-v-electives-full="0"] #electivesView .el-row.full:not(.on){display:non
         <div class="content">
           <div class="gv-top">
             <div><h2>Успеваемость</h2><div class="hint" id="grInfo"></div></div>
-            <button class="btn" id="grRefresh">Обновить</button>
+            <div class="gv-tb"><button class="icon-btn vwbtn" data-vw="grades" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button><button class="btn" id="grRefresh">Обновить</button></div>
           </div>
           <div id="grMsg" class="hint hidden" style="margin:0 0 10px"></div>
           <div id="grBody"></div>
@@ -1218,17 +1464,23 @@ body[data-v-electives-full="0"] #electivesView .el-row.full:not(.on){display:non
     <section class="view hidden" id="newsView">
       <div class="layout">
         <div class="content">
-          <div class="toolbar"><h2>Что нового</h2><span class="hint" id="nwInfo" style="margin:0"></span><div class="spacer"></div>
-            <select class="txt" id="nwKind" style="width:auto"></select>
-            <select class="txt" id="nwCourse" style="width:auto;max-width:240px"></select>
-            <button class="chip" id="nwUnread">Только непрочитанное</button><button class="icon-btn vwbtn" data-vw="news" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
+          <div class="nw-head">
+            <div class="nw-h1"><h2>Что нового</h2><span class="hint" id="nwInfo" style="margin:0"></span><div class="spacer"></div>
+              <button class="btn nw-all" id="nwReadAll" title="Отметить все события прочитанными"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12l5 5L18 7M10 17l1.5 1.5L21 9"/></svg><span>Прочитано всё</span></button>
+              <button class="icon-btn nw-gear" id="nwSetBtn" title="Уведомления и настройки" aria-label="Уведомления и настройки"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></button>
+              <button class="icon-btn vwbtn" data-vw="news" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
+            <div class="nw-f">
+              <div class="seg" id="nwSeg" role="group" aria-label="Какие события показывать"><button data-nu="0" class="on">Все</button><button data-nu="1">Новые</button></div>
+              <select class="txt" id="nwKind" aria-label="Тип события"></select>
+              <select class="txt" id="nwCourse" aria-label="Курс"></select>
+            </div>
+          </div>
           <div id="nwList"></div>
         </div>
         <aside class="side">
           <div class="panel">
             <h3>Лента изменений</h3>
-            <button class="btn primary big" id="nwReadAll">Отметить всё прочитанным</button>
-            <button class="btn big" id="nwSettings" style="margin-top:8px">Уведомления и настройки</button>
+            <button class="btn primary big" id="nwSettings">Уведомления и настройки</button>
             <p class="hint">После каждой загрузки или синхронизации я сравниваю курсы с тем, что было раньше: новые материалы и файлы, объявления преподавателей, оценки. Лента хранится у вас в папке с материалами и читается без интернета.</p>
             <p class="hint">Первая загрузка курса ничего не показывает — она просто запоминает, что уже есть.</p>
           </div>
@@ -1251,15 +1503,19 @@ body[data-v-electives-full="0"] #electivesView .el-row.full:not(.on){display:non
     <section class="view hidden" id="searchView">
       <div class="layout">
         <div class="content">
-          <div class="sqbox"><input class="txt" id="sqIn" placeholder="Поиск по скачанным материалам" autocomplete="off" spellcheck="false"><button class="btn primary" id="sqGo">Найти</button><button class="btn" id="sqAi" title="Задать вопрос нейросети: она ответит по найденным в ваших материалах местам">Спросить ИИ</button></div>
-          <div class="sqf"><select class="txt" id="sqCourse" style="width:auto;max-width:260px"></select>
-            <span id="sqTypes" style="display:contents"></span>
-            <div class="spacer"></div>
-            <select class="txt" id="sqOrder" style="width:auto"><option value="rank">Сначала самые подходящие</option><option value="new">Сначала новые файлы</option></select><button class="icon-btn vwbtn" data-vw="search" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
-          <div class="hint" id="sqInfo" style="margin:0 0 10px"></div>
+          <div class="sqtop" id="sqTop">
+            <div class="sqbox"><input class="txt" id="sqIn" type="search" enterkeyhint="search" placeholder="Поиск по скачанным материалам" autocomplete="off" spellcheck="false"><button class="btn primary" id="sqGo" aria-label="Найти"><svg class="sq-i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span class="sq-t">Найти</span></button><button class="btn" id="sqAi" title="Задать вопрос нейросети: она ответит по найденным в ваших материалах местам"><span class="sq-t">Спросить ИИ</span><span class="sq-s">ИИ</span></button></div>
+            <div class="sqf">
+              <div class="sq-types" id="sqTypes"></div>
+              <select class="txt" id="sqCourse" aria-label="Курс"></select>
+              <select class="txt" id="sqOrder" aria-label="Порядок"><option value="rank">Самые подходящие</option><option value="new">Новые файлы</option></select>
+              <button class="icon-btn vwbtn" data-vw="search" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button>
+            </div>
+          </div>
+          <div class="sq-ir"><div class="hint" id="sqInfo"></div><button class="chip" id="sqIdxB" title="Состояние индекса и его настройки — ниже на странице"></button></div>
           <div id="sqList"></div>
         </div>
-        <aside class="side">
+        <aside class="side" id="sqSide">
           <div class="panel">
             <h3>Индекс поиска</h3>
             <div id="sqStatus"></div>
@@ -1275,20 +1531,31 @@ body[data-v-electives-full="0"] #electivesView .el-row.full:not(.on){display:non
       <div class="layout">
         <div class="content">
           <div class="cchips" id="calChips"></div>
-          <div class="sqf"><select class="txt" id="calShow" style="width:auto"><option value="all">Сроки и пары</option><option value="deadlines">Только сроки</option><option value="lessons">Только пары</option></select>
-            <select class="txt" id="calCourse" style="width:auto;max-width:260px"></select>
-            <select class="txt" id="calDays" style="width:auto"><option value="7">7 дней</option><option value="14" selected>14 дней</option><option value="30">30 дней</option><option value="60">60 дней</option></select>
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><span class="sw-t"><input type="checkbox" id="calDone"><span></span></span>сделанное</label><button class="icon-btn vwbtn" data-vw="calendar" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button></div>
+          <div class="cal-f" id="calF">
+            <div class="cal-f1">
+              <div class="seg" id="calShowSeg" role="group" aria-label="Что показывать"><button data-cs="all" class="on" title="Сроки и пары расписания вместе">Всё</button><button data-cs="deadlines">Сроки</button><button data-cs="lessons">Пары</button></div>
+              <input type="hidden" id="calShow" value="all">
+              <button class="btn cal-more-b" id="calMoreB" aria-expanded="false" aria-controls="calMore">Фильтры<i class="cal-dot hidden" id="calDot"></i></button>
+              <button class="icon-btn vwbtn" data-vw="calendar" title="Настроить вид" aria-label="Настроить вид"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M10 10v10"/></svg></button>
+            </div>
+            <div class="cal-f2" id="calMore">
+              <div class="seg" id="calDaysSeg" role="group" aria-label="На сколько дней вперёд"><button data-cd="7">7 дн.</button><button data-cd="14" class="on">14 дн.</button><button data-cd="30">30 дн.</button><button data-cd="60">60 дн.</button></div>
+              <input type="hidden" id="calDays" value="14">
+              <select class="txt" id="calCourse" aria-label="Курс"></select>
+              <label class="cal-done"><span class="sw-t"><input type="checkbox" id="calDone"><span></span></span>сделанное</label>
+            </div>
+          </div>
           <div class="hint" id="calSync" style="margin:0 0 10px"></div>
           <div id="calList"></div>
+          <p class="hint cal-help">Сроки сдачи берутся из календаря Moodle. Сданную работу Moodle сам убирает из списка; остальное отмечайте галочкой справа. Кнопки «.ics» и «Офлайн» сверху сохраняют сроки и пары расписания — для календаря телефона и для чтения без интернета.</p>
         </div>
         <aside class="side">
           <div class="panel">
             <h3>Календарь</h3>
-            <button class="btn primary big" id="calUpdate">Обновить сроки</button>
-            <button class="btn big" id="calIcs" style="margin-top:8px">Скачать для телефона (.ics)</button>
-            <button class="btn big" id="calPage" style="margin-top:8px">Страница для офлайна</button>
-            <button class="btn big" id="calSettings" style="margin-top:8px">Настройки календаря</button>
+            <button class="btn primary big" id="calUpdate"><svg class="cal-i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg><span class="lg">Обновить сроки</span><span class="sh">Обновить</span></button>
+            <button class="btn big" id="calIcs" style="margin-top:8px"><svg class="cal-i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg><span class="lg">Скачать для телефона (.ics)</span><span class="sh">В календарь (.ics)</span></button>
+            <button class="btn big" id="calPage" style="margin-top:8px"><svg class="cal-i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v5h5"/></svg><span class="lg">Страница для офлайна</span><span class="sh">Офлайн</span></button>
+            <button class="btn big" id="calSettings" style="margin-top:8px"><svg class="cal-i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg><span class="lg">Настройки календаря</span><span class="sh">Настройки</span></button>
             <p class="hint">Сроки сдачи берутся из календаря Moodle. Сданную работу Moodle сам убирает из списка; остальное отмечайте галочкой. В файл .ics попадают сроки и пары расписания — с напоминаниями. Список работает и без интернета: показывает то, что сохранено при последнем обновлении.</p>
           </div>
         </aside>
@@ -1540,6 +1807,11 @@ body[data-v-electives-full="0"] #electivesView .el-row.full:not(.on){display:non
     <div class="nt-bind" id="noteBind"></div>
     <input class="txt" id="noteTitle" placeholder="Название (если пусто — первая строка текста)" maxlength="120" autocomplete="off">
     <textarea class="txt" id="noteBody" placeholder="Текст заметки…" spellcheck="true"></textarea>
+    <div class="nt-att" id="noteAtt">
+      <div class="nt-att-h"><b>Файлы</b><span class="hint" id="noteAttN" style="margin:0"></span><div class="spacer"></div><button class="btn" id="noteAttAdd" title="Прикрепить к заметке файл: фото, PDF, документ, таблицу">＋ Файл</button></div>
+      <div class="nt-att-l" id="noteAttList"></div>
+      <input type="file" id="noteAttIn" multiple class="hidden">
+    </div>
   </div>
   <div class="rules-foot"><span class="hint" id="noteSt"></span><button class="btn no-android" id="noteFolder" title="Показать файл заметки в папке">В папке</button><button class="btn" id="notePin">Закрепить</button><button class="btn" id="noteDel">Удалить</button></div>
 </div></div>
@@ -2267,17 +2539,40 @@ const VIEWDEF = {
   search: {name: "Поиск", opts: [
     V_DENS,
     {k: "hits", t: "Найденные фрагменты", v: [["all", "Все"], ["one", "Только первый"], ["off", "Скрыть"]]},
+    {k: "snip", t: "Длина фрагмента", v: [["three", "Три строки"], ["two", "Две строки"], ["full", "Целиком"]]},
+    {k: "focus", t: "Курсор в строке поиска при входе", n: "На телефоне при этом сразу открывается клавиатура", v: [["auto", "Только на компьютере"], ["always", "Всегда"], ["never", "Никогда"]]},
+    {k: "pin", t: "Строка поиска остаётся сверху (на телефоне)", b: 1},
     {h: "Показывать"},
-    {k: "path", t: "Путь к файлу", b: 1}, {k: "acts", t: "Кнопки у результата", b: 1}]},
+    {k: "recent", t: "Недавние запросы", b: 1}, {k: "badge", t: "Значок типа файла (PDF, DOCX…)", b: 1}, {k: "size", t: "Размер файла", b: 1}, {k: "path", t: "Путь к файлу", b: 1},
+    {k: "dups", t: "«Такой же файл есть ещё в…»", b: 1}, {k: "acts", t: "Кнопки у результата", b: 1}]},
   news: {name: "Что нового", opts: [
     V_DENS,
-    {k: "detail", t: "Подробности", v: [["full", "Полностью"], ["two", "Две строки"], ["off", "Скрыть"]]},
+    {k: "detail", t: "Подробности", n: "Нажатие на карточку раскрывает текст целиком", v: [["two", "Две строки"], ["full", "Полностью"], ["off", "Скрыть"]]},
+    {k: "days", t: "Разбивка по дням", v: [["on", "С заголовками дней"], ["off", "Одним списком"]]},
+    {k: "merge", t: "Сворачивать однотипное", n: "Три и больше новых файла или материала одного курса за день — одной строкой", b: 1},
+    {k: "status", t: "«Moodle не отвечает / работает»", v: [["line", "Тонкой строкой"], ["card", "Карточкой"], ["off", "Не показывать"]]},
+    {k: "sticky", t: "Заголовок дня остаётся сверху при прокрутке", b: 1},
     {h: "Показывать"},
+    {k: "tint", t: "Цвет карточки по типу события", b: 1}, {k: "kind", t: "Метку типа", b: 1}, {k: "course", t: "Название курса", b: 1}, {k: "time", t: "Время", b: 1},
     {k: "files", t: "Список файлов", b: 1}, {k: "acts", t: "Кнопки действий", b: 1}, {k: "dim", t: "Прочитанное бледнее", b: 1}]},
   calendar: {name: "Календарь", opts: [
     V_DENS,
+    {k: "sticky", t: "Заголовок дня остаётся сверху при прокрутке", b: 1},
+    {k: "fopen", t: "Фильтры на телефоне", v: [["shut", "Свёрнуты под кнопкой"], ["open", "Всегда открыты"]]},
     {h: "Показывать"},
-    {k: "chips", t: "Счётчики сверху", b: 1}, {k: "sub", t: "Курс и подпись под названием", b: 1}, {k: "left", t: "Сколько осталось («через 5 ч»)", b: 1}]},
+    {k: "chips", t: "Счётчики сверху", b: 1}, {k: "bar", t: "Кнопки сверху (на телефоне)", b: 1}, {k: "dcount", t: "Сколько дел в заголовке дня", b: 1},
+    {k: "sub", t: "Курс и подпись под названием", b: 1}, {k: "left", t: "Сколько осталось («через 5 ч»)", b: 1},
+    {h: "Пары в повестке"},
+    {k: "end", t: "Время окончания", b: 1}, {k: "room", t: "Аудиторию и корпус", b: 1}, {k: "teacher", t: "Преподавателя", b: 1}, {k: "past", t: "Уже прошедшие сегодня", b: 1}]},
+  grades: {name: "Успеваемость", opts: [
+    V_DENS,
+    {k: "sort", t: "Порядок предметов", v: [["doc", "Как в ведомости"], ["wait", "Сначала ждущие оценки"], ["done", "Сначала с оценкой"], ["name", "По названию"]]},
+    {k: "sum", t: "Сводка вверху", v: [["full", "Полная"], ["compact", "Компактная"], ["off", "Скрыть"]]},
+    {h: "Показывать"},
+    {k: "dyn", t: "График среднего балла по семестрам", n: "Столбики — нажмите, чтобы открыть семестр", b: 1}, {k: "semavg", t: "Средний балл на кнопках семестров", b: 1},
+    {k: "honors", t: "Подсказку про диплом с отличием", n: "Доля пятёрок и число троек — по общему правилу; точные условия смотрите в положении вуза", b: 1, d: 0},
+    {h: "В строке предмета"},
+    {k: "control", t: "Вид контроля (экзамен, зачёт…)", b: 1}, {k: "zet", t: "ЗЕТ", b: 1}, {k: "date", t: "Дату сдачи", b: 1}, {k: "bar", t: "Цветную полоску слева", b: 1}]},
   electives: {name: "Элективы", opts: [
     V_DENS,
     {h: "Показывать"},
@@ -2316,6 +2611,8 @@ function vAfter(sec, k){                                 // что нельзя 
   if (sec === "courses" && (k === "sort" || k === "group" || k === "onlydl")) renderGrid();
   else if (sec === "course" && k === "sections" && CV) { CV.tg = null; renderCourse(); }
   else if (sec === "notes" && k === "sort") renderNotes(NT.list.length);
+  else if (sec === "news" && (k === "merge" || k === "status") && NW) renderNews();
+  else if (sec === "grades" && (k === "sort" || k === "control" || k === "zet" || k === "date") && GR && GR.has) renderGrList();
   else if (sec === "schedule") vSchedPing();
 }
 function vSchedPing(){ try { const f = $("#schFrame"); if (f && f.contentWindow) f.contentWindow.postMessage({moView: 1}, location.origin); } catch (e) {} }
@@ -2672,7 +2969,7 @@ function ntCard(n){
   return `<div class="ntc${n.pinned ? " pin" : ""}${on ? " sel" : ""}" data-id="${id}">
     <label class="ntc-ck" title="Выбрать"><input type="checkbox" data-ck="${id}"${on ? " checked" : ""} aria-label="Выбрать заметку «${esc(n.title)}»"></label>
     <button class="ntc-main" data-nt="${id}"><div class="ntc-t">${n.pinned ? "📌 " : ""}${esc(n.title)}</div>
-      <div class="ntc-m">${esc(ntBindText(n))} · ${esc(ntWhen(n.updated))}</div>${n.preview ? `<div class="ntc-p">${esc(n.preview)}</div>` : ""}</button>
+      <div class="ntc-m">${esc(ntBindText(n))} · ${esc(ntWhen(n.updated))}${n.att ? ` · <span class="att" title="Прикреплённые файлы">📎 ${n.att}</span>` : ""}</div>${n.preview ? `<div class="ntc-p">${esc(n.preview)}</div>` : ""}</button>
     <div class="ntc-act">
       <button class="icon-btn${n.pinned ? " on" : ""}" data-act="pin" title="${n.pinned ? "Открепить" : "Закрепить"}" aria-label="${n.pinned ? "Открепить" : "Закрепить"}" aria-pressed="${!!n.pinned}">${ntIco.pin(n.pinned)}</button>
       <button class="icon-btn no-android" data-act="folder" title="Показать файл в папке" aria-label="Показать файл в папке">${ntIco.folder}</button>
@@ -2772,6 +3069,7 @@ async function openNote(id, bind){
     n = j.note;
   } else n = {id: null, title: "", body: "", pinned: false, course: bind ? bind.course : null, course_name: bind ? bind.course_name : "", item: bind ? bind.item || null : null, item_name: bind ? bind.item_name || "" : "", path: ""};
   NT.cur = {id: n.id, pinned: !!n.pinned, course: n.course, course_name: n.course_name, item: n.item, item_name: n.item_name, path: n.path};
+  NT.files = n.files || []; NT.up = []; ntFilesRender();
   $("#noteHead").textContent = id ? "Заметка" : "Новая заметка"; $("#noteBind").textContent = ntBindText(n);
   $("#noteTitle").value = n.title || ""; $("#noteBody").value = n.body || "";
   $("#notePin").textContent = n.pinned ? "Открепить" : "Закрепить"; $("#noteDel").classList.toggle("hidden", !n.id); $("#noteFolder").classList.toggle("hidden", !n.id);
@@ -2824,6 +3122,84 @@ addEventListener("pagehide", () => {          // окно закрывают, п
   if (!NT.cur || !NT.dirty) return;
   try { fetch("/api/notes/save", {method: "POST", keepalive: true, headers: {"X-Token": T, "Content-Type": "application/json"}, body: JSON.stringify(ntBody())}); } catch (e) {}
 });
+/* файлы в заметке: ＋ Файл, перетаскивание (компьютер), вставка картинки из буфера; едут по одному, чтобы не нагружать телефон */
+NT.files = []; NT.up = []; NT.askDel = "";
+const NT_FILE_MAX = 50 * 1048576, NT_FILE_COUNT = 30;
+const ntExt = name => ((/\.([^./\\]{1,6})$/.exec(name) || [])[1] || "").slice(0, 4);
+function ntFilesRender(){
+  const list = $("#noteAttList"); if (!list) return;
+  const done = NT.files.map((f, i) => `<div class="nt-f" data-fi="${i}"><span class="nt-f-i" aria-hidden="true">${esc(ntExt(f.name) || "•")}</span>
+      <button class="nt-f-n" data-fopen="${i}" title="Открыть «${esc(f.name)}»"><b>${esc(f.name)}</b><small>${esc(hsize(f.size))}</small></button>
+      <button class="icon-btn nt-f-x${NT.askDel === f.name ? " ask" : ""}" data-fdel="${i}" title="Убрать файл из заметки" aria-label="Убрать файл «${esc(f.name)}»">${NT.askDel === f.name ? "Убрать?" : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'}</button></div>`);
+  const up = NT.up.map(u => `<div class="nt-f up${u.err ? " bad" : ""}"><span class="nt-f-i" aria-hidden="true">${esc(ntExt(u.name) || "•")}</span>
+      <div class="nt-f-n"><b>${esc(u.name)}</b><small>${u.err ? esc(u.err) : "передаю… " + Math.round(u.pct) + " %"}</small></div>${u.err ? `<button class="icon-btn nt-f-x" data-fgone="${u.id}" aria-label="Убрать сообщение">✕</button>` : ""}${u.err ? "" : `<i class="pg" style="width:${u.pct}%"></i>`}</div>`);
+  list.innerHTML = done.concat(up).join("");
+  const n = NT.files.length; $("#noteAttN").textContent = n ? (n + " " + (n % 10 === 1 && n !== 11 ? "файл" : n % 10 >= 2 && n % 10 <= 4 && (n < 10 || n > 20) ? "файла" : "файлов")) : "";
+}
+function ntUpload(f, id){   // XHR, а не fetch: только он умеет показывать, сколько файла уже уехало
+  return new Promise(res => {
+    const u = {id: Math.random().toString(36).slice(2), name: f.name || "файл", pct: 0, err: ""}; NT.up.push(u); ntFilesRender();
+    const x = new XMLHttpRequest();
+    x.open("POST", `/api/notes/attach?t=${encodeURIComponent(T)}&id=${encodeURIComponent(id)}&name=${encodeURIComponent(u.name)}`);
+    x.upload.onprogress = e => { if (e.lengthComputable) { u.pct = e.loaded * 100 / e.total; ntFilesRender(); } };
+    const fail = m => { u.err = m; ntFilesRender(); res(false); };
+    x.onerror = () => fail("не передался: нет связи с программой");
+    x.onload = () => {
+      let j = null; try { j = JSON.parse(x.responseText); } catch (e) {}
+      if (!j || !j.ok) return fail((j && j.error) || "не удалось прикрепить");
+      NT.up = NT.up.filter(z => z !== u); if (NT.cur && NT.cur.id === id) NT.files = j.files; ntFilesRender(); res(true);
+    };
+    x.send(f);
+  });
+}
+async function ntAttach(fileList){
+  const fs = [...(fileList || [])].filter(f => f && f.size >= 0); if (!fs.length || !NT.cur) return;
+  const ok = [];
+  for (const f of fs) {
+    if (!f.size) { toast(`«${f.name}»: файл пустой`, "bad"); continue; }
+    if (f.size > NT_FILE_MAX) { toast(`«${f.name}» больше ${NT_FILE_MAX / 1048576} МБ — такой файл к заметке не прикрепить`, "bad"); continue; }
+    ok.push(f);
+  }
+  if (!ok.length) return;
+  if (NT.files.length + NT.up.length + ok.length > NT_FILE_COUNT) { toast(`К заметке можно прикрепить не больше ${NT_FILE_COUNT} файлов`, "bad"); return; }
+  if (!NT.cur.id) {                                         // у новой заметки ещё нет номера: создаём её (если пусто — называем по первому файлу)
+    const t = $("#noteTitle"); if (!t.value.trim() && !$("#noteBody").value.trim()) t.value = (ok[0].name || "Файл").replace(/\.[^.]+$/, "").slice(0, 100) || "Файл";
+    await ntSave();
+    if (!NT.cur || !NT.cur.id) { toast("Не удалось сохранить заметку — файл пока не прикрепить", "bad"); return; }
+  }
+  const id = NT.cur.id; let n = 0;
+  for (const f of ok) if (await ntUpload(f, id)) n++;
+  if (n) toast(n === 1 ? "Файл прикреплён" : `Прикреплено файлов: ${n}`, "ok");
+}
+$("#noteAttAdd").onclick = () => $("#noteAttIn").click();
+$("#noteAttIn").onchange = () => { const fs = [...$("#noteAttIn").files]; $("#noteAttIn").value = ""; ntAttach(fs); };
+$("#noteAttList").onclick = async e => {
+  const g = e.target.closest("[data-fgone]"); if (g) { NT.up = NT.up.filter(u => u.id !== g.dataset.fgone); ntFilesRender(); return; }
+  const op = e.target.closest("[data-fopen]");
+  if (op) {
+    const f = NT.files[+op.dataset.fopen]; if (!f) return;
+    if (PREVIEWABLE.test(f.name)) { $("#modal").style.zIndex = "52"; return preview(f.path); }       // поверх окна заметки (как файл из ответа нейросети)
+    const r = await api("/api/open", {path: f.path});
+    if (!r.ok) { toast(r.risky ? "Программа сама не запускает такие файлы (.exe, .bat…) — откройте его из папки" : (r.error || "Файл не найден"), "bad"); if (r.risky) api("/api/open", {path: f.path, reveal: true}); }
+    return;
+  }
+  const d = e.target.closest("[data-fdel]"); if (!d) return;
+  const f = NT.files[+d.dataset.fdel]; if (!f || !NT.cur || !NT.cur.id) return;
+  if (NT.askDel !== f.name) { NT.askDel = f.name; ntFilesRender(); setTimeout(() => { if (NT.askDel === f.name) { NT.askDel = ""; ntFilesRender(); } }, 3500); return; }   // второе нажатие подряд — убрать
+  NT.askDel = "";
+  const r = await api("/api/notes/detach", {id: NT.cur.id, name: f.name});
+  if (!r.ok) toast(r.error || "Не удалось убрать файл", "bad"); else NT.files = r.files;
+  ntFilesRender();
+};
+(() => {                                                    // перетаскивание файлов в окно заметки (на компьютере) и картинка из буфера в тексте
+  const box = $("#noteModal .nt-box"); let depth = 0;
+  const has = e => e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files");
+  box.addEventListener("dragenter", e => { if (has(e)) { depth++; box.classList.add("drag"); e.preventDefault(); } });
+  box.addEventListener("dragover", e => { if (has(e)) e.preventDefault(); });
+  box.addEventListener("dragleave", e => { if (has(e) && --depth <= 0) { depth = 0; box.classList.remove("drag"); } });
+  box.addEventListener("drop", e => { if (!has(e)) return; e.preventDefault(); depth = 0; box.classList.remove("drag"); ntAttach(e.dataTransfer.files); });
+  $("#noteBody").addEventListener("paste", e => { const fs = e.clipboardData && e.clipboardData.files; if (fs && fs.length) { e.preventDefault(); ntAttach(fs); } });
+})();
 /* заметки в окне курса */
 async function cvNotesRefresh(){
   if (!CV) return; const id = CV.c.id;
@@ -3207,9 +3583,9 @@ async function loadGrades(){ try { GR = await api("/api/lk"); } catch (e) { retu
 function grRowHtml(r, semN){                                   // одна строка предмета: название, «вид · ЗЕТ · дата», справа оценка
   const k = GR_KIND[r.gk] || "0", meta = [];
   if (semN) meta.push(semN + " сем.");
-  if (r.control) meta.push(esc(r.control));
-  if (r.zet != null) meta.push(grNum(r.zet) + " ЗЕТ");
-  if (r.date) meta.push(esc(r.date));
+  if (r.control && vGet("grades", "control")) meta.push(esc(r.control));
+  if (r.zet != null && vGet("grades", "zet")) meta.push(grNum(r.zet) + " ЗЕТ");
+  if (r.date && vGet("grades", "date")) meta.push(esc(r.date));
   const word = esc(r.grade || "ещё нет оценки");
   const mark = r.gk === "none" ? '<span class="gv-wait">ждёт</span>'
     : /^[2-5]$/.test(r.gk) ? `<span class="gv-g gb${r.gk}" title="${word}" aria-label="${word}">${r.gk}</span>`
@@ -3221,7 +3597,11 @@ function grVisibleRows(p, sem){                                // строки �
   const src = q ? p.semesters.map(x => ({n: x.n, rows: x.rows.filter(r => r.subject.toLowerCase().includes(q))})) : [{n: 0, rows: sem.rows}];
   for (const g of src) for (const r of g.rows) all.push({r, n: g.n});
   const part = {all, done: all.filter(x => x.r.gk !== "none"), wait: all.filter(x => x.r.gk === "none")};
-  return {q, part, rows: part[grFilter] || all};
+  const rows = (part[grFilter] || all).slice(), so = vGet("grades", "sort");
+  if (so === "wait") rows.sort((a, b) => (b.r.gk === "none") - (a.r.gk === "none"));        // стабильная сортировка: порядок ведомости внутри групп сохраняется
+  else if (so === "done") rows.sort((a, b) => (a.r.gk === "none") - (b.r.gk === "none"));
+  else if (so === "name") rows.sort((a, b) => a.r.subject.localeCompare(b.r.subject, "ru"));
+  return {q, part, rows};
 }
 function renderGrList(){                                       // только список: поиск и фильтр не должны перерисовывать полоску семестров и поле ввода
   const s = GR; if (!s || !s.has) return;
@@ -3255,6 +3635,12 @@ function renderGrades(){
   const sem = p.semesters.find(x => x.n === grSem) || p.semesters[0];
   const old = $("#gvSems"), keep = old ? old.scrollLeft : 0, pct = st.total ? Math.round(st.passed * 100 / st.total) : 0;
   const dist = [["5", st.n5], ["4", st.n4], ["3", st.n3], ["2", st.n2]].filter(x => x[1]).map(x => `<span class="gv-dc" title="Оценок «${x[0]}»: ${x[1]}"><b class="gb${x[0]}">${x[0]}</b>×${x[1]}</span>`).join("");
+  const dyn = sm.semesters.filter(x => x.stats.avg != null);
+  const dynHtml = dyn.length < 2 ? "" : `<div class="gv-dynw"><small>Средний балл по семестрам</small><div class="gv-dyn" role="group" aria-label="Средний балл по семестрам (шкала от 2 до 5)">` + sm.semesters.map(x => {
+    const a = x.stats.avg, hgt = a == null ? 0 : Math.max(8, Math.round((a - 2) / 3 * 100));
+    return `<button class="gv-db${x.n === sem.n ? " on" : ""}${a == null ? " none" : ""}" data-sem="${x.n}" title="${x.n} семестр: ${a == null ? "оценок ещё нет" : "средний балл " + grNum(a)}" aria-label="${x.n} семестр: ${a == null ? "оценок ещё нет" : "средний балл " + grNum(a)}"><em>${a == null ? "" : grNum(a)}</em><span><i style="height:${hgt}%"></i></span><b>${x.n}</b></button>`;
+  }).join("") + `</div></div>`;
+  const gr5 = st.n5 + st.n4 + st.n3 + st.n2, honors = gr5 ? `<div class="gv-hon">Пятёрок: <b>${Math.round(st.n5 * 100 / gr5)} %</b> из ${gr5} ${calPl(gr5, "оценки", "оценок", "оценок")} · троек: <b>${st.n3}</b>${st.n2 ? ` · двоек: <b>${st.n2}</b>` : ""}<small>Для диплома с отличием по общему правилу нужно не менее 75 % оценок «отлично», остальные «хорошо» (плюс итоговая аттестация на «отлично»). Условия СевГУ уточните в положении.</small></div>` : "";
   let h = '<div class="gv-sum">';
   h += progs.length > 1 ? `<select class="txt" id="grProg" aria-label="Программа">${progs.map((x, i) => `<option value="${i}"${i === grProg ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select>`
                         : `<div class="gv-prog">${esc(p.name)}</div>`;
@@ -3262,8 +3648,8 @@ function renderGrades(){
      + `<div><small>Сдано</small><b>${st.passed}<i> из ${st.total}</i></b></div>`
      + `<div><small>ЗЕТ</small><b>${grNum(st.zet_done)}<i> из ${grNum(st.zet_all)}</i></b></div></div>`
      + `<div class="gv-meter" title="Сдано ${pct}%"><i style="width:${pct}%"></i></div>`
-     + `<div class="gv-dist">${dist}<span>${st.left ? "без оценки: " + st.left : "всё сдано"}${st.failed ? " · не сдано: " + st.failed : ""}</span></div></div>`;
-  h += '<div class="gv-sems" id="gvSems">' + sm.semesters.map(x => `<button class="gv-sem${x.n === sem.n ? " on" : ""}" data-sem="${x.n}" aria-pressed="${x.n === sem.n}"><b>${x.n} семестр</b><small>${x.stats.passed} из ${x.stats.total}</small><i style="width:${x.stats.total ? Math.round(x.stats.passed * 100 / x.stats.total) : 0}%"></i></button>`).join("") + "</div>";
+     + `<div class="gv-dist">${dist}<span>${st.left ? "без оценки: " + st.left : "всё сдано"}${st.failed ? " · не сдано: " + st.failed : ""}</span></div>${dynHtml}${honors}</div>`;
+  h += '<div class="gv-sems" id="gvSems">' + sm.semesters.map(x => `<button class="gv-sem${x.n === sem.n ? " on" : ""}" data-sem="${x.n}" aria-pressed="${x.n === sem.n}"><b>${x.n} семестр</b><small>${x.stats.passed} из ${x.stats.total}</small><small class="gv-sa">${x.stats.avg == null ? "&nbsp;" : "ср. " + grNum(x.stats.avg)}</small><i style="width:${x.stats.total ? Math.round(x.stats.passed * 100 / x.stats.total) : 0}%"></i></button>`).join("") + "</div>";
   h += `<div class="gv-flt"><div class="gv-seg" id="gvSeg"><button data-f="all">Все<small></small></button><button data-f="done">С оценкой<small></small></button><button data-f="wait">Ждут<small></small></button></div>`
      + `<button class="icon-btn" id="gvQBtn" aria-label="Найти предмет" aria-pressed="${grQOpen || !!grQ}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg></button></div>`
      + `<div class="gv-qrow${grQOpen || grQ ? "" : " hidden"}"><input class="txt" id="gvQ" type="search" placeholder="Найти предмет во всех семестрах" value="${esc(grQ)}" autocomplete="off"></div>`
@@ -3345,15 +3731,58 @@ function renderNewsBadge(n){
 }
 const PREVIEWABLE = /\.(html?|pdf|txt|png|jpe?g|gif|svg|webp)$/i;
 function nwWhen(ts){ return new Date(ts * 1000).toLocaleString("ru-RU", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}); }
+const NW_STATUS = new Set(["moodle_down", "moodle_up"]), NW_MERGE = new Set(["file_new", "item_new"]), NWG = new Set();   // NWG — какие свёрнутые группы раскрыты
+const nwTime = ts => new Date(ts * 1000).toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"});
+function nwDay(ts){
+  const d = new Date(ts * 1000), t = new Date(), y0 = new Date(t.getFullYear(), t.getMonth(), t.getDate()), d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = Math.round((y0 - d0) / 864e5), base = d.toLocaleDateString("ru-RU", {day: "numeric", month: "long"}), wd = d.toLocaleDateString("ru-RU", {weekday: "long"});
+  return {key: d0.getTime(), rel: diff === 0 ? "Сегодня" : diff === 1 ? "Вчера" : "", base: base + (diff > 1 || diff < 0 ? ", " + wd : "")};
+}
 function nwCard(e){
   const [lbl, col] = NW_KIND[e.kind] || [e.kind, "#8a93a3"];
   const files = (e.files || []).length ? `<div class="nf">Файлы: ${e.files.map(esc).join(", ")}</div>` : "";
-  return `<div class="nw ${e.read ? "read" : "unread"}" data-id="${esc(e.id)}"><div class="nb">
-    <div class="nt"><span class="nk" style="background:${col}">${esc(lbl)}</span>${esc(e.title)}</div>
-    <div class="nm">${esc(e.course)} · ${nwWhen(e.ts)}</div>
+  return `<div class="nw ${e.read ? "read" : "unread"}" data-id="${esc(e.id)}" style="--kc:${col}"><div class="nb">
+    <div class="nm"><span class="nk">${esc(lbl)}</span><span class="nc">${esc(e.course)}</span><time><span class="d">${nwWhen(e.ts).slice(0, 6)}</span>${nwTime(e.ts)}</time>${e.read ? "" : `<button class="nw-rd" data-a="read" title="Отметить прочитанным" aria-label="Отметить прочитанным"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>`}</div>
+    <div class="nt">${esc(e.title)}</div>
     ${e.detail ? `<div class="nd">${esc(e.detail)}</div>` : ""}${files}
-    <div class="na">${e.path ? `<button class="btn" data-a="open">${e.old_path ? "Открыть новый" : "Открыть копию"}</button>` : ""}${e.old_path ? `<button class="btn" data-a="old">Открыть прежний</button>` : ""}${e.url ? `<button class="btn" data-a="site">На сайте</button>` : ""}${e.read ? "" : `<button class="btn ghost" data-a="read">Прочитано</button>`}</div>
+    <div class="na">${e.path ? `<button class="btn" data-a="open">${e.old_path ? "Открыть новый" : "Открыть копию"}</button>` : ""}${e.old_path ? `<button class="btn" data-a="old">Открыть прежний</button>` : ""}${e.url ? `<button class="btn" data-a="site">На сайте</button>` : ""}</div>
   </div></div>`;
+}
+function nwStatusLine(e){
+  const [lbl, col] = NW_KIND[e.kind] || [e.kind, "#8a93a3"];
+  return `<div class="nw-st ${e.kind === "moodle_down" ? "down" : "up"}${e.read ? " read" : ""}" data-id="${esc(e.id)}" style="--kc:${col}"><i></i><time>${nwTime(e.ts)}</time><span>${esc(lbl)}</span></div>`;
+}
+function nwGroup(list, key){      // «Новый файл · 12» — свернуто одной строкой, по нажатию раскрывается
+  const e0 = list[0], [lbl, col] = NW_KIND[e0.kind] || [e0.kind, "#8a93a3"], unread = list.filter(x => !x.read).length, open = NWG.has(key);
+  const noun = e0.kind === "file_new" ? calPl(list.length, "новый файл", "новых файла", "новых файлов") : calPl(list.length, "новый материал", "новых материала", "новых материалов");
+  return `<div class="nw nw-g ${unread ? "unread" : "read"}${open ? " open" : ""}" data-gk="${esc(key)}" style="--kc:${col}">
+    <button class="nw-gh" data-a="grp" aria-expanded="${open}"><span class="nk">${esc(lbl)}</span><span class="gt"><b>${list.length}</b> ${noun}<small>${esc(e0.course)} · ${nwTime(list[list.length - 1].ts)}–${nwTime(e0.ts)}${unread ? ` · новых: ${unread}` : ""}</small></span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    ${open ? `<div class="nw-gl">${list.map(nwCard).join("")}<div class="nw-ga">${unread ? `<button class="btn ghost" data-a="readgrp" data-ids="${esc(list.filter(x => !x.read).map(x => x.id).join(","))}">Отметить группу прочитанной</button>` : ""}</div></div>` : ""}</div>`;
+}
+function renderNews(){
+  const ev = (NW.events || []).slice().sort((a, b) => b.ts - a.ts), status = vGet("news", "status"), merge = vGet("news", "merge");
+  const days = []; let cur = null;
+  for (const e of ev) {
+    if (NW_STATUS.has(e.kind) && status === "off") continue;
+    const d = nwDay(e.ts);
+    if (!cur || cur.key !== d.key) { cur = {...d, items: []}; days.push(cur); }
+    cur.items.push(e);
+  }
+  let h = "";
+  for (const d of days) {
+    const unread = d.items.filter(x => !x.read).length;
+    h += `<div class="nw-day"><b>${esc(d.rel || d.base)}</b>${d.rel ? `<span>${esc(d.base)}</span>` : ""}<em>${d.items.length} ${calPl(d.items.length, "событие", "события", "событий")}${unread ? ` · новых: ${unread}` : ""}</em></div>`;
+    for (let i = 0; i < d.items.length;) {
+      const e = d.items[i];
+      if (NW_STATUS.has(e.kind) && status === "line") { h += nwStatusLine(e); i++; continue; }
+      if (merge && NW_MERGE.has(e.kind)) {
+        let j = i; while (j < d.items.length && d.items[j].kind === e.kind && d.items[j].course === e.course) j++;
+        if (j - i >= 3) { h += nwGroup(d.items.slice(i, j), `${d.key}|${e.kind}|${e.course}`); i = j; continue; }
+      }
+      h += nwCard(e); i++;
+    }
+  }
+  $("#nwList").innerHTML = h || `<div class="empty">${NW.total ? "По этому фильтру ничего нет." : "Пока пусто. Лента заполнится после следующей загрузки или быстрой синхронизации — когда преподаватели что-нибудь добавят."}</div>`;
 }
 async function loadNews(){
   const kind = $("#nwKind").value || "", course = $("#nwCourse").value || "";
@@ -3362,20 +3791,28 @@ async function loadNews(){
   const cur = $("#nwCourse").value;
   $("#nwCourse").innerHTML = '<option value="">Все курсы</option>' + NW.courses.map(c => `<option value="${c.id}">${esc(c.name)} (${c.count})</option>`).join("");
   $("#nwCourse").value = cur;
-  $("#nwUnread").classList.toggle("on", nwUnreadOnly);
+  $$("#nwSeg button").forEach(b => b.classList.toggle("on", (b.dataset.nu === "1") === nwUnreadOnly));
+  $("#nwSeg [data-nu='1']").textContent = NW.unread ? `Новые · ${NW.unread}` : "Новые";
   $("#nwInfo").textContent = NW.total ? `непрочитано ${NW.unread} из ${NW.total}` : "";
   $("#nwReadAll").disabled = !NW.unread;
-  $("#nwList").innerHTML = NW.events.length ? NW.events.map(nwCard).join("")
-    : `<div class="empty">${NW.total ? "По этому фильтру ничего нет." : "Пока пусто. Лента заполнится после следующей загрузки или быстрой синхронизации — когда преподаватели что-нибудь добавят."}</div>`;
+  renderNews();
   renderNewsBadge(NW.unread);
 }
 $("#nwKind").onchange = $("#nwCourse").onchange = loadNews;
-$("#nwUnread").onclick = () => { nwUnreadOnly = !nwUnreadOnly; loadNews(); };
+$("#nwSeg").onclick = e => { const b = e.target.closest("[data-nu]"); if (!b) return; const on = b.dataset.nu === "1"; if (on === nwUnreadOnly) return; nwUnreadOnly = on; loadNews(); };
+$("#nwSetBtn").onclick = () => openNewsSettings();
 $("#nwReadAll").onclick = async () => { await api("/api/news/read", {ids: "all"}); loadNews(); };
 $("#nwList").onclick = async ev => {
-  const b = ev.target.closest("button[data-a]"); if (!b) return;
-  const card = b.closest(".nw"), e = NW.events.find(x => x.id === card.dataset.id); if (!e) return;
+  const b = ev.target.closest("button[data-a]");
+  if (!b) {                                       // нажатие на саму карточку — раскрыть/свернуть текст
+    const c = ev.target.closest(".nw:not(.nw-g)");
+    if (c && !ev.target.closest("a,.na")) c.classList.toggle("open");
+    return;
+  }
   const a = b.dataset.a;
+  if (a === "grp") { const k = b.closest(".nw-g").dataset.gk; NWG.has(k) ? NWG.delete(k) : NWG.add(k); renderNews(); return; }
+  if (a === "readgrp") { await api("/api/news/read", {ids: b.dataset.ids.split(",")}); loadNews(); return; }
+  const card = b.closest(".nw"), e = NW.events.find(x => x.id === card.dataset.id); if (!e) return;
   if (a === "site") openUrl(e.url);
   else if (a === "open") { PREVIEWABLE.test(e.path) ? preview(e.path) : api("/api/open", {path: e.path}).then(r => r.ok || toast(r.error || "Файл не найден", "bad")); }
   else if (a === "old") { PREVIEWABLE.test(e.old_path) ? preview(e.old_path) : api("/api/open", {path: e.old_path}).then(r => r.ok || toast(r.error || "Файл не найден", "bad")); }
@@ -3461,6 +3898,9 @@ function renderSearchSide(){
     if (SI.last && !SI.last.ok) h += `<div class="sqw">${esc(SI.last.text)}</div>`;
   }
   $("#sqStatus").innerHTML = h;
+  const ib = $("#sqIdxB");
+  ib.textContent = run ? (p.total ? `Индексирую ${Math.round(p.done * 100 / p.total)} %` : "Индексирую…") : !st.exists ? "Индекса нет" : `Индекс: ${st.docs} ${st.docs % 10 === 1 && st.docs % 100 !== 11 ? "файл" : (st.docs % 10 >= 2 && st.docs % 10 <= 4 && (st.docs % 100 < 10 || st.docs % 100 >= 20)) ? "файла" : "файлов"}`;
+  ib.classList.toggle("warn", !st.exists && !run);
   $("#sqUpdate").disabled = $("#sqRebuild").disabled = run;
   const stop = $("#sqStop"); if (stop) stop.onclick = () => api("/api/search/stop", {});
   const why = $("#sqWhy"); if (why) why.onclick = e => { e.preventDefault(); openSearchSettings(); };
@@ -3479,19 +3919,29 @@ function renderSearchRun(p){
 async function openSearchTab(){
   if (!SI) await loadSearchInfo(); else renderSearchSide();
   loadSearchInfo();   // свежие цифры
-  setTimeout(() => $("#sqIn").focus(), 50);
+  const fm = vGet("search", "focus");
+  if (fm === "always" || (fm === "auto" && !matchMedia("(pointer:coarse)").matches)) setTimeout(() => $("#sqIn").focus(), 50);   // на телефоне клавиатура сама не выскакивает: она закрывает половину экрана
   if (!$("#sqIn").value.trim()) renderSearchEmpty();
+}
+const SQ_RECENT = "mo_sq_recent";
+function sqRecent(){ try { const a = JSON.parse(localStorage.getItem(SQ_RECENT) || "[]"); return Array.isArray(a) ? a.filter(x => typeof x === "string" && x).slice(0, 8) : []; } catch (e) { return []; } }
+function sqRemember(q){
+  q = (q || "").trim().slice(0, 120); if (!q) return;
+  const a = [q, ...sqRecent().filter(x => x.toLowerCase() !== q.toLowerCase())].slice(0, 8);
+  try { localStorage.setItem(SQ_RECENT, JSON.stringify(a)); } catch (e) {}
 }
 function renderSearchEmpty(){
   $("#sqInfo").textContent = "";
-  const has = SI && SI.status.exists;
-  $("#sqList").innerHTML = `<div class="empty" style="text-align:left;max-width:560px;margin:0 auto">
+  const has = SI && SI.status.exists, rc = sqRecent();
+  const recent = has && rc.length ? `<div class="sq-recent"><div class="sq-rh"><b>Недавние запросы</b><button class="link" id="sqRcClear">очистить</button></div><div class="sq-rl">${rc.map((x, i) => `<button class="chip" data-rc="${i}">${esc(x)}</button>`).join("")}</div></div>` : "";
+  $("#sqList").innerHTML = recent + `<div class="empty" style="text-align:left;max-width:560px;margin:0 auto">
     <b>${has ? "Что искать" : "Сначала построим индекс"}</b><br><br>
     ${has ? `Слова из лекций и заданий, названия файлов, фамилии из таблиц.<br><br>
     • несколько слов — найдутся места, где есть <b>все</b> сразу<br>
     • <b>"точная фраза"</b> — слова подряд, в таком порядке<br>
     • <b>-слово</b> — исключить то, где оно встречается<br>
-    • окончания не важны: «лекция» найдёт «лекции» и «лекций»; е и ё — одно и то же` : "Нажмите «Обновить индекс» (кнопка на этой же странице): программа прочитает всё, что уже скачано. Это работает без интернета."}</div>`;
+    • окончания не важны: «лекция» найдёт «лекции» и «лекций»; е и ё — одно и то же` : `Программа прочитает всё, что уже скачано. Это работает без интернета.<br><br><button class="btn primary" id="sqBuild2">Построить индекс</button>`}</div>`;
+  const b2 = $("#sqBuild2"); if (b2) b2.onclick = () => startIndex(false);
 }
 async function doSearch(){
   const q = $("#sqIn").value.trim(); if (!q) { renderSearchEmpty(); return; }
@@ -3502,11 +3952,11 @@ async function doSearch(){
 }
 function sResCard(r, i){
   const [gt, col] = SG[r.group] || SG.other, ext = (r.ext || "").replace(".", "").toUpperCase() || "ФАЙЛ";
-  const hits = r.hits.map((h, j) => `<div class="sp" data-i="${i}" data-j="${j}">${h.loc ? `<span class="sloc">${esc(h.loc)}</span>` : ""}<span>${hl(h.snip)}</span></div>`).join("");
+  const hits = r.hits.map((h, j) => `<div class="sp" data-i="${i}" data-j="${j}">${h.loc ? `<span class="sloc">${esc(h.loc)}</span>` : ""}<span class="stx">${hl(h.snip)}</span></div>`).join("");
   const more = r.more ? `<div class="sn">…и ещё ${r.more} ${r.more % 10 === 1 && r.more !== 11 ? "фрагмент" : (r.more % 10 >= 2 && r.more % 10 <= 4 && (r.more < 10 || r.more > 20)) ? "фрагмента" : "фрагментов"} в этом файле</div>` : "";
-  const dups = r.dups.length ? `<div class="sn">Такой же файл есть ещё в: ${r.dups.slice(0, 3).map((d, k) => `<a data-i="${i}" data-d="${k}">${esc(d.split("/").slice(0, -1).join(" › "))}</a>`).join(", ")}${r.dups.length > 3 ? ` и ещё ${r.dups.length - 3}` : ""}</div>` : "";
-  return `<div class="sr" data-i="${i}"><div class="st"><span class="nk" style="background:${col}" title="${esc(gt)}">${esc(ext)}</span>${hl(r.name)}<span class="sx">${hsize(r.size)}</span></div>
-    <div class="sm">${esc(r.course)}${r.where ? " › " + hl(r.where) : ""}${r.by_name ? " · совпало название" : ""}</div>${hits}${more}${dups}
+  const dups = r.dups.length ? `<div class="sn sdup">Такой же файл есть ещё в: ${r.dups.slice(0, 3).map((d, k) => `<a data-i="${i}" data-d="${k}">${esc(d.split("/").slice(0, -1).join(" › "))}</a>`).join(", ")}${r.dups.length > 3 ? ` и ещё ${r.dups.length - 3}` : ""}</div>` : "";
+  return `<div class="sr" data-i="${i}"><div class="st" data-a="open" role="button" tabindex="0" title="Открыть файл"><span class="nk" style="background:${col}" title="${esc(gt)}">${esc(ext)}</span><span class="sname">${hl(r.name)}</span></div>
+    <div class="sm">${esc(r.course)}${r.where ? " › " + hl(r.where) : ""}${r.by_name ? " · совпало название" : ""}<span class="sx"> · ${hsize(r.size)}</span></div>${hits}${more}${dups}
     <div class="na"><button class="btn" data-a="open">Открыть</button><button class="btn" data-a="reveal">Показать в папке</button>${aiOn() && aiReadable(r.path) ? `<button class="btn" data-a="ai" title="Пересказать или составить вопросы по этому файлу">ИИ</button>` : ""}</div></div>`;
 }
 function renderSearchResults(r){
@@ -3540,23 +3990,28 @@ async function startIndex(full){
   SP = {running: true, phase: "scan", done: 0, total: 0, current: ""}; spWas = true; renderSearchSide();
 }
 $("#sqIn").oninput = () => { clearTimeout(SQtimer); SQtimer = setTimeout(doSearch, 280); };
-$("#sqIn").onkeydown = e => { if (e.key === "Enter") { clearTimeout(SQtimer); doSearch(); } };
-$("#sqGo").onclick = doSearch;
+$("#sqIn").onkeydown = e => { if (e.key === "Enter") { clearTimeout(SQtimer); sqRemember($("#sqIn").value); doSearch(); if (matchMedia("(pointer:coarse)").matches) $("#sqIn").blur(); } };   // на телефоне после «Найти» клавиатура убирается — иначе она закрывает результаты
+$("#sqGo").onclick = () => { sqRemember($("#sqIn").value); doSearch(); if (matchMedia("(pointer:coarse)").matches) $("#sqIn").blur(); };
 $("#sqCourse").onchange = $("#sqOrder").onchange = doSearch;
 $("#sqTypes").onclick = e => { const b = e.target.closest("[data-g]"); if (!b) return; const g = b.dataset.g; SQgroups.has(g) ? SQgroups.delete(g) : SQgroups.add(g); b.classList.toggle("on"); doSearch(); };
 $("#sqUpdate").onclick = () => startIndex(false);
 $("#sqRebuild").onclick = () => { if (confirm("Пересобрать индекс с нуля? Все файлы будут прочитаны заново — это может занять несколько минут.")) startIndex(true); };
 $("#sqSettings").onclick = openSearchSettings;
 $("#sqList").onclick = e => {
+  const rc = e.target.closest("[data-rc]");
+  if (rc) { const q = sqRecent()[+rc.dataset.rc]; if (q) { $("#sqIn").value = q; doSearch(); } return; }
+  if (e.target.closest("#sqRcClear")) { try { localStorage.removeItem(SQ_RECENT); } catch (x) {} renderSearchEmpty(); return; }
   const a = e.target.closest("[data-d]"), card = e.target.closest(".sr"); if (!card || !SQres) return;
   const r = SQres.results[+card.dataset.i]; if (!r) return;
   if (a) return sOpen(r.dups[+a.dataset.d], "");
-  const b = e.target.closest("button[data-a]"), hit = e.target.closest(".sp");
-  if (hit) return sOpen(r.path, r.hits[+hit.dataset.j].loc);
-  if (b && b.dataset.a === "open") sOpen(r.path, r.hits[0] ? r.hits[0].loc : "");
+  const b = e.target.closest("[data-a]"), hit = e.target.closest(".sp");
+  if (hit) { sqRemember($("#sqIn").value); return sOpen(r.path, r.hits[+hit.dataset.j].loc); }
+  if (b && b.dataset.a === "open") { sqRemember($("#sqIn").value); sOpen(r.path, r.hits[0] ? r.hits[0].loc : ""); }
   if (b && b.dataset.a === "reveal") api("/api/open", {path: r.path, reveal: true}).then(x => x.ok || toast(x.error || "Файл не найден", "bad"));
   if (b && b.dataset.a === "ai") openAi({tab: "doc", files: [r.path], title: r.name});
 };
+$("#sqList").onkeydown = e => { const t = e.target.closest(".st[data-a]"); if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); t.click(); } };
+$("#sqIdxB").onclick = () => { const el = $("#sqSide"); if (el) el.scrollIntoView({block: "start", behavior: "smooth"}); };
 $("#sqAi").onclick = () => openAi({tab: "ask", q: $("#sqIn").value.trim(), course: $("#sqCourse").value});
 
 let SS0 = null;
@@ -3607,20 +4062,35 @@ async function loadCal(){
   $("#calCourse").value = [...$("#calCourse").options].some(o => o.value === cur) ? cur : "0";
   renderCal();
 }
-function calRow(i){
+const calPl = (n, a, b, c) => n % 10 === 1 && n % 100 !== 11 ? a : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? b : c;
+function calRow(i, now){
   if (i.type === "lesson") {
-    const sub = [i.room, i.address, i.teacher].filter(Boolean).join(" · ");
-    return `<div class="crow lesson${i.past ? " past" : ""}"><span style="width:16px;flex:none"></span><div class="ctm">${esc(i.time)}–${esc(i.end)}</div><div><div class="ct">${esc(i.title)}</div>${sub ? `<div class="cs">${esc(sub)}</div>` : ""}</div></div>`;
+    const live = !i.past && now && i.ts <= now;
+    const sub = [i.room ? `<span class="cr">${esc(i.room)}</span>` : "", i.address ? `<span class="ca">${esc(i.address)}</span>` : "", i.teacher ? `<span class="cp">${esc(i.teacher)}</span>` : ""].join("");
+    return `<div class="crow lesson${i.past ? " past" : ""}${live ? " live" : ""}"><div class="ctm"><b>${esc(i.time)}</b><small class="ce">${esc(i.end)}</small></div><div class="cbd"><div class="ct">${esc(i.title)}${live ? '<span class="cnow">идёт сейчас</span>' : ""}</div>${sub ? `<div class="cs">${sub}</div>` : ""}</div><span class="cck-sp"></span></div>`;
   }
   const t = i.url ? `<a data-u="${esc(i.url)}" title="Открыть в Moodle">${esc(i.title)}</a>` : esc(i.title);
-  const sub = [i.cshort || i.course, i.label, i.action].filter(Boolean).map(esc).join(" · ") + (i.gone ? ' · <span title="Moodle убрал срок из календаря — обычно это значит, что работа сдана">убрано с сайта</span>' : "");
-  return `<div class="crow ${i.state}${i.done ? " done" : ""}${i.gone ? " gone" : ""}" data-id="${esc(i.id)}"><input type="checkbox" ${i.done ? "checked" : ""} title="Сделано"><div class="ctm">${esc(i.time || "")}</div>`
-    + `<div><div class="ct">${t}<span class="cl">${esc(i.left)}</span></div><div class="cs">${sub}</div></div></div>`;
+  const bits = [i.cshort || i.course, i.label, i.action].filter(Boolean).map(x => `<span>${esc(x)}</span>`).join("");
+  const gone = i.gone ? '<span title="Moodle убрал срок из календаря — обычно это значит, что работа сдана">убрано с сайта</span>' : "";
+  return `<div class="crow ${i.state}${i.done ? " done" : ""}${i.gone ? " gone" : ""}" data-id="${esc(i.id)}"><div class="ctm"><b>${esc(i.time || "")}</b></div>`
+    + `<div class="cbd"><div class="ct">${t}</div><div class="cs">${bits}${gone}<span class="cl">${esc(i.left)}</span></div></div>`
+    + `<label class="cck" title="Сделано"><input type="checkbox" ${i.done ? "checked" : ""} aria-label="Сделано: ${esc(i.title)}"></label></div>`;
+}
+function calDayHead(d, rel){
+  const parts = d.label.split(" · "), r = parts.length > 1 ? parts[0] : "", base = parts[parts.length - 1];
+  const nd = d.items.filter(i => i.type !== "lesson").length, nl = d.items.length - nd;
+  const cnt = [nd ? `${nd} ${calPl(nd, "срок", "срока", "сроков")}` : "", nl ? `${nl} ${calPl(nl, "пара", "пары", "пар")}` : ""].filter(Boolean).join(" · ");
+  const key = r === "Сегодня" ? "today" : r === "Завтра" ? "tomorrow" : "";
+  return `<div class="ch2${key ? " " + key : ""}" data-date="${esc(d.date)}"${key ? ` data-rel="${key}"` : ""}><b>${esc(r || base)}</b>${r ? `<span>${esc(base)}</span>` : ""}<em class="cdn">${cnt}</em></div>`;
+}
+function calFDot(){   // на кнопке «Фильтры» точка, когда что-то отличается от обычного: курс, срок, «сделанное»
+  const on = $("#calDays").value !== "14" || ($("#calCourse").value || "0") !== "0" || (!calFirst && CAL && $("#calDone").checked !== !CAL.cfg.hide_done);
+  $("#calDot").classList.toggle("hidden", !on);
 }
 function renderCal(){
   const v = CAL, c = v.counts;
-  $("#calChips").innerHTML = [["late", c.overdue, "просрочено"], ["soon", c.today, "сегодня"], ["", c.tomorrow, "завтра"], ["", c.week, "за 7 дней"], ["", c.total, "всего впереди"]]
-    .map(([k, n, t]) => `<span class="cchip ${k && n ? k : ""}"><b>${n}</b>${t}</span>`).join("");
+  $("#calChips").innerHTML = [["late", c.overdue, "просрочено", "over"], ["soon", c.today, "сегодня", "today"], ["", c.tomorrow, "завтра", "tomorrow"], ["", c.week, "за 7 дней", ""], ["", c.total, "всего впереди", ""]]
+    .map(([k, n, t, go]) => go && n ? `<button class="cchip ${k && n ? k : ""}" data-go="${go}" title="Перейти к этому месту в списке"><b>${n}</b>${t}</button>` : `<span class="cchip ${k && n ? k : ""}"><b>${n}</b>${t}</span>`).join("");
   const s = v.sync || {};
   const when = s.last ? new Date(s.last * 1000).toLocaleString("ru-RU", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) : "";
   let info = s.last ? `Сроки обновлены ${when}` + (s.ok === false ? " · последняя попытка не удалась" : "") : "Сроки ещё не загружались — нажмите «Обновить сроки» (нужен вход в Moodle).";
@@ -3629,13 +4099,22 @@ function renderCal(){
   if (v.gone) info += ` · <a id="calGoneT" style="cursor:pointer;color:var(--accent)">${calGone ? "скрыть" : "показать"} убранные с сайта (${v.gone}, вероятно, сданы)</a>`;
   $("#calSync").innerHTML = info;
   let h = "";
-  if (v.overdue.length) h += `<div class="ch2 late">Просрочено</div>` + v.overdue.map(calRow).join("");
-  for (const d of v.days) h += `<div class="ch2">${esc(d.label)}</div>` + d.items.map(calRow).join("");
+  if (v.overdue.length) h += `<div class="ch2 late" id="calOver"><b>Просрочено</b><em class="cdn">${v.overdue.length}</em></div>` + v.overdue.map(i => calRow(i, v.now)).join("");
+  for (const d of v.days) h += calDayHead(d) + d.items.map(i => calRow(i, v.now)).join("");
   if (v.empty) h = `<div class="hint" style="padding:30px 0;text-align:center">Ближайших сроков и пар нет — либо календарь ещё не загружен, либо всё сдано.</div>`;
   $("#calList").innerHTML = h;
   $("#calIcs").disabled = !v.ics && !s.last;
+  calFDot();
 }
-["calShow", "calCourse", "calDays", "calDone"].forEach(id => $("#" + id).onchange = loadCal);
+["calCourse", "calDone"].forEach(id => $("#" + id).onchange = loadCal);
+$("#calShowSeg").onclick = e => { const b = e.target.closest("[data-cs]"); if (!b) return; $("#calShow").value = b.dataset.cs; $$("#calShowSeg button").forEach(x => x.classList.toggle("on", x === b)); loadCal(); };
+$("#calDaysSeg").onclick = e => { const b = e.target.closest("[data-cd]"); if (!b) return; $("#calDays").value = b.dataset.cd; $$("#calDaysSeg button").forEach(x => x.classList.toggle("on", x === b)); loadCal(); };
+$("#calMoreB").onclick = () => { const f = $("#calF"), on = !f.classList.contains("open"); f.classList.toggle("open", on); $("#calMoreB").setAttribute("aria-expanded", on); };
+$("#calChips").onclick = e => {
+  const b = e.target.closest("[data-go]"); if (!b) return;
+  const t = b.dataset.go === "over" ? $("#calOver") : $(`#calList .ch2[data-rel="${b.dataset.go}"]`);
+  if (t) t.scrollIntoView({block: "start", behavior: "smooth"}); else toast("Этого места в списке сейчас нет — возможно, оно скрыто фильтром", "bad");
+};
 $("#calSync").onclick = e => { if (e.target.id === "calGoneT") { calGone = !calGone; loadCal(); } };
 $("#calList").onclick = async e => {
   const a = e.target.closest("a[data-u]"); if (a) return openUrl(a.dataset.u);
