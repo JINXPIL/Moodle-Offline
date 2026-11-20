@@ -15,6 +15,15 @@ Moodle Offline is built for students of Sevastopol State University (SevSU) and 
 
 ---
 
+## 1.35.1 — 2026-11-20
+
+**New**
+- **Choosing the save folder on a phone.** Next to “Папка для сохранения” (Save folder) there is now a “…” button, just like on a computer. Before, it was missing on a phone and you had to type the path by hand. It opens a “Выбор папки” (Choose a folder) window: quick places (phone storage, Documents, Downloads, memory card), a path with tappable parts, a list of folders with an “Наверх” (Up) button, “＋ Новая папка” (New folder) and “Выбрать эту папку” (Use this folder). The program checks that the chosen folder can be written to. If the app has no “all files” access, the window says so and offers an “Разрешить доступ” (Allow access) button. Files already downloaded stay in the old place.
+
+**What was verified and what was not.** `tests/test_folders_unit.py` (41 checks: names, roots, boundaries — it cannot leave shared storage, memory cards and the app folder, links pointing outside, a new folder, the write check, window requests). The window was checked in Chromium on a mock of shared storage: phone 390, 360 and 320 px with touch (opening, Up, quick places, a new folder, a bad name, choosing a folder, the system Back, the “no access” variant), no console errors and no horizontal scrolling. **Not verified:** a real Android phone with the app (real “all files” access, a memory card, folders in Documents), Termux, Windows/Edge.
+
+---
+
 ## 1.35.0 — 2026-11-20
 
 **New**

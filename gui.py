@@ -42,6 +42,7 @@ import search
 import uistate
 import watch
 import electives as el
+import folders
 import iotapi
 import lk
 import oldver
@@ -616,6 +617,39 @@ class App:
         if name == "battery":
             return {"ok": android.request_battery()}
         return {"ok": False, "error": "неизвестное действие"}
+
+    # ── выбор папки внутри программы: на телефоне нет системного окна, которое вернуло бы обычный путь (folders.py) ──
+    def folder_roots(self) -> list:
+        home = Path.home()
+        return folders.roots(android.shared_storage(home), home)
+
+    def folders_list(self, path: str = "") -> dict:
+        """Что показать в окне «Выбор папки»: подпапки, «хлебные крошки», корни; открывается папка сохранения, если она годится."""
+        r = folders.browse(str(path or ""), self.folder_roots(), start=self.settings.get("out_dir") or "")
+        home = Path.home()
+        r["kind"] = "apk" if android.is_apk() else ("termux" if ANDROID else "other")
+        r["need_access"] = bool(android.is_apk() and android.shared_storage(home) is None)
+        r["current"] = str(self.settings.get("out_dir") or "")
+        return r
+
+    def folders_new(self, parent: str, name: str) -> dict:
+        try:
+            new = folders.make_dir(str(parent or ""), name, self.folder_roots())
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "path": str(new)}
+
+    def folders_use(self, path: str) -> dict:
+        """«Выбрать эту папку»: проверяем, что в неё можно записывать, и записываем в настройки (как «…» на компьютере)."""
+        p = folders.inside(str(path or ""), self.folder_roots())
+        if p is None:
+            return {"ok": False, "error": "Эту папку выбрать нельзя: откройте её из списка."}
+        if not folders.probe_writable(p):
+            return {"ok": False, "error": "В эту папку нельзя записывать — выберите другую."}
+        with self.lock:
+            self.settings["out_dir"] = str(p)
+        self.save_settings()
+        return {"ok": True, "path": str(p)}
 
     # ── слежение в фоне без окна (автозапуск Windows) ──
     def autostart_info(self) -> dict:
@@ -3566,6 +3600,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, APP.electives_act(b.get("id", ""), b.get("password") or None, b.get("username") or None))
         if p == "/api/android/action":
             return self._send(200, APP.android_action(str(b.get("name", ""))))
+        if p == "/api/folders":
+            return self._send(200, APP.folders_list(b.get("path", "")))
+        if p == "/api/folders/new":
+            return self._send(200, APP.folders_new(b.get("parent", ""), b.get("name", "")))
+        if p == "/api/folders/use":
+            return self._send(200, APP.folders_use(b.get("path", "")))
         if p == "/api/open_url":
             url = b.get("url", "")
             if not url.startswith(("http://", "https://")):
