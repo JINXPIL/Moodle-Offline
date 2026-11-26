@@ -3071,7 +3071,7 @@ function renderJob(j){
 /* ── светофор, IP, баннер ── */
 /* На телефоне — короткий статус в шапке и полный результат ручной проверки в уведомлении. */
 function netText(full, short){ $("#net .lg").textContent = full; $("#net .sh").textContent = short; }
-let netCheckPending = false;
+let netCheckPending = false, netCheckRevision = 0;
 $("#net").onclick = async () => {
   if (netCheckPending) return;
   netCheckPending = true;
@@ -3081,6 +3081,7 @@ $("#net").onclick = async () => {
     netCheckPending = false;
     if (!r.ok) throw new Error(r.error);
     if (r.net) {
+      netCheckRevision++;
       if (S) S.net = r.net;
       renderMoodleStatus(r.net);
       if (NARROW.matches) toast($("#net .lg").textContent);
@@ -5362,6 +5363,7 @@ function lostShow(why, msg){
 function pollNow(){ clearTimeout(pollTimer); poll(); }
 async function poll(){
   clearTimeout(pollTimer);
+  const netRevision = netCheckRevision;
   let delay = 1200, st = null, why = "", msg = "";
   try { st = await api("/api/state?since=" + seq + (dseqSeen >= 0 ? "&dsince=" + dseqSeen : "")); }
   catch (e) { why = "net"; }
@@ -5369,6 +5371,8 @@ async function poll(){
   if (why === "net" && closingSeen) return closeSelf();          // сервер ушёл после «закрываюсь» (новая версия, перезапуск) — это не сбой
   if (why) { pollFails++; lostShow(why, msg); pollTimer = setTimeout(poll, 3000); return; }
   pollFails = 0;
+  // Запоздавший ответ фонового опроса не должен затирать свежий результат по кнопке.
+  if (netRevision !== netCheckRevision && S) st.net = S.net;
   S = st; seq = st.job.seq;
   closingSeen = st.closing || "";                                 // пустое — закрываться не нужно (например, новая копия не запустилась)
   closingWhy = st.closing_why || "";                              // зачем закрываемся: restart — кнопка, иначе новая версия
