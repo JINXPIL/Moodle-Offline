@@ -53,7 +53,9 @@ check("17. текст статуса пишет одна функция netText 
 for w in ["Онлайн", "Медленно", "Недоступен", "Пауза", "Проверка…"]:
     check(f"18. короткая подпись «{w}» есть", f'"{w}"' in html)
 check("19. на телефоне виден короткий текст, на ПК — полный", "#net .sh{display:none}" in html and "#net .lg{display:none}#net .sh{display:inline}" in html)
-check("20. нажатие на статус показывает полный текст", '$("#net").addEventListener("click"' in html)
+net_click = html.partition('$("#net").onclick =')[2].split("function renderMoodleStatus", 1)[0]
+check("20. нажатие на статус сразу проверяет Moodle и показывает полный результат на телефоне",
+      'await api("/api/moodle/check", {})' in net_click and 'toast($("#net .lg").textContent)' in net_click)
 check("21. шапка на телефоне в одну строку (nowrap), на узких экранах прячется значок", "flex-wrap:nowrap;padding:8px 10px" in html and "@media (max-width:340px){.brand{display:none}}" in html)
 
 # --- фильтры и карточки

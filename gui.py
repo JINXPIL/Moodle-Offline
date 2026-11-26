@@ -358,6 +358,7 @@ class App:
         self.keep_running = ANDROID             # не выходить, когда страницу закрыли (на телефоне браузер часто в фоне)
         self.window_seen = False                # приложение .apk: окно уже запрашивало состояние (для проверки в эмуляторе)
         self.probe_kick = False                 # настройки таймера сменили — проверить сайт сразу, не ждать старого интервала
+        self.probe_lock = threading.Lock()
         self._news = None             # (путь, NewsLog)
         self._cal = None              # (путь, deadlines.Store)
         self.cal_checked = 0.0        # когда в последний раз проверяли «горящие» сроки (monotonic)
@@ -416,6 +417,21 @@ class App:
         if prev == "down" and status in ("ok", "slow"):
             self.on_server_up()
 
+    def probe_moodle(self, manual=False):
+        """Ручная проверка не зависит от таймера. Одновременные проверки используют один результат."""
+        if not self.probe_lock.acquire(blocking=False):
+            return {"ok": True, "checking": True}
+        try:
+            # У ручной проверки своя сессия: сессию загрузчика может использовать его поток ожидания.
+            client = self.new_client() if manual else self.client or self.new_client()
+            st, dt = client.probe()
+            self.set_net(st, "" if dt is None else f"{dt:.1f} с", dt)
+            if not manual:
+                self.watch_feed(st)
+            return {"ok": True, "net": self.net}
+        finally:
+            self.probe_lock.release()
+
     def note_poll(self):
         """Окно спросило состояние: оно живо и ничего не закрывало."""
         self.last_poll = time.monotonic()
@@ -445,15 +461,13 @@ class App:
                     active = chk["enabled"] and watch.in_window(chk["window"], datetime.now())
                     if active or waiting:
                         try:
-                            prober = self.client or self.new_client()
-                            st, dt = prober.probe()
-                            self.set_net(st, "" if dt is None else f"{dt:.1f} с", dt)
-                            self.watch_feed(st)
-                        except Exception:
-                            pass
+                            self.probe_moodle()
+                        except Exception as e:
+                            log_error("проверка Moodle", e, self.rep)
                     else:
                         with self.lock:
-                            self.net["paused"] = "проверка выключена" if not chk["enabled"] else "вне заданного времени"
+                            if not self.probe_lock.locked():
+                                self.net["paused"] = "проверка выключена" if not chk["enabled"] else "вне заданного времени"
                     interval = chk["interval"] if chk["enabled"] else 60
                     if waiting:
                         interval = min(interval, 300)
@@ -625,11 +639,14 @@ class App:
 
     def folders_list(self, path: str = "") -> dict:
         """Что показать в окне «Выбор папки»: подпапки, «хлебные крошки», корни; открывается папка сохранения, если она годится."""
-        r = folders.browse(str(path or ""), self.folder_roots(), start=self.settings.get("out_dir") or "")
+        roots = self.folder_roots()
+        out = self.settings.get("out_dir") or ""
+        r = folders.browse(str(path or ""), roots, start=out)
         home = Path.home()
         r["kind"] = "apk" if android.is_apk() else ("termux" if ANDROID else "other")
         r["need_access"] = bool(android.is_apk() and android.shared_storage(home) is None)
-        r["current"] = str(self.settings.get("out_dir") or "")
+        current = folders.inside(out, roots) if out else None
+        r["current"] = str(current) if current is not None else out
         return r
 
     def folders_new(self, parent: str, name: str) -> dict:
@@ -3087,6 +3104,7 @@ def guess_ctype(name: str) -> str:
 # адрес — ни окна программы, ни её API, ни её хранилища), а API отвечает только запросам самого окна (Handler._same_origin).
 SANDBOX_EXT = {".html", ".htm", ".xhtml", ".shtml", ".svg", ".svgz", ".xml", ".xsl", ".mht", ".mhtml"}
 SANDBOX_CSP = "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
+SANDBOX_ASSET_EXT = {".css", ".woff", ".woff2", ".ttf", ".otf"}
 # Программы и сценарии из материалов программа сама не запускает (у скачанного программой файла нет пометки «из интернета»,
 # и Windows не предупредит). Открыть такой файл можно только самому, из папки.
 RISKY_EXT = {".exe", ".msi", ".msix", ".appx", ".bat", ".cmd", ".com", ".scr", ".pif", ".cpl", ".vbs", ".vbe", ".js", ".jse",
@@ -3279,8 +3297,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        if target.suffix.lower() in SANDBOX_EXT and not trusted_page(rel, target):
+        ext = target.suffix.lower()
+        if ext in SANDBOX_EXT and not trusted_page(rel, target):
             self.send_header("Content-Security-Policy", SANDBOX_CSP)
+        # iSpring читает CSS слайдов через XHR, а браузер загружает шрифты через CORS из sandbox.
+        if ext in SANDBOX_ASSET_EXT and self.headers.get("Origin") == "null":
+            self.send_header("Access-Control-Allow-Origin", "null")
         if code == 206:
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
         self.end_headers()
@@ -3296,6 +3318,21 @@ class Handler(BaseHTTPRequestHandler):
                     left -= len(chunk)
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
+
+    def _serve_pdf_page(self, q):
+        out = Path(APP.settings.get("out_dir") or mo.DEFAULT_OUT)
+        target = out / q.get("path", "")
+        if target.suffix.lower() != ".pdf" or not inside(out, target) or not target.is_file():
+            return self._send(404, {"error": "PDF не найден"})
+        try:
+            number = int(q.get("page", "1"))
+        except ValueError:
+            return self._send(400, {"error": "Неверный номер страницы"})
+        try:
+            png, number, total = search.render_pdf_page(target, number)
+        except search.Unreadable as e:
+            return self._send(422, {"error": str(e)})
+        return self._send(200, png, "image/png", {"X-PDF-Page": str(number), "X-PDF-Pages": str(total)})
 
     def _body(self):
         n = int(self.headers.get("Content-Length") or 0)
@@ -3326,6 +3363,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_files(unquote(rel))
         if not self._authorized(q):
             return self._send(403, {"error": "forbidden"})
+        if u.path == "/api/pdf/page":
+            return self._serve_pdf_page(q)
         if u.path == "/api/state":
             if not APP.window_seen and android.is_apk():
                 APP.window_seen = True
@@ -3418,6 +3457,8 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/schedule/import":
             return self._send(200, APP.schedule_import(self.rfile, int(self.headers.get("Content-Length") or 0), q.get("name", "")))
         b = self._body()
+        if p == "/api/moodle/check":
+            return self._send(200, APP.probe_moodle(manual=True))
         if p == "/api/login":
             return self._send(200, APP.login(b.get("url", ""), b.get("username", ""), b.get("password", ""),
                                              bool(b.get("remember")), b.get("cookie", "")))
@@ -3697,7 +3738,7 @@ class Handler(BaseHTTPRequestHandler):
                       "remember": bool(st.get("remember", True)), "can_encrypt": APP.vault.can_encrypt,
                       "offline": APP.offline if APP.login_state == "offline" else None,
                       "has_cache": APP.OFFLINE_FILE.exists()},
-            "net": APP.net, "geo": APP.geo,
+            "net": {**APP.net, "checking": APP.probe_lock.locked()}, "geo": APP.geo,
             "job": {"state": APP.job_status(), "kind": APP.job_kind, "armed": bool(APP.armed),
                     "started": APP.job_started, "result": APP.last_result, **snap},
             "settings": {**{k: st.get(k) for k in ("mode", "out_dir", "pdf", "zip", "course_ids", "quiet_hours",
