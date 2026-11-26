@@ -329,6 +329,10 @@ input.txt:focus,select.txt:focus{border-color:var(--accent)}
 .modal-box header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
 .modal-box header b{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .modal-box iframe{flex:1;border:0;background:#fff}
+.pdf-preview{flex:1;min-height:0;display:flex;flex-direction:column}
+.pdf-tools{display:flex;justify-content:center;align-items:center;gap:10px;padding:8px;border-bottom:1px solid var(--line)}
+.pdf-content{flex:1;min-height:0;overflow:auto;text-align:center;background:var(--bg);padding:12px}
+.pdf-content img{display:block;width:min(100%,900px);height:auto;margin:0 auto;background:#fff;box-shadow:var(--shadow)}
 /* ползунок прокрутки для сенсорных экранов (скрипт «fastScroll»): системная полоска на телефоне только показывает место, а этот можно взять и потянуть */
 .fsb{position:fixed;top:0;right:0;bottom:0;width:30px;z-index:70;pointer-events:none;visibility:hidden;opacity:0;transition:opacity .25s,visibility 0s .25s}
 .fsb.on{visibility:visible;opacity:1;transition-delay:0s}
@@ -1298,7 +1302,7 @@ body[data-v-grades-honors="0"] #gradesView .gv-hon{display:none}
   <header class="top">
     <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17l7-11 7 11"/></svg></div>Moodle Offline</div>
     <div class="seg mtabs hidden" id="mainTabs"><button data-view="courses" class="on"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/></svg><span class="tl">Курсы</span></button><button data-view="search"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg><span class="tl">Поиск</span></button><button data-view="notes"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 11h8M8 15h5"/></svg><span class="tl">Заметки</span></button><button data-view="calendar"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="tl">Календарь</span><span class="nbadge cbadge hidden" id="calBadge" title="Просрочено или истекает сегодня"></span></button><button data-view="schedule"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="tl">Расписание</span></button><button data-view="electives"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="tl">Элективы</span></button><button data-view="grades"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="tl"><span class="tl-lg">Успеваемость</span><span class="tl-sh">Оценки</span></span></button><button data-view="news"><svg class="tic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="tl">Что нового</span><span class="nbadge hidden" id="newsBadge"></span></button></div>
-    <div class="pill" id="net" title="Проверка доступности Moodle (частоту можно изменить: «Таймер и автообновление»)"><span class="dot"></span><span class="txt"><span class="lg">Проверяю сервер…</span><span class="sh">Проверка…</span></span></div>
+    <button type="button" class="pill" id="net" title="Проверить доступность Moodle сейчас"><span class="dot"></span><span class="txt" aria-live="polite"><span class="lg">Проверяю сервер…</span><span class="sh">Проверка…</span></span></button>
     <div class="pill hidden" id="ip"></div>
     <button class="icon-btn dlbtn hidden" id="dlBtn" title="Загрузки" aria-label="Загрузки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg><span class="dlpct" id="dlPct"></span><span class="dlmark" id="dlMark"></span></button>
     <div class="spacer"></div>
@@ -1706,7 +1710,12 @@ body[data-v-grades-honors="0"] #gradesView .gv-hon{display:none}
           </div>
   </div>
 </div></div>
-<div class="modal hidden" id="modal"><div class="modal-box"><header><b id="mTitle"></b><button class="btn" id="mOpen">Открыть в программе</button><button class="btn" id="mReveal">Показать в папке</button><button class="icon-btn" id="mClose"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><iframe id="mFrame"></iframe></div></div>
+<div class="modal hidden" id="modal"><div class="modal-box"><header><b id="mTitle"></b><button class="btn" id="mOpen">Открыть в программе</button><button class="btn" id="mReveal">Показать в папке</button><button class="icon-btn" id="mClose"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><iframe id="mFrame"></iframe>
+  <div id="mPdf" class="pdf-preview hidden">
+    <div id="mPdfTools" class="pdf-tools hidden"><button class="btn" id="mPdfPrev" aria-label="Предыдущая страница">‹</button><span id="mPdfCount" aria-live="polite"></span><button class="btn" id="mPdfNext" aria-label="Следующая страница">›</button></div>
+    <div class="pdf-content" id="mPdfContent"><p id="mPdfStatus" role="status"></p><img id="mPdfImage" class="hidden" alt=""></div>
+  </div>
+</div></div>
 <div class="modal hidden" id="rdModal"><div class="modal-box rd-box">
   <header><button class="btn" id="rdBack" title="Назад" aria-label="Назад">←</button><button class="btn" id="rdFwd" title="Вперёд" aria-label="Вперёд">→</button><b id="rdTitle"></b>
     <button class="btn" id="rdRefresh" title="Прочитать страницу с сайта заново">↻</button><button class="btn" id="rdSite">На сайте</button>
@@ -2930,12 +2939,61 @@ document.addEventListener("click", e => {
   api("/api/open", {path: b.dataset.ext || b.dataset.rev, reveal: !!b.dataset.rev}).then(r => { if (!r.ok) toast(r.error, "bad"); });
 });
 let mPath = "";
-// страницы и SVG из курсов — в песочнице (свой пустой адрес: ни окна программы, ни её ключа); PDF — без неё (встроенный просмотр PDF в песочнице не работает)
+let pdfPage = 1, pdfTotal = 0, pdfRequest = null, pdfImageUrl = "";
+// Страницы и SVG из курсов остаются в песочнице. PDF отображаем отдельно, без браузерного плагина.
 const SANDBOXED = /\.(html?|xhtml|shtml|svgz?|xml|xsl|mht(ml)?)$/i;
-function preview(p, hash = ""){ mPath = p; $("#mTitle").textContent = p.split("/").pop(); const f = $("#mFrame");
+function clearPdfPage(){
+  pdfRequest?.abort(); pdfRequest = null;
+  if (pdfImageUrl) URL.revokeObjectURL(pdfImageUrl);
+  pdfImageUrl = "";
+  $("#mPdfImage").classList.add("hidden"); $("#mPdfImage").removeAttribute("src");
+}
+async function loadPdfPage(number){
+  clearPdfPage();
+  const request = pdfRequest = new AbortController();
+  const status = $("#mPdfStatus"), image = $("#mPdfImage");
+  status.textContent = "Открываю страницу PDF…"; status.classList.remove("hidden");
+  $("#mPdfPrev").disabled = $("#mPdfNext").disabled = true;
+  try {
+    const query = new URLSearchParams({path: mPath, page: number});
+    const r = await fetch("/api/pdf/page?" + query, {headers: {"X-Token": T}, signal: request.signal});
+    if (!r.ok) throw new Error((await r.json()).error);
+    const data = await r.blob();
+    if (request.signal.aborted) return;
+    pdfPage = Number(r.headers.get("X-PDF-Page")); pdfTotal = Number(r.headers.get("X-PDF-Pages"));
+    pdfImageUrl = URL.createObjectURL(data);
+    image.src = pdfImageUrl; image.alt = "Страница " + pdfPage;
+    await image.decode();
+    if (request.signal.aborted) return;
+    image.classList.remove("hidden"); status.classList.add("hidden");
+    $("#mPdfContent").scrollTop = 0;
+    $("#mPdfCount").textContent = `Страница ${pdfPage} из ${pdfTotal}`;
+    $("#mPdfTools").classList.remove("hidden");
+  } catch (e) {
+    if (request.signal.aborted) return;
+    status.textContent = (e.message && e.message !== "Failed to fetch") ? e.message : "Не удалось открыть PDF";
+  } finally {
+    if (!request.signal.aborted) {
+      $("#mPdfPrev").disabled = pdfPage <= 1; $("#mPdfNext").disabled = pdfPage >= pdfTotal;
+    }
+  }
+}
+$("#mPdfPrev").onclick = () => loadPdfPage(pdfPage - 1);
+$("#mPdfNext").onclick = () => loadPdfPage(pdfPage + 1);
+function preview(p, hash = ""){
+  clearPdfPage(); mPath = p; $("#mTitle").textContent = p.split("/").pop();
+  const f = $("#mFrame"), pdf = /\.pdf$/i.test(p);
+  f.classList.toggle("hidden", pdf); $("#mPdf").classList.toggle("hidden", !pdf);
+  $("#modal").classList.remove("hidden");
+  if (pdf) {
+    f.src = "about:blank";
+    pdfPage = 1; pdfTotal = 0; $("#mPdfTools").classList.add("hidden");
+    return loadPdfPage(Number(hash.match(/^#page=(\d+)/)?.[1]) || 1);
+  }
   if (SANDBOXED.test(p)) f.setAttribute("sandbox", "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"); else f.removeAttribute("sandbox");
-  f.src = fileUrl(p) + hash; $("#modal").classList.remove("hidden"); }
-$("#mClose").onclick = () => { $("#modal").classList.add("hidden"); $("#mFrame").src = "about:blank"; };
+  f.src = fileUrl(p) + hash;
+}
+$("#mClose").onclick = () => { clearPdfPage(); $("#modal").classList.add("hidden"); $("#mFrame").src = "about:blank"; };
 // Системная кнопка «Назад» на Android (MainActivity.onBackPressed): закрывает верхнее открытое окно, затем курс. true — что-то закрыто, false — закрывать нечего (тогда приложение сворачивается).
 window.moBack = () => {
   const open = [...document.querySelectorAll(".modal:not(.hidden)")].sort((a, b) => (+getComputedStyle(a).zIndex || 0) - (+getComputedStyle(b).zIndex || 0)).pop();   // верхнее по z-index (окно файла, открытое из ответа нейросети, выше); при равенстве — позднее в разметке
@@ -3011,17 +3069,43 @@ function renderJob(j){
 }
 
 /* ── светофор, IP, баннер ── */
-/* Надпись о сервере: на компьютере полная («Moodle доступен · 0,4 с»), на телефоне — короткое слово (в шапке мало места), полный текст — по нажатию */
+/* На телефоне — короткий статус в шапке и полный результат ручной проверки в уведомлении. */
 function netText(full, short){ $("#net .lg").textContent = full; $("#net .sh").textContent = short; }
-$("#net").addEventListener("click", () => { const t = $("#net").title.replace(/^ · /, ""); toast($("#net .lg").textContent + (t ? "\n" + t : "")); });
-function renderNet(st){
-  const n = st.net, dot = $("#net .dot");
+let netCheckPending = false;
+$("#net").onclick = async () => {
+  if (netCheckPending) return;
+  netCheckPending = true;
+  renderMoodleStatus(S?.net || {status: "unknown"});
+  try {
+    const r = await api("/api/moodle/check", {});
+    netCheckPending = false;
+    if (!r.ok) throw new Error(r.error);
+    if (r.net) {
+      if (S) S.net = r.net;
+      renderMoodleStatus(r.net);
+      if (NARROW.matches) toast($("#net .lg").textContent);
+    }
+  } catch (e) {
+    netCheckPending = false;
+    renderMoodleStatus(S?.net || {status: "unknown"});
+    toast("Не удалось проверить доступность Moodle", "bad");
+  }
+};
+function renderMoodleStatus(n){
+  const button = $("#net"), dot = $("#net .dot");
+  const checking = netCheckPending || Boolean(n.checking);
+  button.setAttribute("aria-busy", String(checking));
   dot.className = "dot " + ({ok:"ok", slow:"slow", down:"down"}[n.status] || "");
   const every = WCHK.interval < 60 ? WCHK.interval + " с" : WCHK.interval < 3600 ? Math.round(WCHK.interval / 60) + " мин" : +(WCHK.interval / 3600).toFixed(1) + " ч";
-  if (n.paused) { dot.className = "dot"; netText("Проверка Moodle на паузе — " + n.paused, "Пауза"); }
+  if (checking) { dot.className = "dot"; netText("Проверяю доступность Moodle…", "Проверка…"); }
+  else if (n.paused) { dot.className = "dot"; netText("Проверка Moodle на паузе — " + n.paused, "Пауза"); }
   else netText({ok:"Moodle доступен", slow:"Moodle отвечает медленно", down:"Moodle недоступен", unknown:"Проверяю сервер…"}[n.status] + (n.detail ? " · " + n.detail : ""),
                {ok:"Онлайн", slow:"Медленно", down:"Недоступен", unknown:"Проверка…"}[n.status] || "Проверка…");
-  $("#net").title = (n.checked ? "Последняя проверка: " + n.checked + (n.paused ? "" : " (раз в " + every + ")") : "") + " · настройки: «Таймер и автообновление»";
+  button.title = "Проверить доступность Moodle сейчас" + (n.checked ? " · Последняя проверка: " + n.checked : "") +
+    (n.paused ? " · " + n.paused : " · интервал " + every);
+}
+function renderNet(st){
+  renderMoodleStatus(st.net);
   const g = st.geo, ip = $("#ip");
   if (g.skipped || !g.cc) ip.classList.add("hidden");
   if (g.checked && g.cc) { ip.classList.remove("hidden"); ip.innerHTML = g.warning ? `<span class="dot down"></span>IP ${esc(g.cc)} — выключите VPN` : `<span class="dot ok"></span>IP ${esc(g.ip || "")} · ${esc(g.cc)}`; }

@@ -21,11 +21,13 @@ import os
 import posixpath
 import re
 import sqlite3
+import struct
 import threading
 import time
 import xml.etree.ElementTree as ET
 import zipfile
 import zlib
+from contextlib import closing
 from pathlib import Path
 
 try:  # нужна только для PDF
@@ -704,6 +706,38 @@ def read_pdf(path, ctx: Ctx) -> list[tuple[str, str]]:
             doc.close()
     _pdf_notes(ctx, total, got, bad)
     return out
+
+
+def render_pdf_page(path: Path, number: int) -> tuple[bytes, int, int]:
+    """Одна страница PDF в PNG, её номер и число страниц. PDFium уже входит в сборки для ПК."""
+    if pdfium is None:
+        raise Unreadable("Встроенный просмотр PDF здесь недоступен. Нажмите «Открыть в программе».")
+    try:
+        with _PDFIUM_LOCK, closing(pdfium.PdfDocument(path)) as doc:
+            total = len(doc)
+            if not total:
+                raise Unreadable("В PDF нет страниц")
+            number = max(1, min(number, total))
+            with closing(doc[number - 1]) as page:
+                scale = min(2.5, 2400 / max(page.get_size()))
+                with closing(page.render(scale=scale, rev_byteorder=True, limit_image_cache=True)) as bmp:
+                    width, height = bmp.width, bmp.height
+                    pixels = bytes(bmp.buffer)
+                    stride = bmp.stride
+    except pdfium.PdfiumError as e:
+        msg = "PDF защищён паролем" if "password" in str(e).lower() else "Не удалось отобразить PDF"
+        raise Unreadable(msg) from e
+    except (OSError, ValueError, ZeroDivisionError) as e:
+        raise Unreadable("Не удалось отобразить PDF") from e
+
+    # PNG RGB: перед каждой строкой — байт фильтра, без служебных байтов выравнивания PDFium.
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    rows = b"".join(b"\0" + pixels[i:i + width * 3] for i in range(0, height * stride, stride))
+    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(rows, 3)) + chunk(b"IEND", b""))
+    return png, number, total
 
 
 def extract(path, ext: str, ctx: Ctx) -> list[tuple[str, str]]:
